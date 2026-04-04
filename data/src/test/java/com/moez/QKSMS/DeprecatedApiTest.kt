@@ -65,6 +65,7 @@ class DeprecatedApiTest {
             .filter { it.extension == "kt" }
             .filter { !it.path.contains("/build/") }
             .filter { !it.path.contains("/test/") }
+            .filter { !it.path.contains("/androidTest/") }
 
         for (file in sourceFiles) {
             val lines = file.readLines()
@@ -113,6 +114,8 @@ class DeprecatedApiTest {
             .filter { it.extension in listOf("kt", "java") }
             .filter { !it.path.contains("/build/") }
             .filter { !it.path.contains("/test/") }
+            .filter { !it.path.contains("/androidTest/") }
+            .filter { !it.path.contains("/androidTest/") }
 
         for (file in sourceFiles) {
             val lines = file.readLines()

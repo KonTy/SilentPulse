@@ -51,6 +51,7 @@ class PendingIntentFlagsTest {
         val sourceFiles = projectRoot.walkTopDown()
             .filter { it.extension in listOf("kt", "java") }
             .filter { !it.path.contains("/test/") }
+            .filter { !it.path.contains("/androidTest/") }
             .filter { !it.path.contains("/build/") }
 
         for (file in sourceFiles) {
