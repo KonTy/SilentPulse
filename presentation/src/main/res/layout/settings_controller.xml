@@ -107,6 +107,75 @@
             android:layout_marginBottom="8dp"
             android:background="?android:attr/divider" />
 
+        <!-- Drive Mode section -->
+        <com.moez.QKSMS.common.widget.QkTextView
+            style="@style/PreferenceCategory"
+            android:text="@string/settings_category_drive_mode" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_directions_car_black_24dp"
+            app:summary="@string/settings_drive_mode_summary"
+            app:title="@string/settings_drive_mode_title"
+            app:widget="@layout/settings_switch_widget" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveModeReadSms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:summary="@string/settings_drive_mode_read_sms_summary"
+            app:title="@string/settings_drive_mode_read_sms_title"
+            app:widget="@layout/settings_switch_widget" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveModeReadAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:summary="@string/settings_drive_mode_read_all_summary"
+            app:title="@string/settings_drive_mode_read_all_title"
+            app:widget="@layout/settings_switch_widget" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveModeVoiceReply"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:summary="@string/settings_drive_mode_voice_reply_summary"
+            app:title="@string/settings_drive_mode_voice_reply_title"
+            app:widget="@layout/settings_switch_widget" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveModeTimeout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:title="@string/settings_drive_mode_timeout_title"
+            tools:summary="10 seconds" />
+
+        <com.moez.QKSMS.common.widget.PreferenceView
+            android:id="@+id/driveModeTtsEngine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:title="@string/settings_drive_mode_tts_engine_title"
+            tools:summary="Android (Offline)" />
+
+        <com.moez.QKSMS.common.widget.QkTextView
+            android:id="@+id/driveModePrivacy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/settings_drive_mode_privacy"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
         <com.moez.QKSMS.common.widget.QkTextView
             style="@style/PreferenceCategory"
             android:text="@string/settings_category_general" />
