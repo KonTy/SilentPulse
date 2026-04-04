@@ -210,6 +210,7 @@
     <string name="settings_category_appearance">Appearance</string>
     <string name="settings_category_general">General</string>
     <string name="settings_category_qkreply">QK Reply</string>
+    <string name="settings_category_drive_mode">Drive Mode</string>
 
     <string name="settings_theme_title">Theme</string>
     <string name="settings_night_title">Night mode</string>
@@ -278,6 +279,45 @@
     <string name="settings_version">Version %s</string>
     <string name="settings_logging_enabled">Debug logging enabled</string>
     <string name="settings_logging_disabled">Debug logging disabled</string>
+
+    <!-- Drive Mode settings -->
+    <string name="settings_drive_mode_title">Drive Mode</string>
+    <string name="settings_drive_mode_summary">Hands-free messaging while driving</string>
+    <string name="settings_drive_mode_read_sms_title">Read SMS aloud</string>
+    <string name="settings_drive_mode_read_sms_summary">Announce incoming text messages</string>
+    <string name="settings_drive_mode_read_all_title">Read all notifications</string>
+    <string name="settings_drive_mode_read_all_summary">Announce all app notifications</string>
+    <string name="settings_drive_mode_voice_reply_title">Enable voice replies</string>
+    <string name="settings_drive_mode_voice_reply_summary">Reply using voice commands</string>
+    <string name="settings_drive_mode_timeout_title">Reply timeout</string>
+    <string name="settings_drive_mode_tts_engine_title">TTS Engine</string>
+    <string name="settings_drive_mode_privacy">🔒 All audio stays on your device. Nothing is sent to the cloud.</string>
+
+    <string-array name="drive_mode_tts_engines">
+        <item>Android (Offline)</item>
+        <item>Piper (High Quality, Offline)</item>
+    </string-array>
+
+    <string-array name="drive_mode_timeout_labels">
+        <item>5 seconds</item>
+        <item>10 seconds</item>
+        <item>15 seconds</item>
+        <item>20 seconds</item>
+        <item>30 seconds</item>
+    </string-array>
+
+    <integer-array name="drive_mode_timeout_values">
+        <item>5</item>
+        <item>10</item>
+        <item>15</item>
+        <item>20</item>
+        <item>30</item>
+    </integer-array>
+
+    <plurals name="seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
 
     <string name="settings_delay_duration_hint">Enter duration (seconds)</string>
 
