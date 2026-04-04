@@ -239,4 +239,13 @@ class Preferences {
         override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
+
+    val didSetReferrer: Preference<Boolean> = object : Preference<Boolean> {
+        private var value: Boolean = false
+        override fun get() = value
+        override fun set(value: Boolean) { this.value = value }
+        override fun delete() { value = false }
+        override val isSet get() = true
+        override fun asObservable(): Observable<Boolean> = Observable.just(value)
+    }
 }
