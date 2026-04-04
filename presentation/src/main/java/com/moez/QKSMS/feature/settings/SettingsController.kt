@@ -24,8 +24,11 @@ import android.content.Context
 import android.os.Build
 import android.text.format.DateFormat
 import android.view.View
+import android.content.Intent
+import android.provider.Settings
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
+import androidx.core.app.NotificationManagerCompat
 import com.bluelinelabs.conductor.RouterTransaction
 import com.google.android.material.snackbar.Snackbar
 import com.jakewharton.rxbinding2.view.clicks
@@ -96,6 +99,7 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     private val driveModeTimeout: PreferenceView get() = view!!.findViewById(R.id.driveModeTimeout)
     private val driveModeTtsEngine: PreferenceView get() = view!!.findViewById(R.id.driveModeTtsEngine)
     private val driveModePrivacy: View get() = view!!.findViewById(R.id.driveModePrivacy)
+    private val driveModeAppFilter: PreferenceView get() = view!!.findViewById(R.id.driveModeAppFilter)
 
 
     @Inject lateinit var context: Context
@@ -127,6 +131,7 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     // Drive Mode subjects
     private val driveModeTimeoutSubject: Subject<Int> = PublishSubject.create()
     private val driveModeTtsEngineSubject: Subject<Int> = PublishSubject.create()
+    private val driveModeAppFilterSubject: Subject<Set<String>> = PublishSubject.create()
 
     private val progressAnimator by lazy { ObjectAnimator.ofInt(syncingProgress, "progress", 0, 0) }
 
@@ -245,6 +250,7 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
         driveModeTimeout.setVisible(driveModeActive)
         driveModeTtsEngine.setVisible(driveModeActive)
         driveModePrivacy.setVisible(driveModeActive)
+        driveModeAppFilter.setVisible(driveModeActive && state.driveModeReadAllNotifications)
 
         driveModeReadSms.checkbox.isChecked = state.driveModeReadSms
         driveModeReadAll.checkbox.isChecked = state.driveModeReadAllNotifications
@@ -259,6 +265,14 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
 
         driveModeTtsEngine.summary = state.driveModeTtsEngineSummary
         driveModeTtsEngineDialog.adapter.selectedItem = state.driveModeTtsEngineId
+
+        // App filter summary
+        if (driveModeActive && state.driveModeReadAllNotifications) {
+            driveModeAppFilter.summary = when {
+                state.driveModeAllowedApps.isEmpty() -> context.getString(R.string.settings_drive_mode_app_filter_all)
+                else -> state.driveModeAllowedApps.joinToString(", ")
+            }
+        }
 
         when (state.syncProgress) {
             is SyncRepository.SyncProgress.Idle -> syncingProgress.isVisible = false
@@ -318,6 +332,78 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     }
 
     override fun showMmsSizePicker() = mmsSizeDialog.show(activity!!)
+
+    // --- Notification listener permission and app filter additions ---
+
+    private fun hasNotificationListenerPermission(): Boolean {
+        return NotificationManagerCompat.getEnabledListenerPackages(context)
+            .contains(context.packageName)
+    }
+
+    private fun checkNotificationListenerPermission(onGranted: () -> Unit) {
+        if (hasNotificationListenerPermission()) {
+            onGranted()
+        } else {
+            AlertDialog.Builder(activity!!)
+                .setTitle(R.string.settings_drive_mode_notification_permission_title)
+                .setMessage(R.string.settings_drive_mode_notification_permission_message)
+                .setPositiveButton(R.string.button_settings) { _, _ ->
+                    try {
+                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback to general settings if specific intent fails
+                        val intent = Intent(Settings.ACTION_SETTINGS)
+                        startActivity(intent)
+                    }
+                }
+                .setNegativeButton(R.string.button_cancel, null)
+                .show()
+        }
+    }
+
+    override fun driveModeReadAllClicks(): Observable<Boolean> {
+        return driveModeReadAll.clicks()
+            .map { !driveModeReadAll.checkbox.isChecked }
+            .doOnNext { enabled ->
+                if (enabled) {
+                    checkNotificationListenerPermission {
+                        // Permission granted, continue with enabling
+                        driveModeReadAll.checkbox.isChecked = true
+                    }
+                }
+            }
+    }
+
+    override fun driveModeAppFilterClicks(): Observable<*> = driveModeAppFilter.clicks()
+
+    override fun driveModeAppFilterSelected(): Observable<Set<String>> = driveModeAppFilterSubject
+
+    override fun showDriveModeAppFilterDialog(selectedApps: Set<String>) {
+        val apps = arrayOf("Signal", "Gmail", "WhatsApp", "Other")
+        val checkedItems = BooleanArray(apps.size) { selectedApps.contains(apps[it]) }
+
+        AlertDialog.Builder(activity!!)
+            .setTitle(R.string.settings_drive_mode_app_filter_title)
+            .setMultiChoiceItems(apps, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+            }
+            .setPositiveButton(R.string.button_ok) { _, _ ->
+                val selected = apps.filterIndexed { index, _ -> checkedItems[index] }.toSet()
+                driveModeAppFilterSubject.onNext(selected)
+            }
+            .setNegativeButton(R.string.button_cancel, null)
+            .setNeutralButton(R.string.settings_drive_mode_app_filter_clear) { _, _ ->
+                driveModeAppFilterSubject.onNext(emptySet())
+            }
+            .show()
+    }
+
+    override fun showDriveModeTimeoutDialog() = driveModeTimeoutDialog.show(activity!!)
+
+    override fun showDriveModeTtsEngineDialog() = driveModeTtsEngineDialog.show(activity!!)
+
+    // --- End notification listener permission and app filter additions ---
 
     override fun showSwipeActions() {
         router.pushController(RouterTransaction.with(SwipeActionsController())
