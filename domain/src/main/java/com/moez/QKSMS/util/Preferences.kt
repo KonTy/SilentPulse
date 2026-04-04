@@ -127,6 +127,9 @@ class Preferences @Inject constructor(
     val driveModeVoiceReplyEnabled = rxPrefs.getBoolean("drive_mode_voice_reply", false)
     val driveModeReplyTimeoutSecs = rxPrefs.getInteger("drive_mode_reply_timeout", 30)
     val driveModeAutoToggleOnCarplay = rxPrefs.getBoolean("drive_mode_auto_carplay", true)
+    val driveModeSttEngine = rxPrefs.getString("drivemode_stt_engine", "android")
+    val driveModeVoskLanguage = rxPrefs.getString("drivemode_vosk_language", "en-us")
+    val driveModeVoskModelPath = rxPrefs.getString("drivemode_vosk_model_path", "")
 
     init {
         // Migrate from old night mode preference to new one, now that we support android Q night mode
