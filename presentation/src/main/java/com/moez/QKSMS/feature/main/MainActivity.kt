@@ -36,7 +36,6 @@ import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.ItemTouchHelper
 import com.google.android.material.snackbar.Snackbar
 import com.jakewharton.rxbinding2.view.clicks
@@ -59,19 +58,57 @@ import com.moez.QKSMS.feature.conversations.ConversationsAdapter
 import com.moez.QKSMS.manager.ChangelogManager
 import com.moez.QKSMS.repository.SyncRepository
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import dagger.android.AndroidInjection
 import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.drawer_view.*
-import kotlinx.android.synthetic.main.main_activity.*
-import kotlinx.android.synthetic.main.main_permission_hint.*
-import kotlinx.android.synthetic.main.main_syncing.*
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import androidx.appcompat.widget.Toolbar
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.RecyclerView
+import com.moez.QKSMS.common.widget.PreferenceView
+import com.moez.QKSMS.common.widget.QkEditText
+import com.moez.QKSMS.common.widget.QkTextView
 
 class MainActivity : QkThemedActivity(), MainView {
+
+    // View references (migrated from synthetics)
+    private val archived: LinearLayout get() = findViewById(R.id.archived)
+    private val archivedIcon: ImageView get() = findViewById(R.id.archivedIcon)
+    private val backup: PreferenceView get() = findViewById(R.id.backup)
+    private val blocking: LinearLayout get() = findViewById(R.id.blocking)
+    private val compose: ImageView get() = findViewById(R.id.compose)
+    private val drawer: View get() = findViewById(R.id.drawer)
+    private val drawerLayout: DrawerLayout get() = findViewById(R.id.drawerLayout)
+    private val empty: QkTextView get() = findViewById(R.id.empty)
+    private val help: LinearLayout get() = findViewById(R.id.help)
+    private val inbox: LinearLayout get() = findViewById(R.id.inbox)
+    private val inboxIcon: ImageView get() = findViewById(R.id.inboxIcon)
+    private val invite: LinearLayout get() = findViewById(R.id.invite)
+    private val plus: LinearLayout get() = findViewById(R.id.plus)
+    private val plusBadge1: QkTextView get() = findViewById(R.id.plusBadge1)
+    private val plusBadge2: QkTextView get() = findViewById(R.id.plusBadge2)
+    private val plusBanner: ConstraintLayout get() = findViewById(R.id.plusBanner)
+    private val plusIcon: ImageView get() = findViewById(R.id.plusIcon)
+    private val rateDismiss: QkTextView get() = findViewById(R.id.rateDismiss)
+    private val rateIcon: ImageView get() = findViewById(R.id.rateIcon)
+    private val rateLayout: ConstraintLayout get() = findViewById(R.id.rateLayout)
+    private val rateOkay: QkTextView get() = findViewById(R.id.rateOkay)
+    private val recyclerView: RecyclerView get() = findViewById(R.id.recyclerView)
+    private val scheduled: LinearLayout get() = findViewById(R.id.scheduled)
+    private val settings: LinearLayout get() = findViewById(R.id.settings)
+    private val snackbarButton: QkTextView get() = findViewById(R.id.snackbarButton)
+    private val snackbarMessage: QkTextView get() = findViewById(R.id.snackbarMessage)
+    private val snackbarTitle: QkTextView get() = findViewById(R.id.snackbarTitle)
+    private val syncingProgress: ProgressBar get() = findViewById(R.id.syncingProgress)
+    private val toolbarSearch: QkEditText get() = findViewById(R.id.toolbarSearch)
+
 
     @Inject lateinit var blockingDialog: BlockingDialog
     @Inject lateinit var disposables: CompositeDisposable
@@ -116,7 +153,7 @@ class MainActivity : QkThemedActivity(), MainView {
     override val undoArchiveIntent: Subject<Unit> = PublishSubject.create()
     override val snackbarButtonIntent: Subject<Unit> = PublishSubject.create()
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[MainViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[MainViewModel::class.java] }
     private val toggle by lazy { ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.main_drawer_open_cd, 0) }
     private val itemTouchHelper by lazy { ItemTouchHelper(itemTouchCallback) }
     private val progressAnimator by lazy { ObjectAnimator.ofInt(syncingProgress, "progress", 0, 0) }
@@ -134,7 +171,7 @@ class MainActivity : QkThemedActivity(), MainView {
 
         (snackbar as? ViewStub)?.setOnInflateListener { _, _ ->
             snackbarButton.clicks()
-                    .autoDisposable(scope(Lifecycle.Event.ON_DESTROY))
+                    .autoDispose(scope(Lifecycle.Event.ON_DESTROY))
                     .subscribe(snackbarButtonIntent)
         }
 
@@ -144,7 +181,7 @@ class MainActivity : QkThemedActivity(), MainView {
         }
 
         toggle.syncState()
-        toolbar.setNavigationOnClickListener {
+        toolbar?.setNavigationOnClickListener {
             dismissKeyboard()
             homeIntent.onNext(Unit)
         }
@@ -153,11 +190,11 @@ class MainActivity : QkThemedActivity(), MainView {
         conversationsAdapter.autoScrollToStart(recyclerView)
 
         // Don't allow clicks to pass through the drawer layout
-        drawer.clicks().autoDisposable(scope()).subscribe()
+        drawer.clicks().autoDispose(scope()).subscribe()
 
         // Set the theme color tint to the recyclerView, progressbar, and FAB
         theme
-                .autoDisposable(scope())
+                .autoDispose(scope())
                 .subscribe { theme ->
                     // Set the color for the drawer icons
                     val states = arrayOf(
@@ -228,17 +265,17 @@ class MainActivity : QkThemedActivity(), MainView {
         }
 
         toolbarSearch.setVisible(state.page is Inbox && state.page.selected == 0 || state.page is Searching)
-        toolbarTitle.setVisible(toolbarSearch.visibility != View.VISIBLE)
+        toolbarTitle?.setVisible(toolbarSearch.visibility != View.VISIBLE)
 
-        toolbar.menu.findItem(R.id.archive)?.isVisible = state.page is Inbox && selectedConversations != 0
-        toolbar.menu.findItem(R.id.unarchive)?.isVisible = state.page is Archived && selectedConversations != 0
-        toolbar.menu.findItem(R.id.delete)?.isVisible = selectedConversations != 0
-        toolbar.menu.findItem(R.id.add)?.isVisible = addContact && selectedConversations != 0
-        toolbar.menu.findItem(R.id.pin)?.isVisible = markPinned && selectedConversations != 0
-        toolbar.menu.findItem(R.id.unpin)?.isVisible = !markPinned && selectedConversations != 0
-        toolbar.menu.findItem(R.id.read)?.isVisible = markRead && selectedConversations != 0
-        toolbar.menu.findItem(R.id.unread)?.isVisible = !markRead && selectedConversations != 0
-        toolbar.menu.findItem(R.id.block)?.isVisible = selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.archive)?.isVisible = state.page is Inbox && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.unarchive)?.isVisible = state.page is Archived && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.delete)?.isVisible = selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.add)?.isVisible = addContact && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.pin)?.isVisible = markPinned && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.unpin)?.isVisible = !markPinned && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.read)?.isVisible = markRead && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.unread)?.isVisible = !markRead && selectedConversations != 0
+        toolbar?.menu?.findItem(R.id.block)?.isVisible = selectedConversations != 0
 
         listOf(plusBadge1, plusBadge2).forEach { badge ->
             badge.isVisible = drawerBadgesExperiment.variant && !state.upgraded

@@ -19,14 +19,14 @@
 package com.moez.QKSMS.feature.qkreply
 
 import android.os.Build
-import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.os.Bundle
 import android.view.WindowManager
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.RecyclerView
 import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.textChanges
@@ -40,10 +40,27 @@ import com.moez.QKSMS.feature.compose.MessagesAdapter
 import dagger.android.AndroidInjection
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.qkreply_activity.*
 import javax.inject.Inject
+import android.widget.ImageView
+import androidx.appcompat.widget.Toolbar
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.moez.QKSMS.common.widget.QkEditText
+import com.moez.QKSMS.common.widget.QkTextView
 
 class QkReplyActivity : QkThemedActivity(), QkReplyView {
+
+    // View references (migrated from synthetics)
+    private val background: ConstraintLayout get() = findViewById(R.id.background)
+    private val composeBackgroundGradient: View get() = findViewById(R.id.composeBackgroundGradient)
+    private val composeBackgroundSolid: View get() = findViewById(R.id.composeBackgroundSolid)
+    private val counter: QkTextView get() = findViewById(R.id.counter)
+    private val message: QkEditText get() = findViewById(R.id.message)
+    private val messageBackground: View get() = findViewById(R.id.messageBackground)
+    private val messages: RecyclerView get() = findViewById(R.id.messages)
+    private val send: ImageView get() = findViewById(R.id.send)
+    private val sim: ImageView get() = findViewById(R.id.sim)
+    private val simIndex: QkTextView get() = findViewById(R.id.simIndex)
+
 
     @Inject lateinit var adapter: MessagesAdapter
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
@@ -53,7 +70,7 @@ class QkReplyActivity : QkThemedActivity(), QkReplyView {
     override val changeSimIntent by lazy { sim.clicks() }
     override val sendIntent by lazy { send.clicks() }
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[QkReplyViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[QkReplyViewModel::class.java] }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AndroidInjection.inject(this)
@@ -67,7 +84,7 @@ class QkReplyActivity : QkThemedActivity(), QkReplyView {
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         viewModel.bindView(this)
 
-        toolbar.clipToOutline = true
+        toolbar?.clipToOutline = true
 
         messages.adapter = adapter
         messages.adapter?.autoScrollToStart(messages)
@@ -77,7 +94,7 @@ class QkReplyActivity : QkThemedActivity(), QkReplyView {
 
         // These theme attributes don't apply themselves on API 21
         if (Build.VERSION.SDK_INT <= 22) {
-            toolbar.setBackgroundTint(resolveThemeColor(R.attr.colorPrimary))
+            toolbar?.setBackgroundTint(resolveThemeColor(com.google.android.material.R.attr.colorPrimary))
             background.setBackgroundTint(resolveThemeColor(android.R.attr.windowBackground))
             messageBackground.setBackgroundTint(resolveThemeColor(R.attr.bubbleColor))
             composeBackgroundGradient.setBackgroundTint(resolveThemeColor(android.R.attr.windowBackground))
@@ -94,8 +111,8 @@ class QkReplyActivity : QkThemedActivity(), QkReplyView {
 
         title = state.title
 
-        toolbar.menu.findItem(R.id.expand)?.isVisible = !state.expanded
-        toolbar.menu.findItem(R.id.collapse)?.isVisible = state.expanded
+        toolbar?.menu?.findItem(R.id.expand)?.isVisible = !state.expanded
+        toolbar?.menu?.findItem(R.id.collapse)?.isVisible = state.expanded
 
         adapter.data = state.data
 

@@ -30,11 +30,19 @@ import com.moez.QKSMS.feature.blocking.manager.BlockingManagerController
 import com.moez.QKSMS.feature.blocking.messages.BlockedMessagesController
 import com.moez.QKSMS.feature.blocking.numbers.BlockedNumbersController
 import com.moez.QKSMS.injection.appComponent
-import kotlinx.android.synthetic.main.blocking_controller.*
-import kotlinx.android.synthetic.main.settings_switch_widget.view.*
 import javax.inject.Inject
+import android.widget.LinearLayout
+import com.moez.QKSMS.common.widget.PreferenceView
 
 class BlockingController : QkController<BlockingView, BlockingState, BlockingPresenter>(), BlockingView {
+
+    // View references (migrated from synthetics)
+    private val blockedMessages: PreferenceView get() = view!!.findViewById(R.id.blockedMessages)
+    private val blockedNumbers: PreferenceView get() = view!!.findViewById(R.id.blockedNumbers)
+    private val blockingManager: PreferenceView get() = view!!.findViewById(R.id.blockingManager)
+    private val drop: PreferenceView get() = view!!.findViewById(R.id.drop)
+    private val parent: LinearLayout get() = view!!.findViewById(R.id.parent)
+
 
     override val blockingManagerIntent by lazy { blockingManager.clicks() }
     override val blockedNumbersIntent by lazy { blockedNumbers.clicks() }
@@ -46,7 +54,6 @@ class BlockingController : QkController<BlockingView, BlockingState, BlockingPre
 
     init {
         appComponent.inject(this)
-        retainViewMode = RetainViewMode.RETAIN_DETACH
         layoutRes = R.layout.blocking_controller
     }
 

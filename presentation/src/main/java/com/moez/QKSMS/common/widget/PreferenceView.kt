@@ -29,11 +29,21 @@ import com.moez.QKSMS.common.util.extensions.resolveThemeAttribute
 import com.moez.QKSMS.common.util.extensions.resolveThemeColorStateList
 import com.moez.QKSMS.common.util.extensions.setVisible
 import com.moez.QKSMS.injection.appComponent
-import kotlinx.android.synthetic.main.preference_view.view.*
+import android.widget.FrameLayout
+import android.widget.ImageView
+import com.moez.QKSMS.common.widget.QkTextView
 
 class PreferenceView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : LinearLayoutCompat(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val icon: ImageView get() = findViewById(R.id.icon)
+    private val summaryView: QkTextView get() = findViewById(R.id.summaryView)
+    val titleView: QkTextView get() = findViewById(R.id.titleView)
+    private val widgetFrame: FrameLayout get() = findViewById(R.id.widgetFrame)
+    val checkbox: QkSwitch get() = findViewById(R.id.checkbox)
+
 
     var title: String? = null
         set(value) {
@@ -68,7 +78,7 @@ class PreferenceView @JvmOverloads constructor(
         }
 
         View.inflate(context, R.layout.preference_view, this)
-        setBackgroundResource(context.resolveThemeAttribute(R.attr.selectableItemBackground))
+        setBackgroundResource(context.resolveThemeAttribute(androidx.appcompat.R.attr.selectableItemBackground))
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
 

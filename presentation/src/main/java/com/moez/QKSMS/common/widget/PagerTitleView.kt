@@ -33,13 +33,17 @@ import com.moez.QKSMS.extensions.Optional
 import com.moez.QKSMS.injection.appComponent
 import com.moez.QKSMS.repository.ConversationRepository
 import com.uber.autodispose.android.ViewScopeProvider
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.tab_view.view.*
 import javax.inject.Inject
+import com.moez.QKSMS.common.widget.QkTextView
 
 class PagerTitleView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val label: QkTextView get() = findViewById(R.id.label)
+
 
     @Inject lateinit var colors: Colors
     @Inject lateinit var conversationRepo: ConversationRepository
@@ -67,7 +71,7 @@ class PagerTitleView @JvmOverloads constructor(context: Context, attrs: Attribut
 
         pager?.adapter?.count?.forEach { position ->
             val view = LayoutInflater.from(context).inflate(R.layout.tab_view, this, false)
-            view.label.text = pager?.adapter?.getPageTitle(position)
+            view.findViewById<QkTextView>(R.id.label).text = pager?.adapter?.getPageTitle(position)
             view.setOnClickListener { pager?.currentItem = position }
 
             addView(view)
@@ -101,7 +105,7 @@ class PagerTitleView @JvmOverloads constructor(context: Context, attrs: Attribut
                     val textSecondary = context.resolveThemeColor(android.R.attr.textColorSecondary)
                     ColorStateList(states, intArrayOf(theme.theme, textSecondary))
                 }
-                .autoDisposable(ViewScopeProvider.from(this))
+                .autoDispose(ViewScopeProvider.from(this))
                 .subscribe { colorStateList ->
                     childCount.forEach { index ->
                         (getChildAt(index) as? TextView)?.setTextColor(colorStateList)

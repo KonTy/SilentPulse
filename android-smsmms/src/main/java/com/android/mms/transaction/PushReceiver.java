@@ -25,7 +25,6 @@ import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.Mms.Inbox;
 
@@ -67,19 +66,29 @@ public class PushReceiver extends BroadcastReceiver {
     private static Set<String> downloadedUrls = new HashSet<String>();
     private static final ExecutorService PUSH_RECEIVER_EXECUTOR = Executors.newSingleThreadExecutor();
 
-    private class ReceivePushTask extends AsyncTask<Intent, Void, Void> {
+    private class ReceivePushTask implements Runnable {
         private Context mContext;
         private PendingResult pendingResult;
+        private Intent mIntent;
 
-        private ReceivePushTask(Context context, PendingResult pendingResult) {
+        private ReceivePushTask(Context context, PendingResult pendingResult, Intent intent) {
             mContext = context;
             this.pendingResult = pendingResult;
+            this.mIntent = intent;
         }
 
         @Override
-        protected Void doInBackground(Intent... intents) {
+        public void run() {
+            try {
+                doWork();
+            } finally {
+                pendingResult.finish();
+            }
+        }
+
+        private void doWork() {
             Timber.v("receiving a new mms message");
-            Intent intent = intents[0];
+            Intent intent = mIntent;
 
             // Get raw PDU push-data from the message and parse it
             byte[] pushData = intent.getByteArrayExtra("data");
@@ -88,7 +97,7 @@ public class PushReceiver extends BroadcastReceiver {
 
             if (pdu == null) {
                 Timber.e("Invalid PUSH data");
-                return null;
+                return;
             }
 
             PduPersister p = PduPersister.getPduPersister(mContext);
@@ -142,7 +151,7 @@ public class PushReceiver extends BroadcastReceiver {
                             String location = getContentLocation(mContext, uri);
                             if (downloadedUrls.contains(location)) {
                                 Timber.v("already added this download, don't download again");
-                                return null;
+                                return;
                             } else {
                                 downloadedUrls.add(location);
                             }
@@ -164,13 +173,6 @@ public class PushReceiver extends BroadcastReceiver {
             }
 
             Timber.v("PUSH Intent processed.");
-
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            pendingResult.finish();
         }
     }
 
@@ -182,7 +184,7 @@ public class PushReceiver extends BroadcastReceiver {
             Timber.v("Received PUSH Intent: " + intent);
 
             MmsConfig.init(context);
-            new ReceivePushTask(context, goAsync()).executeOnExecutor(PUSH_RECEIVER_EXECUTOR, intent);
+            PUSH_RECEIVER_EXECUTOR.execute(new ReceivePushTask(context, goAsync(), intent));
 
             Timber.v(context.getPackageName() + " received and aborted");
         }

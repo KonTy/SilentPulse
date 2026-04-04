@@ -31,10 +31,10 @@ import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.Colors
 import com.moez.QKSMS.common.util.DateFormatter
 import com.moez.QKSMS.common.util.extensions.setVisible
+import com.moez.QKSMS.common.widget.GroupAvatarView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.extensions.removeAccents
 import com.moez.QKSMS.model.SearchResult
-import kotlinx.android.synthetic.main.search_list_item.*
-import kotlinx.android.synthetic.main.search_list_item.view.*
 import javax.inject.Inject
 
 class SearchAdapter @Inject constructor(
@@ -61,7 +61,13 @@ class SearchAdapter @Inject constructor(
         val previous = data.getOrNull(position - 1)
         val result = getItem(position)
 
-        holder.resultsHeader.setVisible(result.messages > 0 && previous?.messages == 0)
+        val resultsHeader = holder.itemView.findViewById<androidx.constraintlayout.widget.Group>(R.id.resultsHeader)
+        val titleView = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val avatars = holder.itemView.findViewById<GroupAvatarView>(R.id.avatars)
+        val date = holder.itemView.findViewById<QkTextView>(R.id.date)
+        val snippet = holder.itemView.findViewById<QkTextView>(R.id.snippet)
+
+        resultsHeader.setVisible(result.messages > 0 && previous?.messages == 0)
 
         val query = result.query
         val title = SpannableString(result.conversation.getTitle())
@@ -71,23 +77,23 @@ class SearchAdapter @Inject constructor(
             title.setSpan(BackgroundColorSpan(highlightColor), index, index + query.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             index = title.indexOf(query, index + query.length, true)
         }
-        holder.title.text = title
+        titleView.text = title
 
-        holder.avatars.recipients = result.conversation.recipients
+        avatars.recipients = result.conversation.recipients
 
         when (result.messages == 0) {
             true -> {
-                holder.date.setVisible(true)
-                holder.date.text = dateFormatter.getConversationTimestamp(result.conversation.date)
-                holder.snippet.text = when (result.conversation.me) {
+                date.setVisible(true)
+                date.text = dateFormatter.getConversationTimestamp(result.conversation.date)
+                snippet.text = when (result.conversation.me) {
                     true -> context.getString(R.string.main_sender_you, result.conversation.snippet)
                     false -> result.conversation.snippet
                 }
             }
 
             false -> {
-                holder.date.setVisible(false)
-                holder.snippet.text = context.getString(R.string.main_message_results, result.messages)
+                date.setVisible(false)
+                snippet.text = context.getString(R.string.main_message_results, result.messages)
             }
         }
     }

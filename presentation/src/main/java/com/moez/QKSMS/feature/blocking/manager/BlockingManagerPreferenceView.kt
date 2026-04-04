@@ -30,11 +30,20 @@ import com.moez.QKSMS.R
 import com.moez.QKSMS.common.util.extensions.animateLayoutChanges
 import com.moez.QKSMS.common.util.extensions.resolveThemeAttribute
 import com.moez.QKSMS.common.util.extensions.setVisible
-import kotlinx.android.synthetic.main.blocking_manager_preference_view.view.*
+import android.widget.FrameLayout
+import com.moez.QKSMS.common.widget.QkTextView
 
 class BlockingManagerPreferenceView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val iconView: ImageView get() = findViewById(R.id.iconView)
+    private val summaryView: QkTextView get() = findViewById(R.id.summaryView)
+    private val titleView: QkTextView get() = findViewById(R.id.titleView)
+    private val widgetFrame: FrameLayout get() = findViewById(R.id.widgetFrame)
+    val action: ImageView get() = findViewById(R.id.action)
+
 
     var icon: Drawable? = null
         set(value) {
@@ -75,7 +84,7 @@ class BlockingManagerPreferenceView @JvmOverloads constructor(
 
     init {
         View.inflate(context, R.layout.blocking_manager_preference_view, this)
-        setBackgroundResource(context.resolveThemeAttribute(R.attr.selectableItemBackground))
+        setBackgroundResource(context.resolveThemeAttribute(androidx.appcompat.R.attr.selectableItemBackground))
 
         context.obtainStyledAttributes(attrs, R.styleable.BlockingManagerPreferenceView).run {
             icon = getDrawable(R.styleable.BlockingManagerPreferenceView_icon)

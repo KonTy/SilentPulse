@@ -18,21 +18,38 @@
  */
 package com.moez.QKSMS.service
 
-import android.app.IntentService
+import android.app.Service
 import android.content.Intent
 import android.net.Uri
+import android.os.IBinder
 import android.telephony.TelephonyManager
 import com.moez.QKSMS.interactor.SendMessage
 import com.moez.QKSMS.repository.ConversationRepository
 import dagger.android.AndroidInjection
+import java.util.concurrent.Executors
 import javax.inject.Inject
 
-class HeadlessSmsSendService : IntentService("HeadlessSmsSendService") {
+class HeadlessSmsSendService : Service() {
 
     @Inject lateinit var conversationRepo: ConversationRepository
     @Inject lateinit var sendMessage: SendMessage
 
-    override fun onHandleIntent(intent: Intent?) {
+    private val executor = Executors.newSingleThreadExecutor()
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        executor.execute {
+            try {
+                handleIntent(intent)
+            } finally {
+                stopSelf(startId)
+            }
+        }
+        return START_REDELIVER_INTENT
+    }
+
+    private fun handleIntent(intent: Intent?) {
         if (intent?.action != TelephonyManager.ACTION_RESPOND_VIA_MESSAGE) return
 
         AndroidInjection.inject(this)

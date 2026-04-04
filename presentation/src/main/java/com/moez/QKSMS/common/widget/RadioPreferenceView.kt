@@ -31,12 +31,21 @@ import com.moez.QKSMS.common.util.extensions.resolveThemeAttribute
 import com.moez.QKSMS.common.util.extensions.resolveThemeColor
 import com.moez.QKSMS.common.util.extensions.setVisible
 import com.moez.QKSMS.injection.appComponent
-import kotlinx.android.synthetic.main.radio_preference_view.view.*
 import javax.inject.Inject
+import android.widget.FrameLayout
+import androidx.appcompat.widget.AppCompatRadioButton
+import com.moez.QKSMS.common.widget.QkTextView
 
 class RadioPreferenceView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val radioButton: AppCompatRadioButton get() = findViewById(R.id.radioButton)
+    private val summaryView: QkTextView get() = findViewById(R.id.summaryView)
+    private val titleView: QkTextView get() = findViewById(R.id.titleView)
+    private val widgetFrame: FrameLayout get() = findViewById(R.id.widgetFrame)
+
 
     @Inject lateinit var colors: Colors
 
@@ -73,14 +82,14 @@ class RadioPreferenceView @JvmOverloads constructor(
         }
 
         View.inflate(context, R.layout.radio_preference_view, this)
-        setBackgroundResource(context.resolveThemeAttribute(R.attr.selectableItemBackground))
+        setBackgroundResource(context.resolveThemeAttribute(androidx.appcompat.R.attr.selectableItemBackground))
 
         val states = arrayOf(
                 intArrayOf(android.R.attr.state_checked),
                 intArrayOf(-android.R.attr.state_checked))
 
         val themeColor = when (isInEditMode) {
-            true -> context.resources.getColor(R.color.tools_theme)
+            true -> androidx.core.content.ContextCompat.getColor(context, R.color.tools_theme)
             false -> colors.theme().theme
         }
         val textSecondary = context.resolveThemeColor(android.R.attr.textColorTertiary)

@@ -11,14 +11,15 @@ import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.Colors
 import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.common.util.extensions.setVisible
+import com.moez.QKSMS.common.widget.AvatarView
+import com.moez.QKSMS.common.widget.BubbleImageView
+import com.moez.QKSMS.common.widget.PreferenceView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.extensions.isVideo
 import com.moez.QKSMS.feature.conversationinfo.ConversationInfoItem.*
 import com.moez.QKSMS.util.GlideApp
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.conversation_info_settings.*
-import kotlinx.android.synthetic.main.conversation_media_list_item.*
-import kotlinx.android.synthetic.main.conversation_recipient_list_item.*
 import javax.inject.Inject
 
 class ConversationInfoAdapter @Inject constructor(
@@ -51,13 +52,19 @@ class ConversationInfoAdapter @Inject constructor(
                     true
                 }
 
-                theme.setOnClickListener {
+                val themeView = itemView.findViewById<android.view.View>(R.id.theme)
+                themeView.setOnClickListener {
                     val item = getItem(adapterPosition) as? ConversationInfoRecipient
                     item?.value?.id?.run(themeClicks::onNext)
                 }
             }
 
             1 -> QkViewHolder(inflater.inflate(R.layout.conversation_info_settings, parent, false)).apply {
+                val groupName = itemView.findViewById<PreferenceView>(R.id.groupName)
+                val notifications = itemView.findViewById<PreferenceView>(R.id.notifications)
+                val archive = itemView.findViewById<PreferenceView>(R.id.archive)
+                val block = itemView.findViewById<PreferenceView>(R.id.block)
+                val delete = itemView.findViewById<PreferenceView>(R.id.delete)
                 groupName.clicks().subscribe(nameClicks)
                 notifications.clicks().subscribe(notificationClicks)
                 archive.clicks().subscribe(archiveClicks)
@@ -80,32 +87,43 @@ class ConversationInfoAdapter @Inject constructor(
         when (val item = getItem(position)) {
             is ConversationInfoRecipient -> {
                 val recipient = item.value
-                holder.avatar.setRecipient(recipient)
+                val avatar = holder.itemView.findViewById<AvatarView>(R.id.avatar)
+                val name = holder.itemView.findViewById<QkTextView>(R.id.name)
+                val address = holder.itemView.findViewById<QkTextView>(R.id.address)
+                val add = holder.itemView.findViewById<android.widget.ImageView>(R.id.add)
+                val themeView = holder.itemView.findViewById<android.widget.ImageView>(R.id.theme)
 
-                holder.name.text = recipient.contact?.name ?: recipient.address
+                avatar.setRecipient(recipient)
 
-                holder.address.text = recipient.address
-                holder.address.setVisible(recipient.contact != null)
+                name.text = recipient.contact?.name ?: recipient.address
 
-                holder.add.setVisible(recipient.contact == null)
+                address.text = recipient.address
+                address.setVisible(recipient.contact != null)
+
+                add.setVisible(recipient.contact == null)
 
                 val theme = colors.theme(recipient)
-                holder.theme.setTint(theme.theme)
+                themeView.setTint(theme.theme)
             }
 
             is ConversationInfoSettings -> {
-                holder.groupName.isVisible = item.recipients.size > 1
-                holder.groupName.summary = item.name
+                val groupName = holder.itemView.findViewById<PreferenceView>(R.id.groupName)
+                val notifications = holder.itemView.findViewById<PreferenceView>(R.id.notifications)
+                val archive = holder.itemView.findViewById<PreferenceView>(R.id.archive)
+                val block = holder.itemView.findViewById<PreferenceView>(R.id.block)
 
-                holder.notifications.isEnabled = !item.blocked
+                groupName.isVisible = item.recipients.size > 1
+                groupName.summary = item.name
 
-                holder.archive.isEnabled = !item.blocked
-                holder.archive.title = context.getString(when (item.archived) {
+                notifications.isEnabled = !item.blocked
+
+                archive.isEnabled = !item.blocked
+                archive.title = context.getString(when (item.archived) {
                     true -> R.string.info_unarchive
                     false -> R.string.info_archive
                 })
 
-                holder.block.title = context.getString(when (item.blocked) {
+                block.title = context.getString(when (item.blocked) {
                     true -> R.string.info_unblock
                     false -> R.string.info_block
                 })
@@ -113,13 +131,15 @@ class ConversationInfoAdapter @Inject constructor(
 
             is ConversationInfoMedia -> {
                 val part = item.value
+                val thumbnail = holder.itemView.findViewById<BubbleImageView>(R.id.thumbnail)
+                val video = holder.itemView.findViewById<android.widget.ImageView>(R.id.video)
 
                 GlideApp.with(context)
                         .load(part.getUri())
                         .fitCenter()
-                        .into(holder.thumbnail)
+                        .into(thumbnail)
 
-                holder.video.isVisible = part.isVideo()
+                video.isVisible = part.isVideo()
             }
         }
     }

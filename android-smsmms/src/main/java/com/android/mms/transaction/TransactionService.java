@@ -26,7 +26,8 @@ import android.content.IntentFilter;
 import android.database.Cursor;
 import android.database.sqlite.SqliteWrapper;
 import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -180,7 +181,8 @@ public class TransactionService extends Service implements Observer {
         mReceiver = new ConnectivityBroadcastReceiver();
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-        registerReceiver(mReceiver, intentFilter);
+        androidx.core.content.ContextCompat.registerReceiver(this, mReceiver, intentFilter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     private void initServiceHandler() {
@@ -239,13 +241,19 @@ public class TransactionService extends Service implements Observer {
     private boolean isNetworkAvailable() {
         if (mConnMgr == null) {
             return false;
-        } else if (Utils.isMmsOverWifiEnabled(this)) {
-            NetworkInfo niWF = mConnMgr.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-            return (niWF == null ? false : niWF.isConnected());
-        } else {
-            NetworkInfo ni = mConnMgr.getNetworkInfo(ConnectivityManager.TYPE_MOBILE_MMS);
-            return (ni == null ? false : ni.isAvailable());
         }
+        Network activeNetwork = mConnMgr.getActiveNetwork();
+        if (activeNetwork == null) {
+            return false;
+        }
+        NetworkCapabilities caps = mConnMgr.getNetworkCapabilities(activeNetwork);
+        if (caps == null) {
+            return false;
+        }
+        if (Utils.isMmsOverWifiEnabled(this)) {
+            return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        }
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
     }
 
     public void onNewIntent(Intent intent, int serviceId) {
@@ -512,25 +520,22 @@ public class TransactionService extends Service implements Observer {
         createWakeLock();
 
         if (Utils.isMmsOverWifiEnabled(this)) {
-            NetworkInfo niWF = mConnMgr.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-            if ((niWF != null) && (niWF.isConnected())) {
-                Timber.v("beginMmsConnectivity: Wifi active");
-                return 0;
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                Network activeNetwork = cm.getActiveNetwork();
+                if (activeNetwork != null) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(activeNetwork);
+                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        Timber.v("beginMmsConnectivity: Wifi active");
+                        return 0;
+                    }
+                }
             }
         }
 
-        int result = mConnMgr.startUsingNetworkFeature(ConnectivityManager.TYPE_MOBILE, "enableMMS");
-
-        Timber.v("beginMmsConnectivity: result=" + result);
-
-        switch (result) {
-            case 0:
-            case 1:
-                acquireWakeLock();
-                return result;
-        }
-
-        throw new IOException("Cannot establish MMS connectivity");
+        // On modern Android, MMS connectivity is managed by the platform
+        acquireWakeLock();
+        return 0;
     }
 
     protected void endMmsConnectivity() {
@@ -539,11 +544,6 @@ public class TransactionService extends Service implements Observer {
 
             // cancel timer for renewal of lease
             mServiceHandler.removeMessages(EVENT_CONTINUE_MMS_CONNECTIVITY);
-            if (mConnMgr != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                mConnMgr.stopUsingNetworkFeature(
-                        ConnectivityManager.TYPE_MOBILE,
-                        "enableMMS");
-            }
         } finally {
             releaseWakeLock();
         }
@@ -878,42 +878,35 @@ public class TransactionService extends Service implements Observer {
             String action = intent.getAction();
             Timber.w("ConnectivityBroadcastReceiver.onReceive() action: " + action);
 
-            if (!action.equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
+            if (!ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
                 return;
             }
 
-            NetworkInfo mmsNetworkInfo = null;
+            boolean hasConnectivity = false;
+            boolean isAvailable = false;
 
             if (mConnMgr != null && Utils.isMobileDataEnabled(context)) {
-                mmsNetworkInfo = mConnMgr.getNetworkInfo(ConnectivityManager.TYPE_MOBILE_MMS);
+                Network activeNetwork = mConnMgr.getActiveNetwork();
+                if (activeNetwork != null) {
+                    NetworkCapabilities caps = mConnMgr.getNetworkCapabilities(activeNetwork);
+                    if (caps != null) {
+                        hasConnectivity = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                                || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+                        isAvailable = hasConnectivity;
+                    }
+                }
             } else {
                 Timber.v("mConnMgr is null, bail");
             }
 
-            /*
-             * If we are being informed that connectivity has been established
-             * to allow MMS traffic, then proceed with processing the pending
-             * transaction, if any.
-             */
+            Timber.v("Handle ConnectivityBroadcastReceiver.onReceive(): connected=" + hasConnectivity);
 
-            Timber.v("Handle ConnectivityBroadcastReceiver.onReceive(): " + mmsNetworkInfo);
-
-            // Check availability of the mobile network.
-            if (mmsNetworkInfo == null) {
-                Timber.v("mms type is null or mobile data is turned off, bail");
+            if (!hasConnectivity && !isAvailable) {
+                Timber.v("no connectivity available, bail");
             } else {
-                // This is a very specific fix to handle the case where the phone receives an
-                // incoming call during the time we're trying to setup the mms connection.
-                // When the call ends, restart the process of mms connectivity.
-                if ("2GVoiceCallEnded".equals(mmsNetworkInfo.getReason())) {
-                    Timber.v("   reason is " + "2GVoiceCallEnded" + ", retrying mms connectivity");
-                    renewMmsConnectivity();
-                    return;
-                }
-
-                if (mmsNetworkInfo.isConnected()) {
+                if (hasConnectivity) {
                     TransactionSettings settings = new TransactionSettings(
-                            TransactionService.this, mmsNetworkInfo.getExtraInfo());
+                            TransactionService.this, null);
                     // If this APN doesn't have an MMSC, mark everything as failed and bail.
                     if (TextUtils.isEmpty(settings.getMmscUrl())) {
                         Timber.v("   empty MMSC url, bail");
@@ -928,10 +921,10 @@ public class TransactionService extends Service implements Observer {
                     }
                     mServiceHandler.processPendingTransaction(null, settings);
                 } else {
-                    Timber.v("   TYPE_MOBILE_MMS not connected, bail");
+                    Timber.v("   not connected, bail");
 
                     // Retry mms connectivity once it's possible to connect
-                    if (mmsNetworkInfo.isAvailable()) {
+                    if (isAvailable) {
                         Timber.v("   retrying mms connectivity for it's available");
                         renewMmsConnectivity();
                     }

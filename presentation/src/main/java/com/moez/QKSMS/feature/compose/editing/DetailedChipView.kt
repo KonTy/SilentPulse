@@ -28,10 +28,20 @@ import com.moez.QKSMS.common.util.extensions.setBackgroundTint
 import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.injection.appComponent
 import com.moez.QKSMS.model.Recipient
-import kotlinx.android.synthetic.main.contact_chip_detailed.view.*
 import javax.inject.Inject
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.moez.QKSMS.common.widget.AvatarView
+import com.moez.QKSMS.common.widget.QkTextView
 
 class DetailedChipView(context: Context) : RelativeLayout(context) {
+
+    // View references (migrated from synthetics)
+    private val avatar: AvatarView get() = findViewById(R.id.avatar)
+    private val card: ConstraintLayout get() = findViewById(R.id.card)
+    private val delete: android.widget.ImageView get() = findViewById(R.id.delete)
+    private val info: QkTextView get() = findViewById(R.id.info)
+    private val name: QkTextView get() = findViewById(R.id.name)
+
 
     @Inject lateinit var colors: Colors
 

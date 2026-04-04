@@ -19,7 +19,6 @@
 package com.moez.QKSMS.repository
 
 import android.content.Context
-import android.os.Environment
 import android.provider.Telephony
 import androidx.core.content.contentValuesOf
 import com.moez.QKSMS.model.BackupFile
@@ -53,7 +52,9 @@ class BackupRepositoryImpl @Inject constructor(
 ) : BackupRepository {
 
     companion object {
-        private val BACKUP_DIRECTORY = Environment.getExternalStorageDirectory().toString() + "/QKSMS/Backups"
+        private fun getBackupDirectory(context: Context): String {
+            return File(context.getExternalFilesDir(null), "Backups").absolutePath
+        }
     }
 
     data class Backup(
@@ -120,7 +121,7 @@ class BackupRepositoryImpl @Inject constructor(
 
         try {
             // Create the directory and file
-            val dir = File(BACKUP_DIRECTORY).apply { mkdirs() }
+            val dir = File(getBackupDirectory(context)).apply { mkdirs() }
             val timestamp = SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(System.currentTimeMillis())
             val file = File(dir, "backup-$timestamp.json")
 
@@ -151,8 +152,8 @@ class BackupRepositoryImpl @Inject constructor(
 
     override fun getBackupProgress(): Observable<BackupRepository.Progress> = backupProgress
 
-    override fun getBackups(): Observable<List<BackupFile>> = QkFileObserver(BACKUP_DIRECTORY).observable
-            .map { File(BACKUP_DIRECTORY).listFiles() ?: arrayOf() }
+    override fun getBackups(): Observable<List<BackupFile>> = QkFileObserver(getBackupDirectory(context)).observable
+            .map { File(getBackupDirectory(context)).listFiles() ?: arrayOf() }
             .subscribeOn(Schedulers.io())
             .observeOn(Schedulers.computation())
             .map { files ->

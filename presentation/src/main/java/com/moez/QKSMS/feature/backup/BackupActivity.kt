@@ -25,10 +25,14 @@ import com.bluelinelabs.conductor.RouterTransaction
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.base.QkThemedActivity
 import dagger.android.AndroidInjection
-import kotlinx.android.synthetic.main.container_activity.*
+import com.bluelinelabs.conductor.ChangeHandlerFrameLayout
 
 
 class BackupActivity : QkThemedActivity() {
+
+    // View references (migrated from synthetics)
+    private val container: ChangeHandlerFrameLayout get() = findViewById(R.id.container)
+
 
     private lateinit var router: Router
 

@@ -26,7 +26,6 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.moez.QKSMS.R
@@ -38,10 +37,16 @@ import dagger.android.AndroidInjection
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.gallery_activity.*
 import javax.inject.Inject
+import androidx.appcompat.widget.Toolbar
+import com.moez.QKSMS.common.widget.QkTextView
 
 class GalleryActivity : QkActivity(), GalleryView {
+
+    // View references (migrated from synthetics)
+    private val pager: ViewPager2 get() = findViewById(R.id.pager)
+    private val toolbarSubtitle: QkTextView get() = findViewById(R.id.toolbarSubtitle)
+
 
     @Inject lateinit var dateFormatter: DateFormatter
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
@@ -51,7 +56,7 @@ class GalleryActivity : QkActivity(), GalleryView {
 
     private val optionsItemSubject: Subject<Int> = PublishSubject.create()
     private val pageChangedSubject: Subject<MmsPart> = PublishSubject.create()
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[GalleryViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[GalleryViewModel::class.java] }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         delegate.localNightMode = AppCompatDelegate.MODE_NIGHT_YES
@@ -70,7 +75,7 @@ class GalleryActivity : QkActivity(), GalleryView {
 
         pagerAdapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
             override fun onChanged() {
-                pagerAdapter.data?.takeIf { pagerAdapter.itemCount > 0 }
+                pagerAdapter.getData()?.takeIf { pagerAdapter.itemCount > 0 }
                         ?.indexOfFirst { part -> part.id == partId }
                         ?.let { index ->
                             onPageSelected(index)
@@ -82,15 +87,15 @@ class GalleryActivity : QkActivity(), GalleryView {
     }
 
     fun onPageSelected(position: Int) {
-        toolbarSubtitle.text = pagerAdapter.getItem(position)?.messages?.firstOrNull()?.date
+        toolbarSubtitle?.text = pagerAdapter.getItem(position)?.messages?.firstOrNull()?.date
                 ?.let(dateFormatter::getDetailedTimestamp)
-        toolbarSubtitle.isVisible = toolbarTitle.text.isNotBlank()
+        toolbarSubtitle?.isVisible = toolbarTitle?.text?.isNotBlank() == true
 
         pagerAdapter.getItem(position)?.run(pageChangedSubject::onNext)
     }
 
     override fun render(state: GalleryState) {
-        toolbar.setVisible(state.navigationVisible)
+        toolbar?.setVisible(state.navigationVisible)
 
         title = state.title
         pagerAdapter.updateData(state.parts)

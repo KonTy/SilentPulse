@@ -42,12 +42,33 @@ import com.moez.QKSMS.repository.BackupRepository
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.backup_controller.*
-import kotlinx.android.synthetic.main.backup_list_dialog.view.*
-import kotlinx.android.synthetic.main.preference_view.view.*
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.recyclerview.widget.RecyclerView
+import com.moez.QKSMS.common.widget.QkTextView
 
 class BackupController : QkController<BackupView, BackupState, BackupPresenter>(), BackupView {
+
+    // View references (migrated from synthetics)
+    private val backup: PreferenceView get() = view!!.findViewById(R.id.backup)
+    private val empty: QkTextView get() = view!!.findViewById(R.id.empty)
+    private val fab: LinearLayout get() = view!!.findViewById(R.id.fab)
+    private val fabIcon: ImageView get() = view!!.findViewById(R.id.fabIcon)
+    private val fabLabel: QkTextView get() = view!!.findViewById(R.id.fabLabel)
+    private val files: RecyclerView get() = view!!.findViewById(R.id.files)
+    private val linearLayout: LinearLayout get() = view!!.findViewById(R.id.linearLayout)
+    private val progress: ConstraintLayout get() = view!!.findViewById(R.id.progress)
+    private val progressBar: ProgressBar get() = view!!.findViewById(R.id.progressBar)
+    private val progressCancel: ImageView get() = view!!.findViewById(R.id.progressCancel)
+    private val progressIcon: ImageView get() = view!!.findViewById(R.id.progressIcon)
+    private val progressSummary: QkTextView get() = view!!.findViewById(R.id.progressSummary)
+    private val progressTitle: QkTextView get() = view!!.findViewById(R.id.progressTitle)
+    private val restore: PreferenceView get() = view!!.findViewById(R.id.restore)
+    private val titleView: QkTextView get() = view!!.findViewById(R.id.titleView)
+
 
     @Inject lateinit var adapter: BackupAdapter
     @Inject lateinit var dateFormatter: DateFormatter

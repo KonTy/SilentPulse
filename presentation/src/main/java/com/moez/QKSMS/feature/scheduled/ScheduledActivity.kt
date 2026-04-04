@@ -22,7 +22,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import com.jakewharton.rxbinding2.view.clicks
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.QkDialog
@@ -31,12 +30,27 @@ import com.moez.QKSMS.common.util.FontProvider
 import com.moez.QKSMS.common.util.extensions.setBackgroundTint
 import com.moez.QKSMS.common.util.extensions.setTint
 import dagger.android.AndroidInjection
-import kotlinx.android.synthetic.main.collapsing_toolbar.*
-import kotlinx.android.synthetic.main.scheduled_activity.*
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.LinearLayout
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.appbar.CollapsingToolbarLayout
+import com.moez.QKSMS.common.widget.QkTextView
+import com.moez.QKSMS.common.widget.TightTextView
 
 
 class ScheduledActivity : QkThemedActivity(), ScheduledView {
+
+    // View references (migrated from synthetics)
+    private val collapsingToolbar: CollapsingToolbarLayout get() = findViewById(R.id.collapsingToolbar)
+    private val compose: ImageView get() = findViewById(R.id.compose)
+    private val empty: QkTextView get() = findViewById(R.id.empty)
+    private val messages: RecyclerView get() = findViewById(R.id.messages)
+    private val sampleMessage: TightTextView get() = findViewById(R.id.sampleMessage)
+    private val upgrade: LinearLayout get() = findViewById(R.id.upgrade)
+    private val upgradeIcon: ImageView get() = findViewById(R.id.upgradeIcon)
+    private val upgradeLabel: QkTextView get() = findViewById(R.id.upgradeLabel)
+
 
     @Inject lateinit var dialog: QkDialog
     @Inject lateinit var fontProvider: FontProvider
@@ -48,7 +62,7 @@ class ScheduledActivity : QkThemedActivity(), ScheduledView {
     override val composeIntent by lazy { compose.clicks() }
     override val upgradeIntent by lazy { upgrade.clicks() }
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[ScheduledViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[ScheduledViewModel::class.java] }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AndroidInjection.inject(this)

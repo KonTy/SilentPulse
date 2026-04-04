@@ -35,9 +35,6 @@ import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.common.util.extensions.setVisible
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.theme_list_item.view.*
-import kotlinx.android.synthetic.main.theme_palette_list_item.*
-import kotlinx.android.synthetic.main.theme_palette_list_item.view.*
 import javax.inject.Inject
 
 class ThemeAdapter @Inject constructor(
@@ -63,14 +60,17 @@ class ThemeAdapter @Inject constructor(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): QkViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.theme_palette_list_item, parent, false)
-        view.palette.flexWrap = FlexWrap.WRAP
-        view.palette.flexDirection = FlexDirection.ROW
+        val palette = view.findViewById<FlexboxLayout>(R.id.palette)
+        palette.flexWrap = FlexWrap.WRAP
+        palette.flexDirection = FlexDirection.ROW
 
         return QkViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: QkViewHolder, position: Int) {
         val palette = getItem(position)
+
+        val paletteView = holder.itemView.findViewById<FlexboxLayout>(R.id.palette)
 
         val screenWidth = Resources.getSystem().displayMetrics.widthPixels
         val minPadding = (16 * 6).dpToPx(context)
@@ -81,20 +81,22 @@ class ThemeAdapter @Inject constructor(
         }
         val swatchPadding = (screenWidth - size * 5) / 12
 
-        holder.palette.removeAllViews()
-        holder.palette.setPadding(swatchPadding, swatchPadding, swatchPadding, swatchPadding)
+        paletteView.removeAllViews()
+        paletteView.setPadding(swatchPadding, swatchPadding, swatchPadding, swatchPadding)
 
         (palette.subList(0, 5) + palette.subList(5, 10).reversed())
                 .mapIndexed { index, color ->
-                    LayoutInflater.from(context).inflate(R.layout.theme_list_item, holder.palette, false).apply {
+                    LayoutInflater.from(context).inflate(R.layout.theme_list_item, paletteView, false).apply {
 
                         // Send clicks to the selected subject
                         setOnClickListener { colorSelected.onNext(color) }
 
                         // Apply the color to the view
-                        theme.setBackgroundTint(color)
+                        val themeView = findViewById<android.view.View>(R.id.theme)
+                        themeView.setBackgroundTint(color)
 
                         // Control the check visibility and tint
+                        val check = findViewById<android.widget.ImageView>(R.id.check)
                         check.setVisible(color == selectedColor)
                         check.setTint(iconTint)
 
@@ -107,7 +109,7 @@ class ThemeAdapter @Inject constructor(
                         }
                     }
                 }
-                .forEach { theme -> holder.palette.addView(theme) }
+                .forEach { themeItem -> paletteView.addView(themeItem) }
     }
 
 }

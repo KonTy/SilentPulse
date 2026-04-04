@@ -31,12 +31,19 @@ import com.moez.QKSMS.feature.blocking.BlockingDialog
 import com.moez.QKSMS.injection.appComponent
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.blocked_messages_controller.*
-import kotlinx.android.synthetic.main.container_activity.*
 import javax.inject.Inject
+import androidx.appcompat.widget.Toolbar
+import androidx.recyclerview.widget.RecyclerView
+import com.moez.QKSMS.common.widget.QkTextView
 
 class BlockedMessagesController : QkController<BlockedMessagesView, BlockedMessagesState, BlockedMessagesPresenter>(),
     BlockedMessagesView {
+
+    // View references (migrated from synthetics)
+    private val conversations: RecyclerView get() = view!!.findViewById(R.id.conversations)
+    private val empty: QkTextView get() = view!!.findViewById(R.id.empty)
+    private val toolbar: Toolbar get() = view!!.findViewById(R.id.toolbar)
+
 
     override val menuReadyIntent: Subject<Unit> = PublishSubject.create()
     override val optionsItemIntent: Subject<Int> = PublishSubject.create()
@@ -53,7 +60,6 @@ class BlockedMessagesController : QkController<BlockedMessagesView, BlockedMessa
 
     init {
         appComponent.inject(this)
-        retainViewMode = RetainViewMode.RETAIN_DETACH
         layoutRes = R.layout.blocked_messages_controller
     }
 

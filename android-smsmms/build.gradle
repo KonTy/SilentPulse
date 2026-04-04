@@ -20,16 +20,26 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
-    compileSdkVersion 25
+    namespace 'com.klinker.android.send_message'
+    compileSdkVersion 35
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
     defaultConfig {
         minSdkVersion 21
-        targetSdkVersion 25
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
     }
 
-    lintOptions {
+    lint {
         abortOnError false
     }
 
@@ -39,8 +49,7 @@ android {
 dependencies {
     implementation "androidx.core:core-ktx:$androidx_core_version"
     implementation "com.jakewharton.timber:timber:$timber_version"
-    implementation 'com.squareup.okhttp:okhttp:2.5.0'
-    implementation 'com.squareup.okhttp:okhttp-urlconnection:2.5.0'
+    implementation "com.squareup.okhttp3:okhttp:$okhttp3_version"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 }
 

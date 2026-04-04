@@ -31,11 +31,21 @@ import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.common.util.extensions.within
 import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.hsv_picker_view.view.*
+import android.widget.FrameLayout
+import android.widget.ImageView
 
 class HSVPickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val action: ImageView get() = findViewById(R.id.action)
+    private val hueGroup: FrameLayout get() = findViewById(R.id.hueGroup)
+    private val hueThumb: View get() = findViewById(R.id.hueThumb)
+    private val hueTrack: ImageView get() = findViewById(R.id.hueTrack)
+    private val saturation: View get() = findViewById(R.id.saturation)
+    private val swatch: ImageView get() = findViewById(R.id.swatch)
+
 
     val selectedColor: Subject<Int> = BehaviorSubject.create()
 

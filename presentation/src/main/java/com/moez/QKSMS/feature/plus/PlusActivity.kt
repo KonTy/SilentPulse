@@ -22,7 +22,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import androidx.core.view.children
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import com.jakewharton.rxbinding2.view.clicks
 import com.moez.QKSMS.BuildConfig
 import com.moez.QKSMS.R
@@ -37,22 +36,43 @@ import com.moez.QKSMS.common.widget.PreferenceView
 import com.moez.QKSMS.feature.plus.experiment.UpgradeButtonExperiment
 import com.moez.QKSMS.manager.BillingManager
 import dagger.android.AndroidInjection
-import kotlinx.android.synthetic.main.collapsing_toolbar.*
-import kotlinx.android.synthetic.main.preference_view.view.*
-import kotlinx.android.synthetic.main.qksms_plus_activity.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.LinearLayout
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.google.android.material.appbar.CollapsingToolbarLayout
+import com.moez.QKSMS.common.widget.QkTextView
 
 class PlusActivity : QkThemedActivity(), PlusView {
+
+    // View references (migrated from synthetics)
+    private val backup: PreferenceView get() = findViewById(R.id.backup)
+    private val collapsingToolbar: CollapsingToolbarLayout get() = findViewById(R.id.collapsingToolbar)
+    private val delayed: PreferenceView get() = findViewById(R.id.delayed)
+    private val description: QkTextView get() = findViewById(R.id.description)
+    private val donate: QkTextView get() = findViewById(R.id.donate)
+    private val free: LinearLayout get() = findViewById(R.id.free)
+    private val linearLayout: LinearLayout get() = findViewById(R.id.linearLayout)
+    private val night: PreferenceView get() = findViewById(R.id.night)
+    private val schedule: ImageView get() = findViewById(R.id.schedule)
+    private val thanksIcon: ImageView get() = findViewById(R.id.thanksIcon)
+    private val themes: PreferenceView get() = findViewById(R.id.themes)
+    private val titleView: QkTextView get() = findViewById(R.id.titleView)
+    private val toUpgrade: LinearLayout get() = findViewById(R.id.toUpgrade)
+    private val upgrade: QkTextView get() = findViewById(R.id.upgrade)
+    private val upgradeDonate: QkTextView get() = findViewById(R.id.upgradeDonate)
+    private val upgraded: ConstraintLayout get() = findViewById(R.id.upgraded)
+
 
     @Inject lateinit var fontProvider: FontProvider
     @Inject lateinit var upgradeButtonExperiment: UpgradeButtonExperiment
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[PlusViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[PlusViewModel::class.java] }
 
     override val upgradeIntent by lazy { upgrade.clicks() }
     override val upgradeDonateIntent by lazy { upgradeDonate.clicks() }

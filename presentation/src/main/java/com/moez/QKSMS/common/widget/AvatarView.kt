@@ -30,12 +30,19 @@ import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.injection.appComponent
 import com.moez.QKSMS.model.Recipient
 import com.moez.QKSMS.util.GlideApp
-import kotlinx.android.synthetic.main.avatar_view.view.*
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.TextView
 
 class AvatarView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : FrameLayout(context, attrs) {
+
+    // View references (migrated from synthetics)
+    private val icon: ImageView get() = findViewById(R.id.icon)
+    private val initial: TextView get() = findViewById(R.id.initial)
+    private val photo: ImageView get() = findViewById(R.id.photo)
+
 
     @Inject lateinit var colors: Colors
     @Inject lateinit var navigator: Navigator

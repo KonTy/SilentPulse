@@ -29,7 +29,7 @@ import com.moez.QKSMS.manager.BillingManager
 import com.moez.QKSMS.manager.PermissionManager
 import com.moez.QKSMS.repository.BackupRepository
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.rxkotlin.plusAssign
 import io.reactivex.rxkotlin.withLatestFrom
 import io.reactivex.subjects.BehaviorSubject
@@ -83,7 +83,7 @@ class BackupPresenter @Inject constructor(
 
         view.activityVisible()
                 .map { permissionManager.hasStorage() }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(storagePermissionSubject)
 
         view.restoreClicks()
@@ -100,29 +100,29 @@ class BackupPresenter @Inject constructor(
                         else -> view.selectFile()
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         view.restoreFileSelected()
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.confirmRestore() }
 
         view.restoreConfirmed()
                 .withLatestFrom(view.restoreFileSelected()) { _, backup -> backup }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { backup -> RestoreBackupService.start(context, backup.path) }
 
         view.stopRestoreClicks()
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.stopRestore() }
 
         view.stopRestoreConfirmed()
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { backupRepo.stopRestore() }
 
         view.fabClicks()
                 .withLatestFrom(billingManager.upgradeStatus) { _, upgraded -> upgraded }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { upgraded ->
                     when {
                         !upgraded -> navigator.showQksmsPlusActivity("backup_fab")

@@ -34,13 +34,31 @@ import com.moez.QKSMS.injection.appComponent
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.theme_picker_controller.*
-import kotlinx.android.synthetic.main.theme_picker_hsv.*
 import javax.inject.Inject
+import android.widget.ImageView
+import android.widget.LinearLayout
+import androidx.constraintlayout.widget.Group
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager.widget.ViewPager
+import com.moez.QKSMS.common.widget.PagerTitleView
+import com.moez.QKSMS.common.widget.QkEditText
+import com.moez.QKSMS.feature.themepicker.HSVPickerView
 
 class ThemePickerController(
     val recipientId: Long = 0L
 ) : QkController<ThemePickerView, ThemePickerState, ThemePickerPresenter>(), ThemePickerView {
+
+    // View references (migrated from synthetics)
+    private val applyButton: android.widget.Button get() = view!!.findViewById(R.id.apply)
+    private val applyGroup: Group get() = view!!.findViewById(R.id.applyGroup)
+    private val clear: ImageView get() = view!!.findViewById(R.id.clear)
+    private val contentView: LinearLayout get() = view!!.findViewById(R.id.contentView)
+    private val hex: QkEditText get() = view!!.findViewById(R.id.hex)
+    private val materialColors: RecyclerView get() = view!!.findViewById(R.id.materialColors)
+    private val pager: ViewPager get() = view!!.findViewById(R.id.pager)
+    private val picker: HSVPickerView get() = view!!.findViewById(R.id.picker)
+    private val tabs: PagerTitleView get() = view!!.findViewById(R.id.tabs)
+
 
     @Inject override lateinit var presenter: ThemePickerPresenter
 
@@ -104,7 +122,7 @@ class ThemePickerController(
 
     override fun clearHsvThemeClicks(): Observable<*> = clear.clicks()
 
-    override fun applyHsvThemeClicks(): Observable<*> = apply.clicks()
+    override fun applyHsvThemeClicks(): Observable<*> = applyButton.clicks()
 
     override fun viewQksmsPlusClicks(): Observable<*> = viewQksmsPlusSubject
 
@@ -114,8 +132,8 @@ class ThemePickerController(
         hex.setText(Integer.toHexString(state.newColor).takeLast(6))
 
         applyGroup.setVisible(state.applyThemeVisible)
-        apply.setBackgroundTint(state.newColor)
-        apply.setTextColor(state.newTextColor)
+        applyButton.setBackgroundTint(state.newColor)
+        applyButton.setTextColor(state.newTextColor)
     }
 
     override fun setCurrentTheme(color: Int) {

@@ -20,7 +20,7 @@ package com.moez.QKSMS.common.base
 
 import androidx.annotation.CallSuper
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.plusAssign
@@ -28,7 +28,7 @@ import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
 
-abstract class QkPresenter<View : QkViewContract<State>, State>(initialState: State) {
+abstract class QkPresenter<View : QkViewContract<State>, State : Any>(initialState: State) {
 
     protected val disposables = CompositeDisposable()
     protected val state: Subject<State> = BehaviorSubject.createDefault(initialState)
@@ -48,7 +48,7 @@ abstract class QkPresenter<View : QkViewContract<State>, State>(initialState: St
     open fun bindIntents(view: View) {
         state
                 .observeOn(AndroidSchedulers.mainThread())
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(view::render)
     }
 

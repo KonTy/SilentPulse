@@ -58,7 +58,7 @@ import com.moez.QKSMS.util.PhoneNumberUtils
 import com.moez.QKSMS.util.Preferences
 import com.moez.QKSMS.util.tryOrNull
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.Observables
@@ -207,13 +207,14 @@ class ComposeViewModel @Inject constructor(
                 .filter { messages -> messages.isValid }
                 .subscribe(searchResults::onNext)
 
-        disposables += Observables.combineLatest(searchSelection, searchResults) { selected, messages ->
+        disposables += Observables.combineLatest(searchSelection, searchResults) { selected: Long, messages: List<Message> ->
             if (selected == -1L) {
                 messages.lastOrNull()?.let { message -> searchSelection.onNext(message.id) }
             } else {
                 val position = messages.indexOfFirst { it.id == selected } + 1
                 newState { copy(searchSelectionPosition = position, searchResults = messages.size) }
             }
+            Unit
         }.subscribe()
 
         val latestSubId = messages
@@ -260,7 +261,7 @@ class ComposeViewModel @Inject constructor(
                                         contact = lookupKey?.let(contactRepo::getUnmanagedContact))
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { chips ->
                     chipsReducer.onNext { list -> list + chips }
                     view.showKeyboard()
@@ -272,12 +273,12 @@ class ComposeViewModel @Inject constructor(
                 .withLatestFrom(selectedChips) { _, chips ->
                     view.showContacts(sharing, chips)
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Update the list of selected contacts when a new contact is selected or an existing one is deselected
         view.chipDeletedIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { contact ->
                     chipsReducer.onNext { contacts ->
                         val result = contacts.filterNot { it == contact }
@@ -290,7 +291,7 @@ class ComposeViewModel @Inject constructor(
 
         // When the menu is loaded, trigger a new state so that the menu options can be rendered correctly
         view.menuReadyIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { newState { copy() } }
 
         // Open the phone dialer if the call button is clicked
@@ -299,14 +300,14 @@ class ComposeViewModel @Inject constructor(
                 .withLatestFrom(conversation) { _, conversation -> conversation }
                 .mapNotNull { conversation -> conversation.recipients.firstOrNull() }
                 .map { recipient -> recipient.address }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { address -> navigator.makePhoneCall(address) }
 
         // Open the conversation settings if info button is clicked
         view.optionsItemIntent
                 .filter { it == R.id.info }
                 .withLatestFrom(conversation) { _, conversation -> conversation }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { conversation -> navigator.showConversationInfo(conversation.id) }
 
         // Copy the message contents
@@ -327,7 +328,7 @@ class ComposeViewModel @Inject constructor(
 
                     ClipboardUtils.copy(context, text)
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.clearSelection() }
 
         // Show the message details
@@ -337,7 +338,7 @@ class ComposeViewModel @Inject constructor(
                 .mapNotNull { messages -> messages.firstOrNull().also { view.clearSelection() } }
                 .mapNotNull(messageRepo::getMessage)
                 .map(messageDetailsFormatter::format)
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.showDetails(it) }
 
         // Delete the messages
@@ -347,7 +348,7 @@ class ComposeViewModel @Inject constructor(
                 .withLatestFrom(view.messagesSelectedIntent, conversation) { _, messages, conversation ->
                     deleteMessages.execute(DeleteMessages.Params(messages, conversation.id))
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.clearSelection() }
 
         // Forward the message
@@ -359,7 +360,7 @@ class ComposeViewModel @Inject constructor(
                         navigator.showCompose(message.getText(), images)
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.clearSelection() }
 
         // Show the previous search result
@@ -371,7 +372,7 @@ class ComposeViewModel @Inject constructor(
                     else messages.getOrNull(currentPosition - 1)?.id ?: -1
                 }
                 .filter { id -> id != -1L }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(searchSelection)
 
         // Show the next search result
@@ -383,32 +384,32 @@ class ComposeViewModel @Inject constructor(
                     else messages.getOrNull(currentPosition + 1)?.id ?: -1
                 }
                 .filter { id -> id != -1L }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(searchSelection)
 
         // Clear the search
         view.optionsItemIntent
                 .filter { it == R.id.clear }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { newState { copy(query = "", searchSelectionId = -1) } }
 
         // Toggle the group sending mode
         view.sendAsGroupIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { prefs.sendAsGroup.set(!prefs.sendAsGroup.get()) }
 
         // Scroll to search position
         searchSelection
                 .filter { id -> id != -1L }
                 .doOnNext { id -> newState { copy(searchSelectionId = id) } }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(view::scrollToMessage)
 
         // Theme changes
         prefs.keyChanges
                 .filter { key -> key.contains("theme") }
                 .doOnNext { view.themeChanged() }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Retry sending
@@ -416,21 +417,21 @@ class ComposeViewModel @Inject constructor(
                 .mapNotNull(messageRepo::getMessage)
                 .filter { message -> message.isFailedMessage() }
                 .doOnNext { message -> retrySending.execute(message.id) }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Media attachment clicks
         view.messagePartClickIntent
                 .mapNotNull(messageRepo::getPart)
                 .filter { part -> part.isImage() || part.isVideo() }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { part -> navigator.showMedia(part.id) }
 
         // Non-media attachment clicks
         view.messagePartClickIntent
                 .mapNotNull(messageRepo::getPart)
                 .filter { part -> !part.isImage() && !part.isVideo() }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { part ->
                     if (permissionManager.hasStorage()) {
                         messageRepo.savePart(part.id)?.let(navigator::viewFile)
@@ -442,14 +443,14 @@ class ComposeViewModel @Inject constructor(
         // Update the State when the message selected count changes
         view.messagesSelectedIntent
                 .map { selection -> selection.size }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { messages -> newState { copy(selectedMessages = messages, editingMode = false) } }
 
         // Cancel sending a message
         view.cancelSendingIntent
                 .mapNotNull(messageRepo::getMessage)
                 .doOnNext { message -> view.setDraft(message.getText()) }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { message ->
                     cancelMessage.execute(CancelDelayedMessage.Params(message.id, message.threadId))
                 }
@@ -471,7 +472,7 @@ class ComposeViewModel @Inject constructor(
                         false -> activeConversationManager.setActiveConversation(null)
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Save draft when the activity goes into the background
@@ -483,17 +484,17 @@ class ComposeViewModel @Inject constructor(
                 .withLatestFrom(view.textChangedIntent) { threadId, draft ->
                     conversationRepo.saveDraft(threadId, draft.toString())
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Open the attachment options
         view.attachIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { newState { copy(attaching = !attaching) } }
 
         // Attach a photo from camera
         view.cameraIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe {
                     if (permissionManager.hasStorage()) {
                         newState { copy(attaching = false) }
@@ -506,7 +507,7 @@ class ComposeViewModel @Inject constructor(
         // Attach a photo from gallery
         view.galleryIntent
                 .doOnNext { newState { copy(attaching = false) } }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.requestGallery() }
 
         // Choose a time to schedule the message
@@ -516,7 +517,7 @@ class ComposeViewModel @Inject constructor(
                 .filter { upgraded ->
                     upgraded.also { if (!upgraded) view.showQksmsPlusSnackbar(R.string.compose_scheduled_plus) }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.requestDatePicker() }
 
         // A photo was selected
@@ -525,7 +526,7 @@ class ComposeViewModel @Inject constructor(
                 view.inputContentIntent.map { inputContent -> Attachment.Image(inputContent = inputContent) })
                 .withLatestFrom(attachments) { attachment, attachments -> attachments + attachment }
                 .doOnNext(attachments::onNext)
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { newState { copy(attaching = false) } }
 
         // Set the scheduled time
@@ -535,13 +536,13 @@ class ComposeViewModel @Inject constructor(
                         if (!future) context.makeToast(R.string.compose_scheduled_future)
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { scheduled -> newState { copy(scheduled = scheduled) } }
 
         // Attach a contact
         view.attachContactIntent
                 .doOnNext { newState { copy(attaching = false) } }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { view.requestContact() }
 
         // Contact was selected for attachment
@@ -549,7 +550,7 @@ class ComposeViewModel @Inject constructor(
                 .map { uri -> Attachment.Contact(getVCard(uri)!!) }
                 .withLatestFrom(attachments) { attachment, attachments -> attachments + attachment }
                 .subscribeOn(Schedulers.io())
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe(attachments::onNext) { error ->
                     context.makeToast(R.string.compose_contact_error)
                     Timber.w(error)
@@ -558,13 +559,13 @@ class ComposeViewModel @Inject constructor(
         // Detach a photo
         view.attachmentDeletedIntent
                 .withLatestFrom(attachments) { bitmap, attachments -> attachments.filter { it !== bitmap } }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { attachments.onNext(it) }
 
         conversation
                 .map { conversation -> conversation.draft }
                 .distinctUntilChanged()
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { draft ->
 
                     // If text was shared into the conversation, it should take priority over the
@@ -584,7 +585,7 @@ class ComposeViewModel @Inject constructor(
                 .combineLatest(view.textChangedIntent, attachments) { text, attachments ->
                     text.isNotBlank() || attachments.isNotEmpty()
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { canSend -> newState { copy(canSend = canSend) } }
 
         // Show the remaining character counter when necessary
@@ -602,12 +603,12 @@ class ComposeViewModel @Inject constructor(
                     }
                 }
                 .distinctUntilChanged()
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { remaining -> newState { copy(remaining = remaining) } }
 
         // Cancel the scheduled time
         view.scheduleCancelIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { newState { copy(scheduled = 0) } }
 
         // Toggle to the next sim slot
@@ -629,7 +630,7 @@ class ComposeViewModel @Inject constructor(
 
                     newState { copy(subscription = subscription) }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // Send a message when the send button is clicked, and disable editing mode if it's enabled
@@ -706,12 +707,12 @@ class ComposeViewModel @Inject constructor(
                         newState { copy(editingMode = false, hasError = !sendAsGroup) }
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
         // View QKSMS+
         view.viewQksmsPlusIntent
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe { navigator.showQksmsPlusActivity("compose_schedule") }
 
         // Navigate back
@@ -725,7 +726,7 @@ class ComposeViewModel @Inject constructor(
                         else -> newState { copy(hasError = true) }
                     }
                 }
-                .autoDisposable(view.scope())
+                .autoDispose(view.scope())
                 .subscribe()
 
     }

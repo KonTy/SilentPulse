@@ -51,21 +51,43 @@ import com.moez.QKSMS.injection.appComponent
 import com.moez.QKSMS.repository.SyncRepository
 import com.moez.QKSMS.util.Preferences
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.android.synthetic.main.settings_controller.*
-import kotlinx.android.synthetic.main.settings_controller.view.*
-import kotlinx.android.synthetic.main.settings_switch_widget.view.*
-import kotlinx.android.synthetic.main.settings_theme_widget.*
 import javax.inject.Inject
 import kotlin.coroutines.resume
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 
 class SettingsController : QkController<SettingsView, SettingsState, SettingsPresenter>(), SettingsView {
+
+    // View references (migrated from synthetics)
+    private val about: PreferenceView get() = view!!.findViewById(R.id.about)
+    private val autoColor: PreferenceView get() = view!!.findViewById(R.id.autoColor)
+    private val autoDelete: PreferenceView get() = view!!.findViewById(R.id.autoDelete)
+    private val autoEmoji: PreferenceView get() = view!!.findViewById(R.id.autoEmoji)
+    private val black: PreferenceView get() = view!!.findViewById(R.id.black)
+    private val contentView: LinearLayout get() = view!!.findViewById(R.id.contentView)
+    private val delayed: PreferenceView get() = view!!.findViewById(R.id.delayed)
+    private val delivery: PreferenceView get() = view!!.findViewById(R.id.delivery)
+    private val longAsMms: PreferenceView get() = view!!.findViewById(R.id.longAsMms)
+    private val mmsSize: PreferenceView get() = view!!.findViewById(R.id.mmsSize)
+    private val mobileOnly: PreferenceView get() = view!!.findViewById(R.id.mobileOnly)
+    private val night: PreferenceView get() = view!!.findViewById(R.id.night)
+    private val nightEnd: PreferenceView get() = view!!.findViewById(R.id.nightEnd)
+    private val nightStart: PreferenceView get() = view!!.findViewById(R.id.nightStart)
+    private val preferences: LinearLayout get() = view!!.findViewById(R.id.preferences)
+    private val signature: PreferenceView get() = view!!.findViewById(R.id.signature)
+    private val syncingProgress: ProgressBar get() = view!!.findViewById(R.id.syncingProgress)
+    private val systemFont: PreferenceView get() = view!!.findViewById(R.id.systemFont)
+    private val textSize: PreferenceView get() = view!!.findViewById(R.id.textSize)
+    private val themePreview: View get() = view!!.findViewById(R.id.themePreview)
+    private val unicode: PreferenceView get() = view!!.findViewById(R.id.unicode)
+
 
     @Inject lateinit var context: Context
     @Inject lateinit var colors: Colors
@@ -93,11 +115,10 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
 
     init {
         appComponent.inject(this)
-        retainViewMode = RetainViewMode.RETAIN_DETACH
         layoutRes = R.layout.settings_controller
 
         colors.themeObservable()
-                .autoDisposable(scope())
+                .autoDispose(scope())
                 .subscribe { activity?.recreate() }
     }
 

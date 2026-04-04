@@ -26,10 +26,10 @@ import com.moez.QKSMS.R
 import com.moez.QKSMS.common.base.FlowableAdapter
 import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.DateFormatter
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.model.BackupFile
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.backup_list_item.*
 import javax.inject.Inject
 
 class BackupAdapter @Inject constructor(
@@ -53,9 +53,12 @@ class BackupAdapter @Inject constructor(
 
         val count = backup.messages
 
-        holder.title.text = dateFormatter.getDetailedTimestamp(backup.date)
-        holder.messages.text = context.resources.getQuantityString(R.plurals.backup_message_count, count, count)
-        holder.size.text = Formatter.formatFileSize(context, backup.size)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val messages = holder.itemView.findViewById<QkTextView>(R.id.messages)
+        val size = holder.itemView.findViewById<QkTextView>(R.id.size)
+        title.text = dateFormatter.getDetailedTimestamp(backup.date)
+        messages.text = context.resources.getQuantityString(R.plurals.backup_message_count, count, count)
+        size.text = Formatter.formatFileSize(context, backup.size)
     }
 
 }

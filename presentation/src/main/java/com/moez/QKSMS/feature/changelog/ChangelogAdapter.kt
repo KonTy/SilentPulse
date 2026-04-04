@@ -25,8 +25,8 @@ import android.view.ViewGroup
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.base.QkAdapter
 import com.moez.QKSMS.common.base.QkViewHolder
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.manager.ChangelogManager
-import kotlinx.android.synthetic.main.changelog_list_item.*
 
 class ChangelogAdapter(private val context: Context) : QkAdapter<ChangelogAdapter.ChangelogItem>() {
 
@@ -56,6 +56,7 @@ class ChangelogAdapter(private val context: Context) : QkAdapter<ChangelogAdapte
         val view = LayoutInflater.from(parent.context).inflate(R.layout.changelog_list_item, parent, false)
         return QkViewHolder(view).apply {
             if (viewType == 0) {
+                val changelogItem = itemView.findViewById<QkTextView>(R.id.changelogItem)
                 changelogItem.setTypeface(changelogItem.typeface, Typeface.BOLD)
             }
         }
@@ -64,7 +65,8 @@ class ChangelogAdapter(private val context: Context) : QkAdapter<ChangelogAdapte
     override fun onBindViewHolder(holder: QkViewHolder, position: Int) {
         val item = getItem(position)
 
-        holder.changelogItem.text = item.label
+        val changelogItem = holder.itemView.findViewById<QkTextView>(R.id.changelogItem)
+        changelogItem.text = item.label
     }
 
     override fun getItemViewType(position: Int): Int {

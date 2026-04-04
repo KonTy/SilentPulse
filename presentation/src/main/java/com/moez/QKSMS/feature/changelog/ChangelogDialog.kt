@@ -26,7 +26,8 @@ import com.moez.QKSMS.feature.main.MainActivity
 import com.moez.QKSMS.manager.ChangelogManager
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.changelog_dialog.view.*
+import com.moez.QKSMS.common.widget.PreferenceView
+import com.moez.QKSMS.common.widget.QkTextView
 
 class ChangelogDialog(activity: MainActivity) {
 
@@ -38,15 +39,20 @@ class ChangelogDialog(activity: MainActivity) {
     init {
         val layout = LayoutInflater.from(activity).inflate(R.layout.changelog_dialog, null)
 
+        val version = layout.findViewById<QkTextView>(R.id.version)
+        val changelog = layout.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.changelog)
+        val more = layout.findViewById<QkTextView>(R.id.more)
+        val dismiss = layout.findViewById<QkTextView>(R.id.dismiss)
+
         dialog = AlertDialog.Builder(activity)
                 .setCancelable(true)
                 .setView(layout)
                 .create()
 
-        layout.version.text = activity.getString(R.string.changelog_version, BuildConfig.VERSION_NAME)
-        layout.changelog.adapter = adapter
-        layout.more.setOnClickListener { dialog.dismiss(); moreClicks.onNext(Unit) }
-        layout.dismiss.setOnClickListener { dialog.dismiss() }
+        version.text = activity.getString(R.string.changelog_version, BuildConfig.VERSION_NAME)
+        changelog.adapter = adapter
+        more.setOnClickListener { dialog.dismiss(); moreClicks.onNext(Unit) }
+        dismiss.setOnClickListener { dialog.dismiss() }
     }
 
     fun show(changelog: ChangelogManager.CumulativeChangelog) {

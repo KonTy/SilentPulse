@@ -77,7 +77,11 @@ class RestoreBackupService : Service() {
     private fun start(intent: Intent) {
         val notificationManager = NotificationManagerCompat.from(this)
 
-        startForeground(NOTIFICATION_ID, notification.build())
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification.build(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, notification.build())
+        }
 
         backupRepo.getRestoreProgress()
                 .sample(200, TimeUnit.MILLISECONDS, true)
@@ -107,7 +111,7 @@ class RestoreBackupService : Service() {
     }
 
     private fun stop() {
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 

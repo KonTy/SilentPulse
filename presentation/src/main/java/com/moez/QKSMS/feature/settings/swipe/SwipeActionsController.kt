@@ -30,14 +30,25 @@ import com.moez.QKSMS.common.util.extensions.setBackgroundTint
 import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.injection.appComponent
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.swipe_actions_controller.*
 import javax.inject.Inject
+import android.widget.ImageView
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.moez.QKSMS.common.widget.QkTextView
 
 class SwipeActionsController : QkController<SwipeActionsView, SwipeActionsState, SwipeActionsPresenter>(), SwipeActionsView {
+
+    // View references (migrated from synthetics)
+    private val left: ConstraintLayout get() = view!!.findViewById(R.id.left)
+    private val leftIcon: ImageView get() = view!!.findViewById(R.id.leftIcon)
+    private val leftLabel: QkTextView get() = view!!.findViewById(R.id.leftLabel)
+    private val right: ConstraintLayout get() = view!!.findViewById(R.id.right)
+    private val rightIcon: ImageView get() = view!!.findViewById(R.id.rightIcon)
+    private val rightLabel: QkTextView get() = view!!.findViewById(R.id.rightLabel)
+
 
     @Inject override lateinit var presenter: SwipeActionsPresenter
     @Inject lateinit var actionsDialog: QkDialog
@@ -69,7 +80,7 @@ class SwipeActionsController : QkController<SwipeActionsView, SwipeActionsState,
         Observable.merge(
                 right.clicks().map { SwipeActionsView.Action.RIGHT },
                 left.clicks().map { SwipeActionsView.Action.LEFT })
-                .autoDisposable(scope())
+                .autoDispose(scope())
                 .subscribe(actionClicks)
     }
 

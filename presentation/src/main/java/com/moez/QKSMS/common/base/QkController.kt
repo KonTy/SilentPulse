@@ -21,15 +21,14 @@ package com.moez.QKSMS.common.base
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import com.bluelinelabs.conductor.archlifecycle.LifecycleController
-import kotlinx.android.extensions.LayoutContainer
-import kotlinx.android.synthetic.*
-import kotlinx.android.synthetic.main.toolbar.view.*
+import com.moez.QKSMS.R
 
-abstract class QkController<ViewContract : QkViewContract<State>, State, Presenter : QkPresenter<ViewContract, State>> : LifecycleController(), LayoutContainer {
+abstract class QkController<ViewContract : QkViewContract<State>, State : Any, Presenter : QkPresenter<ViewContract, State>> : LifecycleController() {
 
     abstract var presenter: Presenter
 
@@ -39,14 +38,11 @@ abstract class QkController<ViewContract : QkViewContract<State>, State, Present
     protected val themedActivity: QkThemedActivity?
         get() = activity as? QkThemedActivity
 
-    override var containerView: View? = null
-
     @LayoutRes
     var layoutRes: Int = 0
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup, savedViewState: android.os.Bundle?): View {
         return inflater.inflate(layoutRes, container, false).also {
-            containerView = it
             onViewCreated()
         }
     }
@@ -60,7 +56,7 @@ abstract class QkController<ViewContract : QkViewContract<State>, State, Present
 
     fun setTitle(title: CharSequence?) {
         activity?.title = title
-        view?.toolbarTitle?.text = title
+        view?.findViewById<TextView>(R.id.toolbarTitle)?.text = title
     }
 
     fun showBackButton(show: Boolean) {
@@ -68,8 +64,7 @@ abstract class QkController<ViewContract : QkViewContract<State>, State, Present
     }
 
     override fun onDestroyView(view: View) {
-        containerView = null
-        clearFindViewByIdCache()
+        super.onDestroyView(view)
     }
 
     override fun onDestroy() {

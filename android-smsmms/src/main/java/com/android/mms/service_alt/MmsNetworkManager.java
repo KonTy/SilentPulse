@@ -26,13 +26,15 @@ import android.net.SSLCertificateSocketFactory;
 import android.os.Build;
 import android.os.SystemClock;
 import com.android.mms.service_alt.exception.MmsNetworkException;
-import com.squareup.okhttp.ConnectionPool;
+import okhttp3.Dns;
 import timber.log.Timber;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.List;
 
-public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
+public class MmsNetworkManager implements Dns {
 
     // Timeout used to call ConnectivityManager.requestNetwork
     private static final int NETWORK_REQUEST_TIMEOUT_MILLIS = 60 * 1000;
@@ -65,10 +67,8 @@ public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
 
     private volatile ConnectivityManager mConnectivityManager;
 
-    // The OkHttp's ConnectionPool used by the HTTP client associated with this network manager
-    private ConnectionPool mConnectionPool;
-
-    // The MMS HTTP client for this network
+    // The OkHttp's Dns resolver used by the HTTP client associated with this network manager
+    // (ConnectionPool is managed by OkHttpClient.Builder in OkHttp 4.x)
     private MmsHttpClient mMmsHttpClient;
 
     // The SIM ID which we use to connect
@@ -82,7 +82,6 @@ public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
         mNetwork = null;
         mMmsRequestCount = 0;
         mConnectivityManager = null;
-        mConnectionPool = null;
         mMmsHttpClient = null;
         mSubId = subId;
 
@@ -233,26 +232,19 @@ public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
         mNetworkCallback = null;
         mNetwork = null;
         mMmsRequestCount = 0;
-        // Currently we follow what android.net.Network does with ConnectionPool,
-        // which is per Network object. So if Network changes, we should clear
-        // out the ConnectionPool and thus the MmsHttpClient (since it is linked
-        // to a specific ConnectionPool).
-        mConnectionPool = null;
         mMmsHttpClient = null;
     }
 
-    private static final InetAddress[] EMPTY_ADDRESS_ARRAY = new InetAddress[0];
-
     @Override
-    public InetAddress[] resolveInetAddresses(String host) throws UnknownHostException {
+    public List<InetAddress> lookup(String hostname) throws UnknownHostException {
         Network network = null;
         synchronized (this) {
             if (mNetwork == null) {
-                return EMPTY_ADDRESS_ARRAY;
+                throw new UnknownHostException(hostname);
             }
             network = mNetwork;
         }
-        return network.getAllByName(host);
+        return Arrays.asList(network.getAllByName(hostname));
     }
 
     private ConnectivityManager getConnectivityManager() {
@@ -261,13 +253,6 @@ public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
                     Context.CONNECTIVITY_SERVICE);
         }
         return mConnectivityManager;
-    }
-
-    private ConnectionPool getOrCreateConnectionPoolLocked() {
-        if (mConnectionPool == null) {
-            mConnectionPool = new ConnectionPool(httpMaxConnections, httpKeepAliveDurationMs);
-        }
-        return mConnectionPool;
     }
 
     /**
@@ -283,14 +268,12 @@ public class MmsNetworkManager implements com.squareup.okhttp.internal.Network {
                     mMmsHttpClient = new MmsHttpClient(
                             mContext,
                             mNetwork.getSocketFactory(),
-                            MmsNetworkManager.this,
-                            getOrCreateConnectionPoolLocked());
+                            MmsNetworkManager.this);
                 } else if (permissionError) {
                     mMmsHttpClient = new MmsHttpClient(
                             mContext,
                             new SSLCertificateSocketFactory(NETWORK_REQUEST_TIMEOUT_MILLIS),
-                            MmsNetworkManager.this,
-                            getOrCreateConnectionPoolLocked());
+                            MmsNetworkManager.this);
                 }
             }
             return mMmsHttpClient;

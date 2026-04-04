@@ -28,11 +28,11 @@ import com.moez.QKSMS.common.base.QkRealmAdapter
 import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.DateFormatter
 import com.moez.QKSMS.common.util.extensions.resolveThemeColor
+import com.moez.QKSMS.common.widget.GroupAvatarView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.model.Conversation
 import com.moez.QKSMS.util.Preferences
 import io.reactivex.subjects.PublishSubject
-import kotlinx.android.synthetic.main.blocked_list_item.*
-import kotlinx.android.synthetic.main.blocked_list_item.view.*
 import javax.inject.Inject
 
 class BlockedMessagesAdapter @Inject constructor(
@@ -46,9 +46,11 @@ class BlockedMessagesAdapter @Inject constructor(
         val view = LayoutInflater.from(parent.context).inflate(R.layout.blocked_list_item, parent, false)
 
         if (viewType == 0) {
-            view.title.setTypeface(view.title.typeface, Typeface.BOLD)
-            view.date.setTypeface(view.date.typeface, Typeface.BOLD)
-            view.date.setTextColor(view.context.resolveThemeColor(android.R.attr.textColorPrimary))
+            val title = view.findViewById<QkTextView>(R.id.title)
+            val date = view.findViewById<QkTextView>(R.id.date)
+            title.setTypeface(title.typeface, Typeface.BOLD)
+            date.setTypeface(date.typeface, Typeface.BOLD)
+            date.setTextColor(view.context.resolveThemeColor(android.R.attr.textColorPrimary))
         }
 
         return QkViewHolder(view).apply {
@@ -71,22 +73,28 @@ class BlockedMessagesAdapter @Inject constructor(
     override fun onBindViewHolder(holder: QkViewHolder, position: Int) {
         val conversation = getItem(position) ?: return
 
-        holder.containerView.isActivated = isSelected(conversation.id)
+        val avatars = holder.itemView.findViewById<GroupAvatarView>(R.id.avatars)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val date = holder.itemView.findViewById<QkTextView>(R.id.date)
+        val blocker = holder.itemView.findViewById<QkTextView>(R.id.blocker)
+        val reason = holder.itemView.findViewById<QkTextView>(R.id.reason)
 
-        holder.avatars.recipients = conversation.recipients
-        holder.title.collapseEnabled = conversation.recipients.size > 1
-        holder.title.text = conversation.getTitle()
-        holder.date.text = dateFormatter.getConversationTimestamp(conversation.date)
+        holder.itemView.isActivated = isSelected(conversation.id)
 
-        holder.blocker.text = when (conversation.blockingClient) {
+        avatars.recipients = conversation.recipients
+        title.collapseEnabled = conversation.recipients.size > 1
+        title.text = conversation.getTitle()
+        date.text = dateFormatter.getConversationTimestamp(conversation.date)
+
+        blocker.text = when (conversation.blockingClient) {
             Preferences.BLOCKING_MANAGER_CC -> context.getString(R.string.blocking_manager_call_control_title)
             Preferences.BLOCKING_MANAGER_SIA -> context.getString(R.string.blocking_manager_sia_title)
             else -> null
         }
 
-        holder.reason.text = conversation.blockReason
-        holder.blocker.isVisible = holder.blocker.text.isNotEmpty()
-        holder.reason.isVisible = holder.blocker.text.isNotEmpty()
+        reason.text = conversation.blockReason
+        blocker.isVisible = blocker.text.isNotEmpty()
+        reason.isVisible = blocker.text.isNotEmpty()
     }
 
     override fun getItemViewType(position: Int): Int {

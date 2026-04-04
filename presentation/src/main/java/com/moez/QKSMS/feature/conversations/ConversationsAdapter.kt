@@ -35,10 +35,11 @@ import com.moez.QKSMS.common.util.Colors
 import com.moez.QKSMS.common.util.DateFormatter
 import com.moez.QKSMS.common.util.extensions.resolveThemeColor
 import com.moez.QKSMS.common.util.extensions.setTint
+import com.moez.QKSMS.common.widget.GroupAvatarView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.model.Conversation
+import android.widget.ImageView
 import com.moez.QKSMS.util.PhoneNumberUtils
-import kotlinx.android.synthetic.main.conversation_list_item.*
-import kotlinx.android.synthetic.main.conversation_list_item.view.*
 import javax.inject.Inject
 
 class ConversationsAdapter @Inject constructor(
@@ -61,16 +62,21 @@ class ConversationsAdapter @Inject constructor(
         if (viewType == 1) {
             val textColorPrimary = parent.context.resolveThemeColor(android.R.attr.textColorPrimary)
 
-            view.title.setTypeface(view.title.typeface, Typeface.BOLD)
+            val title = view.findViewById<QkTextView>(R.id.title)
+            val snippet = view.findViewById<QkTextView>(R.id.snippet)
+            val unread = view.findViewById<ImageView>(R.id.unread)
+            val date = view.findViewById<QkTextView>(R.id.date)
 
-            view.snippet.setTypeface(view.snippet.typeface, Typeface.BOLD)
-            view.snippet.setTextColor(textColorPrimary)
-            view.snippet.maxLines = 5
+            title.setTypeface(title.typeface, Typeface.BOLD)
 
-            view.unread.isVisible = true
+            snippet.setTypeface(snippet.typeface, Typeface.BOLD)
+            snippet.setTextColor(textColorPrimary)
+            snippet.maxLines = 5
 
-            view.date.setTypeface(view.date.typeface, Typeface.BOLD)
-            view.date.setTextColor(textColorPrimary)
+            unread.isVisible = true
+
+            date.setTypeface(date.typeface, Typeface.BOLD)
+            date.setTextColor(textColorPrimary)
         }
 
         return QkViewHolder(view).apply {
@@ -103,24 +109,31 @@ class ConversationsAdapter @Inject constructor(
         }
         val theme = colors.theme(recipient).theme
 
-        holder.containerView.isActivated = isSelected(conversation.id)
+        holder.itemView.isActivated = isSelected(conversation.id)
 
-        holder.avatars.recipients = conversation.recipients
-        holder.title.collapseEnabled = conversation.recipients.size > 1
-        holder.title.text = buildSpannedString {
+        val avatars = holder.itemView.findViewById<GroupAvatarView>(R.id.avatars)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val date = holder.itemView.findViewById<QkTextView>(R.id.date)
+        val snippet = holder.itemView.findViewById<QkTextView>(R.id.snippet)
+        val pinned = holder.itemView.findViewById<ImageView>(R.id.pinned)
+        val unread = holder.itemView.findViewById<ImageView>(R.id.unread)
+
+        avatars.recipients = conversation.recipients
+        title.collapseEnabled = conversation.recipients.size > 1
+        title.text = buildSpannedString {
             append(conversation.getTitle())
             if (conversation.draft.isNotEmpty()) {
                 color(theme) { append(" " + context.getString(R.string.main_draft)) }
             }
         }
-        holder.date.text = conversation.date.takeIf { it > 0 }?.let(dateFormatter::getConversationTimestamp)
-        holder.snippet.text = when {
+        date.text = conversation.date.takeIf { it > 0 }?.let(dateFormatter::getConversationTimestamp)
+        snippet.text = when {
             conversation.draft.isNotEmpty() -> conversation.draft
             conversation.me -> context.getString(R.string.main_sender_you, conversation.snippet)
             else -> conversation.snippet
         }
-        holder.pinned.isVisible = conversation.pinned
-        holder.unread.setTint(theme)
+        pinned.isVisible = conversation.pinned
+        unread.setTint(theme)
     }
 
     override fun getItemId(position: Int): Long {

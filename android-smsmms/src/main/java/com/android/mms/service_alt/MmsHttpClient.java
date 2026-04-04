@@ -19,19 +19,10 @@ package com.android.mms.service_alt;
 import android.content.Context;
 import android.text.TextUtils;
 import com.android.mms.service_alt.exception.MmsHttpException;
-import com.squareup.okhttp.ConnectionPool;
-import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Protocol;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.internal.Internal;
-import com.squareup.okhttp.internal.huc.HttpURLConnectionImpl;
-import com.squareup.okhttp.internal.huc.HttpsURLConnectionImpl;
+import okhttp3.Dns;
 import timber.log.Timber;
 
 import javax.net.SocketFactory;
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -44,12 +35,7 @@ import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.Proxy;
-import java.net.ProxySelector;
-import java.net.SocketAddress;
-import java.net.URI;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -80,23 +66,19 @@ public class MmsHttpClient {
 
     private final Context mContext;
     private final SocketFactory mSocketFactory;
-    private final MmsNetworkManager mHostResolver;
-    private final ConnectionPool mConnectionPool;
+    private final Dns mDns;
 
     /**
      * Constructor
      *
      * @param context The Context object
-     * @param socketFactory The socket factory for creating an OKHttp client
-     * @param hostResolver The host name resolver for creating an OKHttp client
-     * @param connectionPool The connection pool for creating an OKHttp client
+     * @param socketFactory The socket factory for creating connections
+     * @param dns The DNS resolver for the MMS network
      */
-    public MmsHttpClient(Context context, SocketFactory socketFactory, MmsNetworkManager hostResolver,
-            ConnectionPool connectionPool) {
+    public MmsHttpClient(Context context, SocketFactory socketFactory, Dns dns) {
         mContext = context;
         mSocketFactory = socketFactory;
-        mHostResolver = hostResolver;
-        mConnectionPool = connectionPool;
+        mDns = dns;
     }
 
     /**
@@ -215,95 +197,54 @@ public class MmsHttpClient {
     /**
      * Open an HTTP connection
      *
-     * TODO: The following code is borrowed from android.net.Network.openConnection
-     * Once that method supports proxy, we should use that instead
-     * Also we should remove the associated HostResolver and ConnectionPool from
-     * MmsNetworkManager
+     * Uses standard URL.openConnection() routed through the appropriate proxy.
+     * DNS resolution is handled by the MMS network via the Dns resolver.
      *
      * @param url The URL to connect to
      * @param proxy The proxy to use
      * @return The opened HttpURLConnection
      * @throws MalformedURLException If URL is malformed
+     * @throws IOException If connection fails
      */
-    private HttpURLConnection openConnection(URL url, final Proxy proxy) throws MalformedURLException {
+    private HttpURLConnection openConnection(URL url, final Proxy proxy) throws IOException {
         final String protocol = url.getProtocol();
-        OkHttpClient okHttpClient;
-        if (protocol.equals("http")) {
-            okHttpClient = new OkHttpClient();
-            okHttpClient.setFollowRedirects(false);
-            okHttpClient.setProtocols(Arrays.asList(Protocol.HTTP_1_1));
-            okHttpClient.setProxySelector(new ProxySelector() {
-                @Override
-                public List<Proxy> select(URI uri) {
-                    if (proxy != null) {
-                        return Arrays.asList(proxy);
-                    } else {
-                        return new ArrayList<Proxy>();
-                    }
-                }
-
-                @Override
-                public void connectFailed(URI uri, SocketAddress address, IOException failure) {
-
-                }
-            });
-            okHttpClient.setAuthenticator(new com.squareup.okhttp.Authenticator() {
-                @Override
-                public Request authenticate(Proxy proxy, Response response) throws IOException {
-                    return null;
-                }
-
-                @Override
-                public Request authenticateProxy(Proxy proxy, Response response) throws IOException {
-                    return null;
-                }
-            });
-            okHttpClient.setConnectionSpecs(Arrays.asList(ConnectionSpec.CLEARTEXT));
-            okHttpClient.setConnectionPool(new ConnectionPool(3, 60000));
-            okHttpClient.setSocketFactory(SocketFactory.getDefault());
-            Internal.instance.setNetwork(okHttpClient, mHostResolver);
-
-            if (proxy != null) {
-                okHttpClient.setProxy(proxy);
-            }
-
-            return new HttpURLConnectionImpl(url, okHttpClient);
-        } else if (protocol.equals("https")) {
-            okHttpClient = new OkHttpClient();
-            okHttpClient.setProtocols(Arrays.asList(Protocol.HTTP_1_1));
-            HostnameVerifier verifier = HttpsURLConnection.getDefaultHostnameVerifier();
-            okHttpClient.setHostnameVerifier(verifier);
-            okHttpClient.setSslSocketFactory(HttpsURLConnection.getDefaultSSLSocketFactory());
-            okHttpClient.setProxySelector(new ProxySelector() {
-                @Override
-                public List<Proxy> select(URI uri) {
-                    return Arrays.asList(proxy);
-                }
-
-                @Override
-                public void connectFailed(URI uri, SocketAddress address, IOException failure) {
-
-                }
-            });
-            okHttpClient.setAuthenticator(new com.squareup.okhttp.Authenticator() {
-                @Override
-                public Request authenticate(Proxy proxy, Response response) throws IOException {
-                    return null;
-                }
-
-                @Override
-                public Request authenticateProxy(Proxy proxy, Response response) throws IOException {
-                    return null;
-                }
-            });
-            okHttpClient.setConnectionSpecs(Arrays.asList(ConnectionSpec.CLEARTEXT));
-            okHttpClient.setConnectionPool(new ConnectionPool(3, 60000));
-            Internal.instance.setNetwork(okHttpClient, mHostResolver);
-
-            return new HttpsURLConnectionImpl(url, okHttpClient);
-        } else {
+        if (!protocol.equals("http") && !protocol.equals("https")) {
             throw new MalformedURLException("Invalid URL or unrecognized protocol " + protocol);
         }
+
+        // Resolve the host via our MMS network DNS
+        String host = url.getHost();
+        List<java.net.InetAddress> addresses = mDns.lookup(host);
+        if (addresses.isEmpty()) {
+            throw new IOException("DNS resolution failed for " + host);
+        }
+
+        // Rebuild URL with resolved IP to route through MMS network
+        java.net.InetAddress address = addresses.get(0);
+        URL resolvedUrl = new URL(protocol, address.getHostAddress(), url.getPort(), url.getFile());
+
+        HttpURLConnection connection;
+        if (proxy != null) {
+            connection = (HttpURLConnection) resolvedUrl.openConnection(proxy);
+        } else {
+            connection = (HttpURLConnection) resolvedUrl.openConnection();
+        }
+
+        // Set the original host header since we replaced the hostname with an IP
+        connection.setRequestProperty("Host", host);
+
+        // For HTTPS, set up hostname verification against the original host
+        if (connection instanceof HttpsURLConnection) {
+            HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
+            httpsConn.setSSLSocketFactory(HttpsURLConnection.getDefaultSSLSocketFactory());
+            // Verify against the original hostname, not the IP
+            final String originalHost = host;
+            httpsConn.setHostnameVerifier((hostname, session) ->
+                    HttpsURLConnection.getDefaultHostnameVerifier().verify(originalHost, session));
+        }
+
+        connection.setInstanceFollowRedirects(false);
+        return connection;
     }
 
     private static void logHttpHeaders(Map<String, List<String>> headers) {

@@ -25,13 +25,12 @@ import com.moez.QKSMS.R
 import com.moez.QKSMS.common.base.QkAdapter
 import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.extensions.forwardTouches
+import com.moez.QKSMS.common.widget.RadioPreferenceView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.extensions.Optional
 import com.moez.QKSMS.model.PhoneNumber
 import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.phone_number_list_item.*
-import kotlinx.android.synthetic.main.radio_preference_view.*
-import kotlinx.android.synthetic.main.radio_preference_view.view.*
 import javax.inject.Inject
 
 class PhoneNumberPickerAdapter @Inject constructor(
@@ -52,6 +51,7 @@ class PhoneNumberPickerAdapter @Inject constructor(
         val inflater = LayoutInflater.from(parent.context)
         val view = inflater.inflate(R.layout.phone_number_list_item, parent, false)
         return QkViewHolder(view).apply {
+            val radioButton = itemView.findViewById<android.widget.RadioButton>(R.id.radioButton)
             radioButton.forwardTouches(itemView)
 
             view.setOnClickListener {
@@ -64,9 +64,10 @@ class PhoneNumberPickerAdapter @Inject constructor(
     override fun onBindViewHolder(holder: QkViewHolder, position: Int) {
         val phoneNumber = getItem(position)
 
-        holder.number.radioButton.isChecked = phoneNumber.id == selectedItem
-        holder.number.titleView.text = phoneNumber.address
-        holder.number.summaryView.text = when (phoneNumber.isDefault) {
+        val number = holder.itemView.findViewById<RadioPreferenceView>(R.id.number)
+        number.findViewById<android.widget.RadioButton>(R.id.radioButton).isChecked = phoneNumber.id == selectedItem
+        number.findViewById<QkTextView>(R.id.titleView).text = phoneNumber.address
+        number.findViewById<QkTextView>(R.id.summaryView).text = when (phoneNumber.isDefault) {
             true -> context.getString(R.string.compose_number_picker_default, phoneNumber.type)
             false -> phoneNumber.type
         }

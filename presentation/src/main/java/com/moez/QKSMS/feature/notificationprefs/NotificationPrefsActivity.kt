@@ -24,9 +24,9 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import com.jakewharton.rxbinding2.view.clicks
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.QkDialog
@@ -35,16 +35,35 @@ import com.moez.QKSMS.common.util.extensions.animateLayoutChanges
 import com.moez.QKSMS.common.util.extensions.setVisible
 import com.moez.QKSMS.common.widget.PreferenceView
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import dagger.android.AndroidInjection
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.notification_prefs_activity.*
-import kotlinx.android.synthetic.main.settings_switch_widget.view.*
 import javax.inject.Inject
+import android.widget.LinearLayout
+import com.moez.QKSMS.common.widget.QkTextView
 
 class NotificationPrefsActivity : QkThemedActivity(), NotificationPrefsView {
+
+    // View references (migrated from synthetics)
+    private val action1: PreferenceView get() = findViewById(R.id.action1)
+    private val action2: PreferenceView get() = findViewById(R.id.action2)
+    private val action3: PreferenceView get() = findViewById(R.id.action3)
+    private val actionsDivider: View get() = findViewById(R.id.actionsDivider)
+    private val actionsTitle: QkTextView get() = findViewById(R.id.actionsTitle)
+    private val notifications: PreferenceView get() = findViewById(R.id.notifications)
+    private val notificationsO: PreferenceView get() = findViewById(R.id.notificationsO)
+    private val preferences: LinearLayout get() = findViewById(R.id.preferences)
+    private val previews: PreferenceView get() = findViewById(R.id.previews)
+    private val qkreply: PreferenceView get() = findViewById(R.id.qkreply)
+    private val qkreplyDivider: View get() = findViewById(R.id.qkreplyDivider)
+    private val qkreplyTapDismiss: PreferenceView get() = findViewById(R.id.qkreplyTapDismiss)
+    private val qkreplyTitle: QkTextView get() = findViewById(R.id.qkreplyTitle)
+    private val ringtone: PreferenceView get() = findViewById(R.id.ringtone)
+    private val vibration: PreferenceView get() = findViewById(R.id.vibration)
+    private val wake: PreferenceView get() = findViewById(R.id.wake)
+
 
     @Inject lateinit var previewModeDialog: QkDialog
     @Inject lateinit var actionsDialog: QkDialog
@@ -56,7 +75,7 @@ class NotificationPrefsActivity : QkThemedActivity(), NotificationPrefsView {
     override val actionsSelectedIntent by lazy { actionsDialog.adapter.menuItemClicks }
 
     private val viewModel by lazy {
-        ViewModelProviders.of(this, viewModelFactory)[NotificationPrefsViewModel::class.java]
+        ViewModelProvider(this, viewModelFactory)[NotificationPrefsViewModel::class.java]
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,7 +105,7 @@ class NotificationPrefsActivity : QkThemedActivity(), NotificationPrefsView {
                 .mapNotNull { view -> view as? PreferenceView }
                 .map { preference -> preference.clicks().map { preference } }
                 .let { Observable.merge(it) }
-                .autoDisposable(scope())
+                .autoDispose(scope())
                 .subscribe(preferenceClickIntent)
     }
 

@@ -23,7 +23,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.core.view.isVisible
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.editorActions
 import com.jakewharton.rxbinding2.widget.textChanges
@@ -44,10 +44,18 @@ import dagger.android.AndroidInjection
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.contacts_activity.*
 import javax.inject.Inject
+import android.widget.ImageView
+import androidx.recyclerview.widget.RecyclerView
+import com.moez.QKSMS.common.widget.QkEditText
 
 class ContactsActivity : QkThemedActivity(), ContactsContract {
+
+    // View references (migrated from synthetics)
+    private val cancel: ImageView get() = findViewById(R.id.cancel)
+    private val contacts: RecyclerView get() = findViewById(R.id.contacts)
+    private val search: QkEditText get() = findViewById(R.id.search)
+
 
     companion object {
         const val SharingKey = "sharing"
@@ -66,7 +74,7 @@ class ContactsActivity : QkThemedActivity(), ContactsContract {
     override val phoneNumberSelectedIntent: Subject<Optional<Long>> by lazy { phoneNumberAdapter.selectedItemChanges }
     override val phoneNumberActionIntent: Subject<PhoneNumberAction> = PublishSubject.create()
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[ContactsViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[ContactsViewModel::class.java] }
 
     private val phoneNumberDialog by lazy {
         QkDialog(this).apply {

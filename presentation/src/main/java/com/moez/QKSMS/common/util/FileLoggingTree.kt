@@ -18,7 +18,7 @@
  */
 package com.moez.QKSMS.common.util
 
-import android.os.Environment
+import android.content.Context
 import android.util.Log
 import com.moez.QKSMS.util.Preferences
 import io.reactivex.schedulers.Schedulers
@@ -34,11 +34,14 @@ import javax.inject.Singleton
  * Based off Vipin Kumar's FileLoggingTree: https://medium.com/@vicky7230/file-logging-with-timber-4e63a1b86a66
  */
 @Singleton
-class FileLoggingTree @Inject constructor(private val prefs: Preferences) : Timber.DebugTree() {
+class FileLoggingTree @Inject constructor(
+    private val context: Context,
+    private val prefs: Preferences
+) : Timber.DebugTree() {
 
     private val fileLock: Boolean = false
 
-    override fun log(priority: Int, tag: String, message: String, t: Throwable?) {
+    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
         if (!prefs.logging.get()) return
 
         Schedulers.io().scheduleDirect {
@@ -59,7 +62,7 @@ class FileLoggingTree @Inject constructor(private val prefs: Preferences) : Timb
             synchronized(fileLock) {
                 try {
                     // Create the directory
-                    val dir = File(Environment.getExternalStorageDirectory(), "QKSMS/Logs").apply { mkdirs() }
+                    val dir = File(context.getExternalFilesDir(null), "Logs").apply { mkdirs() }
 
                     // Create the file
                     val file = File(dir, "${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(System.currentTimeMillis())}.log")

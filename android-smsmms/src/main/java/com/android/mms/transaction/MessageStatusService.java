@@ -16,7 +16,7 @@
 
 package com.android.mms.transaction;
 
-import android.app.IntentService;
+import android.app.Service;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
@@ -24,30 +24,43 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
+import android.os.IBinder;
 import android.provider.Telephony.Sms;
 import android.provider.Telephony.Sms.Inbox;
 import android.telephony.SmsMessage;
 import timber.log.Timber;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * Service that gets started by the MessageStatusReceiver when a message status report is
  * received.
  */
-public class MessageStatusService extends IntentService {
+public class MessageStatusService extends Service {
     private static final String[] ID_PROJECTION = new String[] { Sms._ID };
     private static final Uri STATUS_URI = Uri.parse("content://sms/status");
+    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
 
-    public MessageStatusService() {
-        // Class name will be the thread name.
-        super(MessageStatusService.class.getName());
-
-        // Intent should be redelivered if the process gets killed before completing the job.
-        setIntentRedelivery(true);
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
     }
 
     @Override
-    protected void onHandleIntent(Intent intent) {
-        // This method is called on a worker thread.
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        EXECUTOR.execute(() -> {
+            try {
+                handleIntent(intent);
+            } finally {
+                stopSelf(startId);
+            }
+        });
+        return START_REDELIVER_INTENT;
+    }
+
+    private void handleIntent(Intent intent) {
+        if (intent == null) return;
 
         String messageUri = intent.getDataString();
         if (messageUri == null) {

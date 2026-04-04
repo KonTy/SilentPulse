@@ -27,6 +27,8 @@ import com.moez.QKSMS.R
 import com.moez.QKSMS.common.base.QkAdapter
 import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.extensions.getDisplayName
+import com.moez.QKSMS.common.widget.BubbleImageView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.extensions.mapNotNull
 import com.moez.QKSMS.model.Attachment
 import ezvcard.Ezvcard
@@ -35,9 +37,6 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.attachment_contact_list_item.*
-import kotlinx.android.synthetic.main.attachment_image_list_item.*
-import kotlinx.android.synthetic.main.attachment_image_list_item.view.*
 import javax.inject.Inject
 
 class AttachmentAdapter @Inject constructor(
@@ -55,7 +54,7 @@ class AttachmentAdapter @Inject constructor(
         val inflater = LayoutInflater.from(parent.context)
         val view = when (viewType) {
             VIEW_TYPE_IMAGE -> inflater.inflate(R.layout.attachment_image_list_item, parent, false)
-                    .apply { thumbnailBounds.clipToOutline = true }
+                    .apply { findViewById<android.widget.FrameLayout>(R.id.thumbnailBounds).clipToOutline = true }
 
             VIEW_TYPE_CONTACT -> inflater.inflate(R.layout.attachment_contact_list_item, parent, false)
 
@@ -76,7 +75,7 @@ class AttachmentAdapter @Inject constructor(
         when (attachment) {
             is Attachment.Image -> Glide.with(context)
                     .load(attachment.getUri())
-                    .into(holder.thumbnail)
+                    .into(holder.itemView.findViewById<android.widget.ImageView>(R.id.thumbnail))
 
             is Attachment.Contact -> Observable.just(attachment.vCard)
                     .mapNotNull { vCard -> Ezvcard.parse(vCard).first() }
@@ -84,8 +83,9 @@ class AttachmentAdapter @Inject constructor(
                     .subscribeOn(Schedulers.computation())
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe { displayName ->
-                        holder.name?.text = displayName
-                        holder.name?.isVisible = displayName.isNotEmpty()
+                        val name = holder.itemView.findViewById<QkTextView>(R.id.name)
+                        name?.text = displayName
+                        name?.isVisible = displayName.isNotEmpty()
                     }
         }
     }

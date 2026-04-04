@@ -23,13 +23,21 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import com.moez.QKSMS.R
+import com.moez.QKSMS.common.widget.QkTextView
 import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.toolbar.*
 
 abstract class QkActivity : AppCompatActivity() {
 
     protected val menu: Subject<Menu> = BehaviorSubject.create()
+
+    internal val toolbar: Toolbar?
+        get() = findViewById(R.id.toolbar)
+
+    internal val toolbarTitle: QkTextView?
+        get() = findViewById(R.id.toolbarTitle)
 
     @SuppressLint("InlinedApi")
     override fun onCreate(savedInstanceState: Bundle?) {

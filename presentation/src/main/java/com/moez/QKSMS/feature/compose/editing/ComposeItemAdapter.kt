@@ -20,6 +20,7 @@ package com.moez.QKSMS.feature.compose.editing
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.moez.QKSMS.R
@@ -28,6 +29,9 @@ import com.moez.QKSMS.common.base.QkViewHolder
 import com.moez.QKSMS.common.util.Colors
 import com.moez.QKSMS.common.util.extensions.forwardTouches
 import com.moez.QKSMS.common.util.extensions.setTint
+import com.moez.QKSMS.common.widget.AvatarView
+import com.moez.QKSMS.common.widget.GroupAvatarView
+import com.moez.QKSMS.common.widget.QkTextView
 import com.moez.QKSMS.extensions.associateByNotNull
 import com.moez.QKSMS.model.Contact
 import com.moez.QKSMS.model.ContactGroup
@@ -38,8 +42,6 @@ import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.plusAssign
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.contact_list_item.*
-import kotlinx.android.synthetic.main.contact_list_item.view.*
 import javax.inject.Inject
 
 class ComposeItemAdapter @Inject constructor(
@@ -63,11 +65,14 @@ class ComposeItemAdapter @Inject constructor(
         val layoutInflater = LayoutInflater.from(parent.context)
         val view = layoutInflater.inflate(R.layout.contact_list_item, parent, false)
 
-        view.icon.setTint(colors.theme().theme)
+        val icon = view.findViewById<ImageView>(R.id.icon)
+        val numbers = view.findViewById<RecyclerView>(R.id.numbers)
 
-        view.numbers.setRecycledViewPool(numbersViewPool)
-        view.numbers.adapter = PhoneNumberAdapter()
-        view.numbers.forwardTouches(view)
+        icon.setTint(colors.theme().theme)
+
+        numbers.setRecycledViewPool(numbersViewPool)
+        numbers.adapter = PhoneNumberAdapter()
+        numbers.forwardTouches(view)
 
         return QkViewHolder(view).apply {
             view.setOnClickListener {
@@ -96,91 +101,126 @@ class ComposeItemAdapter @Inject constructor(
     }
 
     private fun bindNew(holder: QkViewHolder, contact: Contact) {
-        holder.index.isVisible = false
+        val index = holder.itemView.findViewById<QkTextView>(R.id.index)
+        val icon = holder.itemView.findViewById<ImageView>(R.id.icon)
+        val avatar = holder.itemView.findViewById<GroupAvatarView>(R.id.avatar)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val subtitle = holder.itemView.findViewById<QkTextView>(R.id.subtitle)
+        val numbers = holder.itemView.findViewById<RecyclerView>(R.id.numbers)
 
-        holder.icon.isVisible = false
+        index.isVisible = false
 
-        holder.avatar.recipients = listOf(createRecipient(contact))
+        icon.isVisible = false
 
-        holder.title.text = contact.numbers.joinToString { it.address }
+        avatar.recipients = listOf(createRecipient(contact))
 
-        holder.subtitle.isVisible = false
+        title.text = contact.numbers.joinToString { it.address }
 
-        holder.numbers.isVisible = false
+        subtitle.isVisible = false
+
+        numbers.isVisible = false
     }
 
     private fun bindRecent(holder: QkViewHolder, conversation: Conversation, prev: ComposeItem?) {
-        holder.index.isVisible = false
+        val index = holder.itemView.findViewById<QkTextView>(R.id.index)
+        val icon = holder.itemView.findViewById<ImageView>(R.id.icon)
+        val avatar = holder.itemView.findViewById<GroupAvatarView>(R.id.avatar)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val subtitle = holder.itemView.findViewById<QkTextView>(R.id.subtitle)
+        val numbers = holder.itemView.findViewById<RecyclerView>(R.id.numbers)
 
-        holder.icon.isVisible = prev !is ComposeItem.Recent
-        holder.icon.setImageResource(R.drawable.ic_history_black_24dp)
+        index.isVisible = false
 
-        holder.avatar.recipients = conversation.recipients
+        icon.isVisible = prev !is ComposeItem.Recent
+        icon.setImageResource(R.drawable.ic_history_black_24dp)
 
-        holder.title.text = conversation.getTitle()
+        avatar.recipients = conversation.recipients
 
-        holder.subtitle.isVisible = conversation.recipients.size > 1 && conversation.name.isBlank()
-        holder.subtitle.text = conversation.recipients.joinToString(", ") { recipient ->
+        title.text = conversation.getTitle()
+
+        subtitle.isVisible = conversation.recipients.size > 1 && conversation.name.isBlank()
+        subtitle.text = conversation.recipients.joinToString(", ") { recipient ->
             recipient.contact?.name ?: recipient.address
         }
-        holder.subtitle.collapseEnabled = conversation.recipients.size > 1
+        subtitle.collapseEnabled = conversation.recipients.size > 1
 
-        holder.numbers.isVisible = conversation.recipients.size == 1
-        (holder.numbers.adapter as PhoneNumberAdapter).data = conversation.recipients
+        numbers.isVisible = conversation.recipients.size == 1
+        (numbers.adapter as PhoneNumberAdapter).data = conversation.recipients
                 .mapNotNull { recipient -> recipient.contact }
                 .flatMap { contact -> contact.numbers }
     }
 
     private fun bindStarred(holder: QkViewHolder, contact: Contact, prev: ComposeItem?) {
-        holder.index.isVisible = false
+        val index = holder.itemView.findViewById<QkTextView>(R.id.index)
+        val icon = holder.itemView.findViewById<ImageView>(R.id.icon)
+        val avatar = holder.itemView.findViewById<GroupAvatarView>(R.id.avatar)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val subtitle = holder.itemView.findViewById<QkTextView>(R.id.subtitle)
+        val numbers = holder.itemView.findViewById<RecyclerView>(R.id.numbers)
 
-        holder.icon.isVisible = prev !is ComposeItem.Starred
-        holder.icon.setImageResource(R.drawable.ic_star_black_24dp)
+        index.isVisible = false
 
-        holder.avatar.recipients = listOf(createRecipient(contact))
+        icon.isVisible = prev !is ComposeItem.Starred
+        icon.setImageResource(R.drawable.ic_star_black_24dp)
 
-        holder.title.text = contact.name
+        avatar.recipients = listOf(createRecipient(contact))
 
-        holder.subtitle.isVisible = false
+        title.text = contact.name
 
-        holder.numbers.isVisible = true
-        (holder.numbers.adapter as PhoneNumberAdapter).data = contact.numbers
+        subtitle.isVisible = false
+
+        numbers.isVisible = true
+        (numbers.adapter as PhoneNumberAdapter).data = contact.numbers
     }
 
     private fun bindGroup(holder: QkViewHolder, group: ContactGroup, prev: ComposeItem?) {
-        holder.index.isVisible = false
+        val index = holder.itemView.findViewById<QkTextView>(R.id.index)
+        val icon = holder.itemView.findViewById<ImageView>(R.id.icon)
+        val avatar = holder.itemView.findViewById<GroupAvatarView>(R.id.avatar)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val subtitle = holder.itemView.findViewById<QkTextView>(R.id.subtitle)
+        val numbers = holder.itemView.findViewById<RecyclerView>(R.id.numbers)
 
-        holder.icon.isVisible = prev !is ComposeItem.Group
-        holder.icon.setImageResource(R.drawable.ic_people_black_24dp)
+        index.isVisible = false
 
-        holder.avatar.recipients = group.contacts.map(::createRecipient)
+        icon.isVisible = prev !is ComposeItem.Group
+        icon.setImageResource(R.drawable.ic_people_black_24dp)
 
-        holder.title.text = group.title
+        avatar.recipients = group.contacts.map(::createRecipient)
 
-        holder.subtitle.isVisible = true
-        holder.subtitle.text = group.contacts.joinToString(", ") { it.name }
-        holder.subtitle.collapseEnabled = group.contacts.size > 1
+        title.text = group.title
 
-        holder.numbers.isVisible = false
+        subtitle.isVisible = true
+        subtitle.text = group.contacts.joinToString(", ") { it.name }
+        subtitle.collapseEnabled = group.contacts.size > 1
+
+        numbers.isVisible = false
     }
 
     private fun bindPerson(holder: QkViewHolder, contact: Contact, prev: ComposeItem?) {
-        holder.index.isVisible = true
-        holder.index.text = if (contact.name.getOrNull(0)?.isLetter() == true) contact.name[0].toString() else "#"
-        holder.index.isVisible = prev !is ComposeItem.Person ||
+        val index = holder.itemView.findViewById<QkTextView>(R.id.index)
+        val icon = holder.itemView.findViewById<ImageView>(R.id.icon)
+        val avatar = holder.itemView.findViewById<GroupAvatarView>(R.id.avatar)
+        val title = holder.itemView.findViewById<QkTextView>(R.id.title)
+        val subtitle = holder.itemView.findViewById<QkTextView>(R.id.subtitle)
+        val numbers = holder.itemView.findViewById<RecyclerView>(R.id.numbers)
+
+        index.isVisible = true
+        index.text = if (contact.name.getOrNull(0)?.isLetter() == true) contact.name[0].toString() else "#"
+        index.isVisible = prev !is ComposeItem.Person ||
                 (contact.name[0].isLetter() && !contact.name[0].equals(prev.value.name[0], ignoreCase = true)) ||
                 (!contact.name[0].isLetter() && prev.value.name[0].isLetter())
 
-        holder.icon.isVisible = false
+        icon.isVisible = false
 
-        holder.avatar.recipients = listOf(createRecipient(contact))
+        avatar.recipients = listOf(createRecipient(contact))
 
-        holder.title.text = contact.name
+        title.text = contact.name
 
-        holder.subtitle.isVisible = false
+        subtitle.isVisible = false
 
-        holder.numbers.isVisible = true
-        (holder.numbers.adapter as PhoneNumberAdapter).data = contact.numbers
+        numbers.isVisible = true
+        (numbers.adapter as PhoneNumberAdapter).data = contact.numbers
     }
 
     private fun createRecipient(contact: Contact): Recipient {

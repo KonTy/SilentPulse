@@ -20,7 +20,7 @@ package com.moez.QKSMS.common.base
 
 import androidx.lifecycle.LifecycleOwner
 
-interface QkView<in State> : LifecycleOwner {
+interface QkView<in State : Any> : LifecycleOwner {
 
     fun render(state: State)
 

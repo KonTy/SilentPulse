@@ -26,10 +26,15 @@ import com.moez.QKSMS.common.base.QkController
 import com.moez.QKSMS.common.widget.PreferenceView
 import com.moez.QKSMS.injection.appComponent
 import io.reactivex.Observable
-import kotlinx.android.synthetic.main.about_controller.*
 import javax.inject.Inject
+import android.widget.LinearLayout
 
 class AboutController : QkController<AboutView, Unit, AboutPresenter>(), AboutView {
+
+    // View references (migrated from synthetics)
+    private val preferences: LinearLayout get() = view!!.findViewById(R.id.preferences)
+    private val version: PreferenceView get() = view!!.findViewById(R.id.version)
+
 
     @Inject override lateinit var presenter: AboutPresenter
 

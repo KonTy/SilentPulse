@@ -20,7 +20,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.provider.Telephony;
 import android.telephony.SmsManager;
 import com.android.mms.service_alt.DownloadRequest;
@@ -107,7 +106,7 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
             if (tasks != null) {
                 Timber.v("running the common async notifier for download");
                 for (CommonAsyncTask task : tasks)
-                    task.executeOnExecutor(RECEIVE_NOTIFICATION_EXECUTOR);
+                    RECEIVE_NOTIFICATION_EXECUTOR.execute(task);
             }
         } catch (FileNotFoundException e) {
             errorMessage = "MMS received, file not found exception";
@@ -167,7 +166,7 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
         return (NotificationInd) PduPersister.getPduPersister(context).load((Uri) intent.getParcelableExtra(EXTRA_URI));
     }
 
-    private static abstract class CommonAsyncTask extends AsyncTask<Void, Void, Void> {
+    private static abstract class CommonAsyncTask implements Runnable {
         protected final Context mContext;
         protected final TransactionSettings mTransactionSettings;
         final NotificationInd mNotificationInd;
@@ -257,7 +256,7 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
         }
 
         @Override
-        protected Void doInBackground(Void... params) {
+        public void run() {
             // Create the M-NotifyResp.ind
             NotifyRespInd notifyRespInd;
             try {
@@ -275,7 +274,6 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
             } catch (MmsException | IOException e) {
                 Timber.e(e, "error");
             }
-            return null;
         }
     }
 
@@ -288,7 +286,7 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
         }
 
         @Override
-        protected Void doInBackground(Void... params) {
+        public void run() {
             // Send M-Acknowledge.ind to MMSC if required.
             // If the Transaction-ID isn't set in the M-Retrieve.conf, it means
             // the MMS proxy-relay doesn't require an ACK.
@@ -316,7 +314,6 @@ public class MmsReceivedReceiver extends BroadcastReceiver {
                     Timber.e(e, "error");
                 }
             }
-            return null;
         }
     }
 

@@ -33,11 +33,11 @@ import android.provider.MediaStore
 import android.text.format.DateFormat
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
 import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.material.snackbar.Snackbar
 import com.jakewharton.rxbinding2.view.clicks
@@ -60,18 +60,60 @@ import com.moez.QKSMS.feature.contacts.ContactsActivity
 import com.moez.QKSMS.model.Attachment
 import com.moez.QKSMS.model.Recipient
 import com.uber.autodispose.android.lifecycle.scope
-import com.uber.autodispose.autoDisposable
+import com.uber.autodispose.autoDispose
 import dagger.android.AndroidInjection
 import io.reactivex.Observable
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
-import kotlinx.android.synthetic.main.compose_activity.*
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 import kotlin.collections.HashMap
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import androidx.appcompat.widget.Toolbar
+import androidx.constraintlayout.widget.Group
+import androidx.recyclerview.widget.RecyclerView
+import com.moez.QKSMS.common.widget.QkEditText
+import com.moez.QKSMS.common.widget.QkSwitch
+import com.moez.QKSMS.common.widget.QkTextView
 
 class ComposeActivity : QkThemedActivity(), ComposeView {
+
+    // View references (migrated from synthetics)
+    private val attach: ImageView get() = findViewById(R.id.attach)
+    private val attaching: Group get() = findViewById(R.id.attaching)
+    private val attachingBackground: View get() = findViewById(R.id.attachingBackground)
+    private val attachments: RecyclerView get() = findViewById(R.id.attachments)
+    private val camera: ImageView get() = findViewById(R.id.camera)
+    private val cameraLabel: QkTextView get() = findViewById(R.id.cameraLabel)
+    private val chips: RecyclerView get() = findViewById(R.id.chips)
+    private val composeBar: Group get() = findViewById(R.id.composeBar)
+    private val contact: ImageView get() = findViewById(R.id.contact)
+    private val contactLabel: QkTextView get() = findViewById(R.id.contactLabel)
+    private val contentView: LinearLayout get() = findViewById(R.id.contentView)
+    private val counter: QkTextView get() = findViewById(R.id.counter)
+    private val gallery: ImageView get() = findViewById(R.id.gallery)
+    private val galleryLabel: QkTextView get() = findViewById(R.id.galleryLabel)
+    private val loading: ProgressBar get() = findViewById(R.id.loading)
+    private val message: QkEditText get() = findViewById(R.id.message)
+    private val messageBackground: View get() = findViewById(R.id.messageBackground)
+    private val messageList: RecyclerView get() = findViewById(R.id.messageList)
+    private val messagesEmpty: QkTextView get() = findViewById(R.id.messagesEmpty)
+    private val schedule: ImageView get() = findViewById(R.id.schedule)
+    private val scheduleLabel: QkTextView get() = findViewById(R.id.scheduleLabel)
+    private val scheduledCancel: ImageView get() = findViewById(R.id.scheduledCancel)
+    private val scheduledGroup: Group get() = findViewById(R.id.scheduledGroup)
+    private val scheduledTime: QkTextView get() = findViewById(R.id.scheduledTime)
+    private val send: ImageView get() = findViewById(R.id.send)
+    private val sendAsGroup: Group get() = findViewById(R.id.sendAsGroup)
+    private val sendAsGroupBackground: View get() = findViewById(R.id.sendAsGroupBackground)
+    private val sendAsGroupSwitch: QkSwitch get() = findViewById(R.id.sendAsGroupSwitch)
+    private val sim: ImageView get() = findViewById(R.id.sim)
+    private val simIndex: QkTextView get() = findViewById(R.id.simIndex)
+    private val toolbarSubtitle: QkTextView get() = findViewById(R.id.toolbarSubtitle)
+
 
     companion object {
         private const val SelectContactRequestCode = 0
@@ -116,7 +158,7 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
     override val viewQksmsPlusIntent: Subject<Unit> = PublishSubject.create()
     override val backPressedIntent: Subject<Unit> = PublishSubject.create()
 
-    private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[ComposeViewModel::class.java] }
+    private val viewModel by lazy { ViewModelProvider(this, viewModelFactory)[ComposeViewModel::class.java] }
 
     private var cameraDestination: Uri? = null
 
@@ -151,7 +193,7 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
                 .doOnNext { attach.setBackgroundTint(it.theme) }
                 .doOnNext { attach.setTint(it.textPrimary) }
                 .doOnNext { messageAdapter.theme = it }
-                .autoDisposable(scope())
+                .autoDispose(scope())
                 .subscribe()
 
         window.callback = ComposeWindowCallback(window.callback, this)
@@ -190,25 +232,25 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
         toolbarSubtitle.text = getString(R.string.compose_subtitle_results, state.searchSelectionPosition,
                 state.searchResults)
 
-        toolbarTitle.setVisible(!state.editingMode)
+        toolbarTitle?.setVisible(!state.editingMode)
         chips.setVisible(state.editingMode)
         composeBar.setVisible(!state.loading)
 
         // Don't set the adapters unless needed
         if (state.editingMode && chips.adapter == null) chips.adapter = chipsAdapter
 
-        toolbar.menu.findItem(R.id.add)?.isVisible = state.editingMode
-        toolbar.menu.findItem(R.id.call)?.isVisible = !state.editingMode && state.selectedMessages == 0
+        toolbar?.menu?.findItem(R.id.add)?.isVisible = state.editingMode
+        toolbar?.menu?.findItem(R.id.call)?.isVisible = !state.editingMode && state.selectedMessages == 0
                 && state.query.isEmpty()
-        toolbar.menu.findItem(R.id.info)?.isVisible = !state.editingMode && state.selectedMessages == 0
+        toolbar?.menu?.findItem(R.id.info)?.isVisible = !state.editingMode && state.selectedMessages == 0
                 && state.query.isEmpty()
-        toolbar.menu.findItem(R.id.copy)?.isVisible = !state.editingMode && state.selectedMessages > 0
-        toolbar.menu.findItem(R.id.details)?.isVisible = !state.editingMode && state.selectedMessages == 1
-        toolbar.menu.findItem(R.id.delete)?.isVisible = !state.editingMode && state.selectedMessages > 0
-        toolbar.menu.findItem(R.id.forward)?.isVisible = !state.editingMode && state.selectedMessages == 1
-        toolbar.menu.findItem(R.id.previous)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
-        toolbar.menu.findItem(R.id.next)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
-        toolbar.menu.findItem(R.id.clear)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
+        toolbar?.menu?.findItem(R.id.copy)?.isVisible = !state.editingMode && state.selectedMessages > 0
+        toolbar?.menu?.findItem(R.id.details)?.isVisible = !state.editingMode && state.selectedMessages == 1
+        toolbar?.menu?.findItem(R.id.delete)?.isVisible = !state.editingMode && state.selectedMessages > 0
+        toolbar?.menu?.findItem(R.id.forward)?.isVisible = !state.editingMode && state.selectedMessages == 1
+        toolbar?.menu?.findItem(R.id.previous)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
+        toolbar?.menu?.findItem(R.id.next)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
+        toolbar?.menu?.findItem(R.id.clear)?.isVisible = state.selectedMessages == 0 && state.query.isNotEmpty()
 
         chipsAdapter.data = state.selectedChips
 
@@ -392,8 +434,8 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
         super.onSaveInstanceState(outState)
     }
 
-    override fun onRestoreInstanceState(savedInstanceState: Bundle?) {
-        cameraDestination = savedInstanceState?.getParcelable(CameraDestinationKey)
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        cameraDestination = savedInstanceState.getParcelable(CameraDestinationKey)
         super.onRestoreInstanceState(savedInstanceState)
     }
 
