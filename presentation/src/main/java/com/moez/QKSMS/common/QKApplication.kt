@@ -19,9 +19,12 @@
 package com.moez.QKSMS.common
 
 import android.app.Application
+import android.os.Build
 import androidx.core.provider.FontRequest
 import androidx.emoji2.text.EmojiCompat
 import androidx.emoji2.text.FontRequestEmojiCompatConfig
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.moez.QKSMS.BuildConfig
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.util.CrashlyticsTree
 import com.moez.QKSMS.common.util.FileLoggingTree
@@ -69,6 +72,23 @@ class QKApplication : Application(), HasAndroidInjector {
         AppComponentManager.init(this)
         appComponent.inject(this)
 
+        // Initialize Firebase Crashlytics
+        try {
+            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+        } catch (e: Exception) {
+            // Crashlytics might not be available in noAnalytics build
+            android.util.Log.w("QKApplication", "Crashlytics not available", e)
+        }
+
+        // Set up logging - plant both debug and file logging trees
+        Timber.plant(Timber.DebugTree(), CrashlyticsTree(), fileLoggingTree)
+
+        // Set up uncaught exception handler
+        setupUncaughtExceptionHandler()
+
+        // Log diagnostic startup information
+        Timber.i("SilentPulse started - version ${BuildConfig.VERSION_NAME}, SDK ${Build.VERSION.SDK_INT}, device ${Build.MODEL}")
+
         Realm.init(this)
         Realm.setDefaultConfiguration(RealmConfiguration.Builder()
                 .compactOnLaunch()
@@ -94,11 +114,32 @@ class QKApplication : Application(), HasAndroidInjector {
 
         EmojiCompat.init(FontRequestEmojiCompatConfig(this, fontRequest))
 
-        Timber.plant(Timber.DebugTree(), CrashlyticsTree(), fileLoggingTree)
-
         RxDogTag.builder()
                 .configureWith(AutoDisposeConfigurer::configure)
                 .install()
+    }
+
+    /**
+     * Set up an uncaught exception handler that logs full stack traces before crashing
+     */
+    private fun setupUncaughtExceptionHandler() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                // Log the crash to Timber (which will write to file and Crashlytics)
+                Timber.e(throwable, "FATAL EXCEPTION in thread ${thread.name}")
+                
+                // Give some time for logs to be written
+                Thread.sleep(500)
+            } catch (e: Exception) {
+                // If logging fails, at least try to print to logcat
+                android.util.Log.e("QKApplication", "Error in uncaught exception handler", e)
+            } finally {
+                // Call the default handler to perform the actual crash
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
     }
 
     override fun androidInjector(): AndroidInjector<Any> {
