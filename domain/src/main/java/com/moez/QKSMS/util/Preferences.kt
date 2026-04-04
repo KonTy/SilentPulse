@@ -119,6 +119,15 @@ class Preferences @Inject constructor(
     val mmsSize = rxPrefs.getInteger("mmsSize", 300)
     val logging = rxPrefs.getBoolean("logging", false)
 
+    // Drive Mode
+    val driveModeEnabled = rxPrefs.getBoolean("drive_mode_enabled", false)
+    val driveModeReadSms = rxPrefs.getBoolean("drive_mode_read_sms", true)
+    val driveModeReadAllNotifications = rxPrefs.getBoolean("drive_mode_read_all_notif", false)
+    val driveModeTtsEngine = rxPrefs.getString("drive_mode_tts_engine", "android") // "android" or "piper"
+    val driveModeVoiceReplyEnabled = rxPrefs.getBoolean("drive_mode_voice_reply", false)
+    val driveModeReplyTimeoutSecs = rxPrefs.getInteger("drive_mode_reply_timeout", 30)
+    val driveModeAutoToggleOnCarplay = rxPrefs.getBoolean("drive_mode_auto_carplay", true)
+
     init {
         // Migrate from old night mode preference to new one, now that we support android Q night mode
         val nightModeSummary = rxPrefs.getInteger("nightModeSummary")
