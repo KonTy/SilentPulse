@@ -280,6 +280,19 @@
     <string name="settings_logging_enabled">Debug logging enabled</string>
     <string name="settings_logging_disabled">Debug logging disabled</string>
 
+    <!-- Diagnostics section -->
+    <string name="settings_category_diagnostics">Diagnostics</string>
+    <string name="settings_logging_title">Enable detailed logging</string>
+    <string name="settings_logging_summary">Log additional information for debugging</string>
+    <string name="settings_share_logs_title">Share logs</string>
+    <string name="settings_share_logs_summary">Share log files for support</string>
+    <string name="settings_clear_logs_title">Clear logs</string>
+    <string name="settings_clear_logs_summary">Delete all log files</string>
+    <string name="settings_diagnostics_info">Log files are stored on your device. Share them for support.</string>
+    <string name="settings_logs_cleared">Log files cleared</string>
+    <string name="settings_no_logs">No log files found</string>
+    <string name="settings_share_logs_title_intent">Share QKSMS Logs</string>
+
     <!-- Drive Mode settings -->
     <string name="settings_drive_mode_title">Drive Mode</string>
     <string name="settings_drive_mode_summary">Hands-free messaging while driving</string>
