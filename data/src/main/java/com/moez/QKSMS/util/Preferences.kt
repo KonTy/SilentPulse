@@ -80,11 +80,11 @@ class Preferences {
 
     val canUseSubId: Preference<Boolean> = object : Preference<Boolean> {
         private var value: Boolean = true
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Boolean) { this.value = value; this.set = true }
-        override fun delete() { value = true; set = false }
-        override val isSet get() = set
+        override fun set(value: Boolean) { this.value = value; this.setFlag = true }
+        override fun delete() { value = true; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Boolean> = Observable.just(value)
     }
 
@@ -108,11 +108,11 @@ class Preferences {
 
     val changelogVersion: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
@@ -127,61 +127,61 @@ class Preferences {
 
     val sia: Preference<Boolean> = object : Preference<Boolean> {
         private var value: Boolean = false
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Boolean) { this.value = value; this.set = true }
-        override fun delete() { set = false }
-        override val isSet get() = set
+        override fun set(value: Boolean) { this.value = value; this.setFlag = true }
+        override fun delete() { setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Boolean> = Observable.just(value)
     }
 
     val notifAction1: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
     val notifAction2: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
     val notifAction3: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
     val swipeLeft: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
     val swipeRight: Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 
@@ -232,11 +232,11 @@ class Preferences {
 
     fun theme(id: Long): Preference<Int> = object : Preference<Int> {
         private var value: Int = 0
-        private var set: Boolean = false
+        private var setFlag: Boolean = false
         override fun get() = value
-        override fun set(value: Int) { this.value = value; this.set = true }
-        override fun delete() { value = 0; set = false }
-        override val isSet get() = set
+        override fun set(value: Int) { this.value = value; this.setFlag = true }
+        override fun delete() { value = 0; setFlag = false }
+        override val isSet get() = setFlag
         override fun asObservable(): Observable<Int> = Observable.just(value)
     }
 }
