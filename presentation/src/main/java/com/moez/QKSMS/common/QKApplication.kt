@@ -23,7 +23,6 @@ import android.os.Build
 import androidx.core.provider.FontRequest
 import androidx.emoji2.text.EmojiCompat
 import androidx.emoji2.text.FontRequestEmojiCompatConfig
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.moez.QKSMS.BuildConfig
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.util.CrashlyticsTree
@@ -71,14 +70,6 @@ class QKApplication : Application(), HasAndroidInjector {
 
         AppComponentManager.init(this)
         appComponent.inject(this)
-
-        // Initialize Firebase Crashlytics
-        try {
-            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
-        } catch (e: Exception) {
-            // Crashlytics might not be available in noAnalytics build
-            android.util.Log.w("QKApplication", "Crashlytics not available", e)
-        }
 
         // Set up logging - plant both debug and file logging trees
         Timber.plant(Timber.DebugTree(), CrashlyticsTree(), fileLoggingTree)

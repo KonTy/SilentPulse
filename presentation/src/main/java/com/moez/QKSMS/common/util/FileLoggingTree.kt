@@ -20,7 +20,6 @@ package com.moez.QKSMS.common.util
 
 import android.content.Context
 import android.util.Log
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.moez.QKSMS.util.Preferences
 import io.reactivex.schedulers.Schedulers
 import timber.log.Timber
@@ -61,19 +60,6 @@ class FileLoggingTree @Inject constructor(
             Log.WARN -> "W"
             Log.ERROR -> "E"
             else -> "WTF"
-        }
-
-        // Log to Firebase Crashlytics
-        try {
-            FirebaseCrashlytics.getInstance().log("$priorityString/$tag: $message")
-            
-            // For errors, record the exception
-            if (priority >= Log.ERROR) {
-                FirebaseCrashlytics.getInstance().recordException(t ?: Exception(message))
-            }
-        } catch (e: Exception) {
-            // Crashlytics might not be available in noAnalytics build
-            Log.e("FileLoggingTree", "Error logging to Crashlytics", e)
         }
 
         // Log to file asynchronously
