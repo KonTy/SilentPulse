@@ -137,10 +137,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
         sendDelayDialog.adapter.setData(R.array.delayed_sending_labels)
         mmsSizeDialog.adapter.setData(R.array.mms_sizes, R.array.mms_sizes_ids)
 
-        // Drive Mode dialogs
-        driveModeTimeoutDialog.adapter.setData(R.array.drive_mode_timeout_labels, R.array.drive_mode_timeout_values)
-        driveModeTtsEngineDialog.adapter.setData(R.array.drive_mode_tts_engines)
-
         about.summary = context.getString(R.string.settings_version, BuildConfig.VERSION_NAME)
     }
 
