@@ -35,8 +35,6 @@ class AboutController : QkController<AboutView, Unit, AboutPresenter>(), AboutVi
     // View references (migrated from synthetics)
     private val preferences: LinearLayout get() = view!!.findViewById(R.id.preferences)
     private val version: PreferenceView get() = view!!.findViewById(R.id.version)
-    private val appName: QkTextView get() = view!!.findViewById(R.id.app_name)
-    private val appSubtitle: QkTextView get() = view!!.findViewById(R.id.app_subtitle)
 
     @Inject override lateinit var presenter: AboutPresenter
 
@@ -47,8 +45,6 @@ class AboutController : QkController<AboutView, Unit, AboutPresenter>(), AboutVi
 
     override fun onViewCreated() {
         version.summary = BuildConfig.VERSION_NAME
-        appName.text = getString(R.string.app_name_silentpulse)
-        appSubtitle.text = getString(R.string.app_subtitle_rebrand)
     }
 
     override fun onAttach(view: View) {

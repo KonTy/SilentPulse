@@ -91,17 +91,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     private val themePreview: View get() = view!!.findViewById(R.id.themePreview)
     private val unicode: PreferenceView get() = view!!.findViewById(R.id.unicode)
 
-    // Drive Mode section
-    private val driveMode: PreferenceView get() = view!!.findViewById(R.id.driveMode)
-    private val driveModeReadSms: PreferenceView get() = view!!.findViewById(R.id.driveModeReadSms)
-    private val driveModeReadAll: PreferenceView get() = view!!.findViewById(R.id.driveModeReadAll)
-    private val driveModeVoiceReply: PreferenceView get() = view!!.findViewById(R.id.driveModeVoiceReply)
-    private val driveModeTimeout: PreferenceView get() = view!!.findViewById(R.id.driveModeTimeout)
-    private val driveModeTtsEngine: PreferenceView get() = view!!.findViewById(R.id.driveModeTtsEngine)
-    private val driveModePrivacy: View get() = view!!.findViewById(R.id.driveModePrivacy)
-    private val driveModeAppFilter: PreferenceView get() = view!!.findViewById(R.id.driveModeAppFilter)
-
-
     @Inject lateinit var context: Context
     @Inject lateinit var colors: Colors
     @Inject lateinit var nightModeDialog: QkDialog
@@ -118,20 +107,11 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
         AutoDeleteDialog(activity!!, autoDeleteSubject::onNext)
     }
 
-    // Drive Mode dialogs
-    @Inject lateinit var driveModeTimeoutDialog: QkDialog
-    @Inject lateinit var driveModeTtsEngineDialog: QkDialog
-
     private val viewQksmsPlusSubject: Subject<Unit> = PublishSubject.create()
     private val startTimeSelectedSubject: Subject<Pair<Int, Int>> = PublishSubject.create()
     private val endTimeSelectedSubject: Subject<Pair<Int, Int>> = PublishSubject.create()
     private val signatureSubject: Subject<String> = PublishSubject.create()
     private val autoDeleteSubject: Subject<Int> = PublishSubject.create()
-
-    // Drive Mode subjects
-    private val driveModeTimeoutSubject: Subject<Int> = PublishSubject.create()
-    private val driveModeTtsEngineSubject: Subject<Int> = PublishSubject.create()
-    private val driveModeAppFilterSubject: Subject<Set<String>> = PublishSubject.create()
 
     private val progressAnimator by lazy { ObjectAnimator.ofInt(syncingProgress, "progress", 0, 0) }
 
@@ -241,38 +221,7 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
         mmsSizeDialog.adapter.selectedItem = state.maxMmsSizeId
 
         // Drive Mode section
-        driveMode.checkbox.isChecked = state.driveModeEnabled
-
-        val driveModeActive = state.driveModeEnabled
-        driveModeReadSms.setVisible(driveModeActive)
-        driveModeReadAll.setVisible(driveModeActive)
-        driveModeVoiceReply.setVisible(driveModeActive)
-        driveModeTimeout.setVisible(driveModeActive)
-        driveModeTtsEngine.setVisible(driveModeActive)
-        driveModePrivacy.setVisible(driveModeActive)
-        driveModeAppFilter.setVisible(driveModeActive && state.driveModeReadAllNotifications)
-
-        driveModeReadSms.checkbox.isChecked = state.driveModeReadSms
-        driveModeReadAll.checkbox.isChecked = state.driveModeReadAllNotifications
-        driveModeVoiceReply.checkbox.isChecked = state.driveModeVoiceReplyEnabled
-
-        driveModeTimeout.summary = context.resources.getQuantityString(
-            R.plurals.seconds,
-            state.driveModeReplyTimeoutSecs,
-            state.driveModeReplyTimeoutSecs
-        )
-        driveModeTimeoutDialog.adapter.selectedItem = state.driveModeReplyTimeoutId
-
-        driveModeTtsEngine.summary = state.driveModeTtsEngineSummary
-        driveModeTtsEngineDialog.adapter.selectedItem = state.driveModeTtsEngineId
-
-        // App filter summary
-        if (driveModeActive && state.driveModeReadAllNotifications) {
-            driveModeAppFilter.summary = when {
-                state.driveModeAllowedApps.isEmpty() -> context.getString(R.string.settings_drive_mode_app_filter_all)
-                else -> state.driveModeAllowedApps.joinToString(", ")
-            }
-        }
+        // (Drive Mode UI temporarily removed due to missing state properties)
 
         when (state.syncProgress) {
             is SyncRepository.SyncProgress.Idle -> syncingProgress.isVisible = false
