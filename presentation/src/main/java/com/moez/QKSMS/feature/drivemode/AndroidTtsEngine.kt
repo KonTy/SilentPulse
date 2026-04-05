@@ -85,6 +85,10 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
             onDone()
         }
     }
+
+    override fun speak(text: String) {
+        speak(text) {}
+    }
     
     override fun stop() {
         tts?.stop()

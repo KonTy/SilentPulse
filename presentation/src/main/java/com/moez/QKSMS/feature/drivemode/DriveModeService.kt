@@ -1,4 +1,4 @@
-package com.example.drivesafe.service
+package com.moez.QKSMS.feature.drivemode
 
 import android.Manifest
 import android.app.Notification
@@ -13,21 +13,16 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.example.drivesafe.R
-import com.example.drivesafe.ml.SttEngine
-import com.example.drivesafe.tts.TtsEngine
-import com.example.drivesafe.util.PreferencesManager
-import com.example.drivesafe.voice.VoiceCommandProcessor
-import dagger.hilt.android.AndroidEntryPoint
+import com.moez.QKSMS.R
+import com.moez.QKSMS.util.Preferences
 import kotlinx.coroutines.*
 import timber.log.Timber
 import javax.inject.Inject
 
-@AndroidEntryPoint
 class DriveModeService : NotificationListenerService() {
 
     @Inject
-    lateinit var ttsEngine: TtsEngine
+    lateinit var ttsEngineFactory: TtsEngineFactory
 
     @Inject
     lateinit var sttEngine: SttEngine
@@ -36,20 +31,22 @@ class DriveModeService : NotificationListenerService() {
     lateinit var voiceCommandProcessor: VoiceCommandProcessor
 
     @Inject
-    lateinit var preferencesManager: PreferencesManager
+    lateinit var prefs: Preferences
 
+    private var ttsEngine: TtsEngine? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isDriveModeActive = false
 
     companion object {
         private const val CHANNEL_ID = "drive_mode_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val ACTION_VOICE_REPLY = "com.example.drivesafe.VOICE_REPLY"
+        private const val ACTION_VOICE_REPLY = "com.moez.QKSMS.VOICE_REPLY"
     }
 
     override fun onCreate() {
         super.onCreate()
         Timber.d("DriveModeService created")
+        ttsEngine = ttsEngineFactory.createEngine()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
     }
@@ -70,6 +67,38 @@ class DriveModeService : NotificationListenerService() {
         return START_STICKY
     }
 
+    fun isDriveModeEnabledForAllNotifications(): Boolean {
+        return isDriveModeActive
+    }
+
+    fun handleIncomingNotification(app: String, sender: String, messageBody: String, notificationKey: String) {
+        Timber.d("Handling notification from $app - $sender: $messageBody")
+        
+        val textToSpeak = buildString {
+            append("Message from $sender. ")
+            append(messageBody)
+            append(". Say respond to reply.")
+        }
+
+        // Store notification context for potential voice reply
+        val notificationContext = VoiceCommandProcessor.NotificationContext(
+            app = app,
+            sender = sender,
+            messageBody = messageBody,
+            notificationKey = notificationKey
+        )
+        voiceCommandProcessor.setCurrentContext(notificationContext)
+
+        // Speak the message
+        ttsEngine?.speak(
+            text = textToSpeak,
+            onDone = {
+                // After TTS finishes, start listening
+                startVoiceListening()
+            }
+        )
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         
@@ -87,42 +116,27 @@ class DriveModeService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
         if (text.isNotEmpty()) {
-            handleIncomingMessage(title, text, sbn)
+            handleIncomingMessage(getAppName(packageName), title, text, sbn.key)
         }
     }
 
-    private fun handleIncomingMessage(sender: String, message: String, sbn: StatusBarNotification) {
-        Timber.d("Handling message from $sender: $message")
-        
-        val textToSpeak = buildString {
-            append("Message from $sender. ")
-            append(message)
-            if (preferencesManager.isDriveModeVoiceReplyEnabled()) {
-                append(". Say respond to reply.")
+    private fun getAppName(packageName: String): String {
+        return when (packageName) {
+            "org.thoughtcrime.securesms" -> "Signal"
+            "com.whatsapp" -> "WhatsApp"
+            "org.telegram.messenger" -> "Telegram"
+            "com.google.android.gm" -> "Gmail"
+            "com.facebook.orca" -> "Messenger"
+            "com.android.mms", "com.google.android.apps.messaging" -> "SMS"
+            else -> {
+                try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    packageName
+                }
             }
         }
-
-        // Store notification context for potential voice reply
-        val notificationContext = VoiceCommandProcessor.NotificationContext(
-            sender = sender,
-            message = message,
-            notification = sbn
-        )
-        voiceCommandProcessor.setNotificationContext(notificationContext)
-
-        // Speak the message
-        ttsEngine.speak(
-            text = textToSpeak,
-            onDone = {
-                // After TTS finishes, start listening if voice reply is enabled
-                if (preferencesManager.isDriveModeVoiceReplyEnabled()) {
-                    startVoiceListening()
-                }
-            },
-            onError = { error ->
-                Timber.e("TTS error: $error")
-            }
-        )
     }
 
     private fun handleVoiceReplyAction() {
@@ -134,7 +148,7 @@ class DriveModeService : NotificationListenerService() {
         // Check for RECORD_AUDIO permission
         if (!hasRecordAudioPermission()) {
             Timber.w("RECORD_AUDIO permission not granted")
-            ttsEngine.speak("Microphone permission is required for voice replies.")
+            ttsEngine?.speak("Microphone permission is required for voice replies.")
             return
         }
 
@@ -147,12 +161,12 @@ class DriveModeService : NotificationListenerService() {
                 updateNotification("Drive Mode Active")
                 
                 // Pass to voice command processor
-                voiceCommandProcessor.handleCommand(recognizedText)
+                voiceCommandProcessor.processCommand(recognizedText, voiceCommandProcessor.getCurrentContext())
             },
             onError = { error ->
                 Timber.e("STT error: $error")
                 updateNotification("Drive Mode Active")
-                ttsEngine.speak("Sorry, I didn't catch that.")
+                ttsEngine?.speak("Sorry, I didn't catch that.")
             }
         )
     }
@@ -205,13 +219,13 @@ class DriveModeService : NotificationListenerService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("DriveSafe")
+            .setContentTitle("QKSMS Drive Mode")
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_drive_mode)
+            .setSmallIcon(R.drawable.ic_notifications_black_24dp)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .addAction(
-                R.drawable.ic_mic,
+                R.drawable.ic_call_black_24dp,
                 "Voice Reply",
                 voiceReplyPendingIntent
             )
@@ -228,7 +242,7 @@ class DriveModeService : NotificationListenerService() {
         Timber.d("DriveModeService destroyed")
         isDriveModeActive = false
         serviceScope.cancel()
-        ttsEngine.shutdown()
+        ttsEngine?.shutdown()
         sttEngine.shutdown()
     }
 }

@@ -1,14 +1,10 @@
-
 package com.moez.QKSMS.feature.drivemode
 
-import android.app.Notification
 import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
 import timber.log.Timber
-import com.moez.QKSMS.common.util.MessageDetailsFormatter
 import com.moez.QKSMS.manager.PermissionManager
 import com.moez.QKSMS.repository.MessageRepository
 import javax.inject.Inject
@@ -17,11 +13,12 @@ class VoiceCommandProcessor @Inject constructor(
     private val context: Context,
     private val messageRepository: MessageRepository,
     private val permissionManager: PermissionManager,
-    private val messageFormatter: MessageDetailsFormatter
+    private val ttsEngineFactory: TtsEngineFactory
 ) {
-    private var tts: TextToSpeech? = null
+    private var ttsEngine: TtsEngine? = null
     private var pendingReplyContext: NotificationContext? = null
     private var pendingOpenAppContext: NotificationContext? = null
+    private var currentContext: NotificationContext? = null
 
     data class NotificationContext(
         val app: String,
@@ -30,12 +27,22 @@ class VoiceCommandProcessor @Inject constructor(
         val notificationKey: String? = null
     )
 
+    init {
+        ttsEngine = ttsEngineFactory.createEngine()
+    }
+
+    fun setCurrentContext(context: NotificationContext) {
+        currentContext = context
+    }
+
+    fun getCurrentContext(): NotificationContext? = currentContext
+
     fun processCommand(command: String, notificationContext: NotificationContext?) {
         when {
             command.contains("read", ignoreCase = true) -> {
                 notificationContext?.let { readMessage(it) }
             }
-            command.contains("reply", ignoreCase = true) -> {
+            command.contains("reply", ignoreCase = true) || command.contains("respond", ignoreCase = true) -> {
                 notificationContext?.let { initiateReply(it) }
             }
             command.contains("yes", ignoreCase = true) -> {
@@ -102,10 +109,8 @@ class VoiceCommandProcessor @Inject constructor(
         }
 
         try {
-            // Use MessageRepository to send SMS
             speak("Sending SMS to ${context.sender}: $replyText")
             // TODO: Implement actual SMS sending via messageRepository
-            // messageRepository.sendMessage(...)
         } catch (e: Exception) {
             Timber.e(e, "Failed to send SMS")
             speak("Sorry, I couldn't send the message.")
@@ -171,21 +176,13 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     private fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
-    }
-
-    fun initializeTTS(onInitialized: () -> Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                onInitialized()
-            }
-        }
+        ttsEngine?.speak(text)
     }
 
     fun shutdown() {
-        tts?.stop()
-        tts?.shutdown()
+        ttsEngine?.shutdown()
         pendingReplyContext = null
         pendingOpenAppContext = null
+        currentContext = null
     }
 }
