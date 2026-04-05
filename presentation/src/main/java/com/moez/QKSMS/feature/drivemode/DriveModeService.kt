@@ -116,7 +116,7 @@ class DriveModeService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
         if (text.isNotEmpty()) {
-            handleIncomingMessage(getAppName(packageName), title, text, sbn.key)
+            handleIncomingNotification(getAppName(packageName), title, text, sbn.key)
         }
     }
 
