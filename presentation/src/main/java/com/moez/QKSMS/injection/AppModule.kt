@@ -123,6 +123,10 @@ class AppModule(private var application: Application) {
     }
 
     @Provides
+    @Named("attachments")
+    fun provideSharedAttachments(): Attachments = Attachments()
+
+    @Provides
     fun provideViewModelFactory(factory: ViewModelFactory): ViewModelProvider.Factory = factory
 
     // Listener
