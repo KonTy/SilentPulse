@@ -1,0 +1,60 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"ggml_add_backend_library",
+			"ggml_add_cpu_backend_variant_impl"
+		],
+		"files" : 
+		[
+			"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/CMakeLists.txt",
+			"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/ggml-cpu/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 445,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 27,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 262,
+				"parent" : 2
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/arm64-v8a/libggml-cpu.so"
+			],
+			"targetId" : "ggml-cpu::@13ca10ed1afff475bcb7",
+			"targetIndex" : 2,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/ggml-build/src",
+		"source" : "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src"
+	}
+}

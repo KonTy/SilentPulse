@@ -20,26 +20,31 @@ apply plugin: 'com.android.application'
 apply plugin: 'realm-android' // Realm needs to be before Kotlin or the build will fail
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
+apply plugin: 'com.google.devtools.ksp'
 
 android {
-    namespace 'com.moez.QKSMS'
+    namespace 'com.silentpulse.messenger'
     compileSdkVersion 35
     flavorDimensions "analytics"
 
     defaultConfig {
-        applicationId "com.moez.QKSMS"
+        applicationId "com.silentpulse.messenger"
         minSdkVersion 21
         targetSdkVersion 35
         versionCode 2219
         versionName "4.0.0"
-        setProperty("archivesBaseName", "QKSMS-v${versionName}")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters 'arm64-v8a', 'x86_64'
+            // arm64-v8a : all modern Android phones (primary)
+            // armeabi-v7a: older/budget ARM devices
+            // x86_64    : emulators
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
         }
 
-        setProperty("archivesBaseName", "QKSMS-v${versionName}")
+        externalNativeBuild {
+            cmake { cppFlags '-O3' }
+        }
     }
 
     signingConfigs {
@@ -47,11 +52,22 @@ android {
     }
 
     buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            // Debug-only flags accessible via BuildConfig
+            buildConfigField 'boolean', 'ENABLE_PERF_LOGGING', 'true'
+            buildConfigField 'boolean', 'ENABLE_DRIVE_MODE_VERBOSE', 'true'
+        }
         release {
+            debuggable false
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+            // Release strips verbose logging via ProGuard + these flags
+            buildConfigField 'boolean', 'ENABLE_PERF_LOGGING', 'false'
+            buildConfigField 'boolean', 'ENABLE_DRIVE_MODE_VERBOSE', 'false'
         }
     }
 
@@ -73,6 +89,18 @@ android {
         abortOnError false
     }
 
+    // NDK version pinned — developers must install this exact version.
+    // Android Studio: SDK Manager → SDK Tools → NDK (Side by side) → 28.2.13676358
+    ndkVersion "28.2.13676358"
+
+    // whisper.cpp JNI native layer
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/whisper/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
     productFlavors {
         withAnalytics { dimension "analytics" }
         noAnalytics { dimension "analytics" }
@@ -86,6 +114,9 @@ android {
     }
 }
 
+// Name the output APK using the modern Gradle base extension API
+base.archivesName = "SilentPulse-v${android.defaultConfig.versionName}"
+
 configurations {
     noAnalyticsDebug
     noAnalyticsRelease
@@ -94,13 +125,16 @@ configurations {
 }
 
 dependencies {
+    // ML Kit language identification (offline after first model download)
+    implementation 'com.google.mlkit:language-id:17.0.6'
+
     // lifecycle
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
 
-    // vosk and work manager
-    implementation 'com.alphacephei:vosk-android:0.3.47'
+    // whisper.cpp STT is built via JNI (see presentation/src/main/cpp/whisper/)
+    // No third-party STT runtime dependency needed — we own the full stack.
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
 
     // androidx
@@ -148,6 +182,9 @@ dependencies {
 
     // realm
     // realm adapters - included as source in QkRealmAdapter (library no longer on Maven Central)
+    // Explicitly add as kapt so Realm's annotation processor runs for Kotlin modules
+    // (the realm-android plugin adds it as annotationProcessor which kapt ignores)
+    kapt "io.realm:realm-annotations-processor:$realm_version"
 
     // rxjava
     implementation "io.reactivex.rxjava2:rxandroid:$rxandroid_version"
@@ -167,7 +204,7 @@ dependencies {
     // moshi
     implementation "com.squareup.moshi:moshi:$moshi_version"
     implementation "com.squareup.moshi:moshi-kotlin:$moshi_version"
-    kapt "com.squareup.moshi:moshi-kotlin-codegen:$moshi_version"
+    ksp "com.squareup.moshi:moshi-kotlin-codegen:$moshi_version"
 
     // coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version"

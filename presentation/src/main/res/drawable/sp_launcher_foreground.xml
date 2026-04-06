@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SilentPulse app icon foreground: speech bubble with 5-bar sound wave -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Speech bubble body with bottom-left tail -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,20 L80,20 Q88,20 88,28 L88,66 Q88,74 80,74 L44,74 L34,88 L34,74 L28,74 Q20,74 20,66 L20,28 Q20,20 28,20 Z" />
+
+    <!-- Sound wave: 5 pill-shaped bars, symmetric, centered in bubble -->
+
+    <!-- Bar 1 (shortest, left) cx=33, y=40–56 -->
+    <path
+        android:fillColor="#1B2A4A"
+        android:pathData="M33,40 Q36,40 36,43 L36,53 Q36,56 33,56 Q30,56 30,53 L30,43 Q30,40 33,40 Z" />
+
+    <!-- Bar 2 (medium) cx=43, y=37–59 -->
+    <path
+        android:fillColor="#1B2A4A"
+        android:pathData="M43,37 Q46,37 46,40 L46,56 Q46,59 43,59 Q40,59 40,56 L40,40 Q40,37 43,37 Z" />
+
+    <!-- Bar 3 (tallest, center) cx=54, y=31–65 -->
+    <path
+        android:fillColor="#1B2A4A"
+        android:pathData="M54,31 Q57,31 57,34 L57,62 Q57,65 54,65 Q51,65 51,62 L51,34 Q51,31 54,31 Z" />
+
+    <!-- Bar 4 (medium) cx=65, y=37–59 -->
+    <path
+        android:fillColor="#1B2A4A"
+        android:pathData="M65,37 Q68,37 68,40 L68,56 Q68,59 65,59 Q62,59 62,56 L62,40 Q62,37 65,37 Z" />
+
+    <!-- Bar 5 (shortest, right) cx=75, y=40–56 -->
+    <path
+        android:fillColor="#1B2A4A"
+        android:pathData="M75,40 Q78,40 78,43 L78,53 Q78,56 75,56 Q72,56 72,53 L72,43 Q72,40 75,40 Z" />
+
+</vector>

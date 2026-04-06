@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION") // SmsManager.getDefault/getSmsManagerForSubscriptionId deprecated API 31+
 package com.klinker.android.send_message
 
 import android.os.Build

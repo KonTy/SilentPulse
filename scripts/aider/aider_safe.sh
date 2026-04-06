@@ -32,7 +32,7 @@ while [ $attempt -lt $MAX_RETRIES ]; do
     #     (covers "Open GitHub issue?", "Add to git?", any Y/n prompt)
     #   - timeout kills it if it hangs beyond $TIMEOUT_SECS
     #   - --no-suggest-shell-commands prevents extra prompts
-    yes n | timeout $TIMEOUT_SECS aider --no-suggest-shell-commands "$@" \
+    yes n | timeout $TIMEOUT_SECS aider --no-suggest-shell-commands --no-browser "$@" \
         2>&1 | tee "$CALL_LOG"
 
     EXIT_CODE=${PIPESTATUS[1]}  # exit code of `timeout aider ...`

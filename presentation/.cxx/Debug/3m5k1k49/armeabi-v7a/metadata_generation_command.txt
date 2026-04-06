@@ -1,0 +1,19 @@
+                        -H/home/blin/Documents/source/SilentPulse/presentation/src/main/cpp/whisper
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=21
+-DANDROID_PLATFORM=android-21
+-DANDROID_ABI=armeabi-v7a
+-DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a
+-DANDROID_NDK=/home/blin/Android/Sdk/ndk/28.2.13676358
+-DCMAKE_ANDROID_NDK=/home/blin/Android/Sdk/ndk/28.2.13676358
+-DCMAKE_TOOLCHAIN_FILE=/home/blin/Android/Sdk/ndk/28.2.13676358/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/home/blin/Android/Sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_CXX_FLAGS=-O3
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/armeabi-v7a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/armeabi-v7a
+-DCMAKE_BUILD_TYPE=Debug
+-B/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a
+-GNinja
+                        Build command args: []
+                        Version: 2

@@ -1,24 +1,24 @@
 <!--
   ~ Copyright (C) 2019 Moez Bhatti <moez.bhatti@gmail.com>
   ~
-  ~ This file is part of QKSMS.
+  ~ This file is part of SilentPulse.
   ~
-  ~ QKSMS is free software: you can redistribute it and/or modify
+  ~ SilentPulse is free software: you can redistribute it and/or modify
   ~ it under the terms of the GNU General Public License as published by
   ~ the Free Software Foundation, either version 3 of the License, or
   ~ (at your option) any later version.
   ~
-  ~ QKSMS is distributed in the hope that it will be useful,
+  ~ SilentPulse is distributed in the hope that it will be useful,
   ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
   ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   ~ GNU General Public License for more details.
   ~
   ~ You should have received a copy of the GNU General Public License
-  ~ along with QKSMS.  If not, see <http://www.gnu.org/licenses/>.
+  ~ along with SilentPulse.  If not, see <http://www.gnu.org/licenses/>.
   -->
 <resources>
 
-    <string name="app_name" translatable="false">QKSMS</string>
+    <string name="app_name" translatable="false">SilentPulse</string>
 
     <string name="shortcut_compose_long_label">New conversation</string>
     <string name="shortcut_compose_short_label">Compose</string>
@@ -26,11 +26,29 @@
 
     <string name="title_archived">Archived</string>
     <string name="title_settings">Settings</string>
+    <string name="title_offline_assistant">Offline Assistant</string>
+    <string name="assistant_title">Offline Assistant</string>
+    <string name="assistant_section_enable">Drive Mode</string>
+    <string name="assistant_enable_title">Enable Drive Mode</string>
+    <string name="assistant_enable_summary">Read messages aloud while driving</string>
+    <string name="assistant_section_stt">Speech Recognition</string>
+    <string name="assistant_engine_android">Android</string>
+    <string name="assistant_engine_whisper">Whisper</string>
+    <string name="assistant_whisper_model_title">Whisper Model</string>
+    <string name="assistant_stt_engine_title">Speech engine</string>
+    <string name="assistant_engine_google">Google (Offline)</string>
+    <string name="assistant_google_stt_desc">Uses Android&#8217;s built-in speech recognizer. Works fully offline once an offline language pack is installed.</string>
+    <string name="assistant_google_stt_install">How to install offline language pack</string>
+    <string name="assistant_whisper_download">Download models</string>
+    <string name="assistant_whisper_download_desc">Browse Hugging Face for .bin model files</string>
+    <string name="assistant_whisper_folder_title">Models folder</string>
+    <string name="assistant_section_tts">Text-to-Speech</string>
+    <string name="assistant_section_behavior">Behavior</string>
     <string name="title_notification_prefs">Notifications</string>
     <string name="title_theme">Theme</string>
     <string name="title_conversations">Search inbox…</string>
     <string name="title_compose">Type a name or number</string>
-    <string name="title_qksms_plus" translatable="false">QKSMS+</string>
+    <string name="title_qksms_plus" translatable="false">SilentPulse+</string>
 
     <string name="setup_skip">Skip</string>
     <string name="setup_next">Continue</string>
@@ -63,11 +81,11 @@
     <string name="archived_empty_text">Your archived conversations will appear here</string>
     <string name="main_fab_cd">Start new conversation</string>
     <string name="main_default_sms_title">Love texting again</string>
-    <string name="main_default_sms_message">Make QKSMS your default SMS app</string>
+    <string name="main_default_sms_message">Make SilentPulse your default SMS app</string>
     <string name="main_default_sms_change">Change</string>
     <string name="main_permission_required">Permission required</string>
-    <string name="main_permission_sms">QKSMS needs permission to send and view SMS messages</string>
-    <string name="main_permission_contacts">QKSMS needs permission to view your contacts</string>
+    <string name="main_permission_sms">SilentPulse needs permission to send and view SMS messages</string>
+    <string name="main_permission_contacts">SilentPulse needs permission to view your contacts</string>
     <string name="main_permission_allow">Allow</string>
 
     <string name="drawer_inbox">Inbox</string>
@@ -76,13 +94,14 @@
     <string name="drawer_blocking">Blocking</string>
     <string name="drawer_more">More</string>
     <string name="drawer_settings">Settings</string>
-    <string name="drawer_plus" translatable="false">QKSMS+</string>
+    <string name="drawer_assistant">Offline Assistant</string>
+    <string name="drawer_plus" translatable="false">SilentPulse+</string>
     <string name="drawer_help">Help &amp; feedback</string>
     <string name="drawer_invite">Invite friends</string>
-    <string name="drawer_plus_banner_title" translatable="false">QKSMS+</string>
+    <string name="drawer_plus_banner_title" translatable="false">SilentPulse+</string>
     <string name="drawer_plus_banner_summary">Unlock amazing new features, and support development</string>
 
-    <string name="rate_title">Enjoying QKSMS?</string>
+    <string name="rate_title">Enjoying SilentPulse?</string>
     <string name="rate_summary">Share some love and rate us on Google Play!</string>
     <string name="rate_okay">OKAY!</string>
     <string name="rate_dismiss">DISMISS</string>
@@ -111,7 +130,7 @@
     <string name="compose_vcard_label">Contact card</string>
     <string name="compose_scheduled_for">Scheduled for</string>
     <string name="compose_scheduled_future">Selected time must be in the future!</string>
-    <string name="compose_scheduled_plus">You must unlock QKSMS+ to use scheduled messaging</string>
+    <string name="compose_scheduled_plus">You must unlock SilentPulse+ to use scheduled messaging</string>
     <string name="compose_scheduled_toast">Added to scheduled messages</string>
     <string name="compose_hint">Write a message…</string>
     <string name="compose_menu_copy">Copy text</string>
@@ -168,7 +187,7 @@
     <string name="backup_never">Never</string>
     <string name="backup_restore_title">Restore</string>
     <string name="backup_restore_summary">Select a backup</string>
-    <string name="backup_restore_error_plus">Please unlock QKSMS+ to use backup and restore</string>
+    <string name="backup_restore_error_plus">Please unlock SilentPulse+ to use backup and restore</string>
     <string name="backup_restore_error_backup">Backup in progress…</string>
     <string name="backup_restore_error_restore">Restore in progress…</string>
     <string name="backup_restore_confirm_title">Restore from backup</string>
@@ -176,7 +195,7 @@
     <string name="backup_restore_stop_title">Stop restore</string>
     <string name="backup_restore_stop_message">Messages that have already been restored will remain on your device</string>
     <string name="backup_restore_dialog_title">Backups</string>
-    <string name="backup_restore_dialog_summary" translatable="false">/QKSMS/Backups</string>
+    <string name="backup_restore_dialog_summary" translatable="false">/SilentPulse/Backups</string>
     <string name="backup_restore_dialog_empty">No backups found</string>
     <plurals name="backup_message_count">
         <item quantity="zero">No messages</item>
@@ -275,7 +294,7 @@
     <string name="settings_mms_size_title">Auto-compress MMS attachments</string>
     <string name="settings_sync_title">Sync messages</string>
     <string name="settings_sync_summary">Re-sync your messages with the native Android SMS database</string>
-    <string name="settings_about_title">About QKSMS</string>
+    <string name="settings_about_title">About SilentPulse</string>
     <string name="settings_version">Version %s</string>
     <string name="settings_logging_enabled">Debug logging enabled</string>
     <string name="settings_logging_disabled">Debug logging disabled</string>
@@ -291,7 +310,7 @@
     <string name="settings_diagnostics_info">Log files are stored on your device. Share them for support.</string>
     <string name="settings_logs_cleared">Log files cleared</string>
     <string name="settings_no_logs">No log files found</string>
-    <string name="settings_share_logs_title_intent">Share QKSMS Logs</string>
+    <string name="settings_share_logs_title_intent">Share SilentPulse Logs</string>
 
     <!-- Drive Mode settings -->
     <string name="settings_drive_mode_title">Drive Mode</string>
@@ -304,6 +323,15 @@
     <string name="settings_drive_mode_voice_reply_summary">Reply using voice commands</string>
     <string name="settings_drive_mode_timeout_title">Reply timeout</string>
     <string name="settings_drive_mode_tts_engine_title">TTS Engine</string>
+    <string name="settings_drive_mode_stt_engine_title">Speech Recognition Engine</string>
+    <string-array name="drive_mode_stt_engines">
+        <item>Android (Google Offline)</item>
+        <item>Whisper (GGML, Fully Offline)</item>
+    </string-array>
+    <string-array name="drive_mode_stt_engine_values">
+        <item>android</item>
+        <item>whisper</item>
+    </string-array>
     <string name="settings_drive_mode_privacy">🔒 All audio stays on your device. Nothing is sent to the cloud.</string>
 
     <string-array name="drive_mode_tts_engines">
@@ -340,8 +368,8 @@
     <string name="blocking_conversations">Blocked conversations</string>
 
     <string name="blocking_manager_title">Blocking Manager</string>
-    <string name="blocking_manager_qksms_title">QKSMS</string>
-    <string name="blocking_manager_qksms_summary">Built-in blocking functionality in QKSMS</string>
+    <string name="blocking_manager_qksms_title">SilentPulse</string>
+    <string name="blocking_manager_qksms_summary">Built-in blocking functionality in SilentPulse</string>
     <string name="blocking_manager_call_blocker_title" translatable="false">Call Blocker - Incoming/Outgoing</string>
     <string name="blocking_manager_call_blocker_summary">Block spam messages, numbers &amp; unknown calls with blacklist &amp; Schedule</string>
     <string name="blocking_manager_call_control_title" translatable="false">Call Control</string>
@@ -390,10 +418,10 @@
     <string name="qksms_plus_upgrade_d" translatable="false">One-time purchase of %1$s %2$s</string>
     <!-- Substitutions are for price and currency. Ex: Unlock + donate for $4.99 USD -->
     <string name="qksms_plus_upgrade_donate">Unlock + donate for %1$s %2$s</string>
-    <string name="qksms_plus_thanks_title">Thank you for supporting QKSMS!</string>
-    <string name="qksms_plus_thanks_summary">You now have access to all QKSMS+ features</string>
+    <string name="qksms_plus_thanks_title">Thank you for supporting SilentPulse!</string>
+    <string name="qksms_plus_thanks_summary">You now have access to all SilentPulse+ features</string>
     <string name="qksms_plus_error">An error has occurred, please try again</string>
-    <string name="qksms_plus_free_title">QKSMS+ is free for F-Droid users! If you\'d like to support development, a donation would be highly appreciated.</string>
+    <string name="qksms_plus_free_title">SilentPulse+ is free for F-Droid users! If you\'d like to support development, a donation would be highly appreciated.</string>
     <string name="qksms_plus_donate">Donate via PayPal</string>
     <string name="qksms_plus_coming_soon">Coming soon</string>
     <string name="qksms_plus_themes_title">Premium themes</string>
@@ -415,7 +443,7 @@
     <string name="qksms_plus_respond_title">Auto-respond</string>
     <string name="qksms_plus_respond_summary">Automatically respond to incoming messages with a preset response</string>
     <string name="qksms_plus_more_title">More</string>
-    <string name="qksms_plus_more_summary">QKSMS is under active development, and your purchase will include all future QKSMS+ features!</string>
+    <string name="qksms_plus_more_summary">SilentPulse is under active development, and your purchase will include all future SilentPulse+ features!</string>
 
     <string name="widget_loading">Loading…</string>
     <string name="widget_more">View more conversations</string>
@@ -428,7 +456,7 @@
     <string name="qkreply_menu_view">Open conversation</string>
 
     <string name="theme_material">Material</string>
-    <string name="theme_plus" translatable="false">QKSMS+</string>
+    <string name="theme_plus" translatable="false">SilentPulse+</string>
     <string name="theme_hex">HEX</string>
     <string name="theme_apply">Apply</string>
 
@@ -439,7 +467,7 @@
     <string name="about_license" translatable="false">GNU General Public License v3.0</string>
     <string name="about_copyright" translatable="false">© 2014–2019</string>
 
-    <string name="changelog_title" translatable="false">New in QKSMS</string>
+    <string name="changelog_title" translatable="false">New in SilentPulse</string>
     <string name="changelog_version" translatable="false">Version %s</string>
     <string name="changelog_added" translatable="false">Added</string>
     <string name="changelog_improved" translatable="false">Improved</string>
@@ -469,7 +497,7 @@
 
     <string name="toast_copied">Copied</string>
     <string name="toast_archived">Archived conversation</string>
-    <string name="toast_qksms_plus">You must unlock QKSMS+ to use this</string>
+    <string name="toast_qksms_plus">You must unlock SilentPulse+ to use this</string>
 
     <plurals name="notification_new_messages">
         <item quantity="one">New message</item>

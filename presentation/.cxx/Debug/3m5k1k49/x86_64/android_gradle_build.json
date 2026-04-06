@@ -1,0 +1,74 @@
+{
+  "buildFiles": [
+    "/home/blin/Documents/source/SilentPulse/presentation/src/main/cpp/whisper/CMakeLists.txt",
+    "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/CMakeLists.txt",
+    "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/CMakeLists.txt",
+    "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/ggml-cpu/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/blin/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/blin/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "ggml::@13ca10ed1afff475bcb7": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml",
+      "output": "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml.so",
+      "runtimeFiles": [
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-cpu.so",
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-base.so"
+      ]
+    },
+    "ggml-base::@13ca10ed1afff475bcb7": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-base",
+      "output": "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-base.so",
+      "runtimeFiles": []
+    },
+    "ggml-cpu::@13ca10ed1afff475bcb7": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-cpu",
+      "output": "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-cpu.so",
+      "runtimeFiles": [
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-base.so",
+        "/home/blin/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/19/lib/linux/x86_64/libomp.so"
+      ]
+    },
+    "whisper_silentpulse::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "whisper_silentpulse",
+      "output": "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libwhisper_silentpulse.so",
+      "runtimeFiles": [
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml.so",
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-cpu.so",
+        "/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/x86_64/libggml-base.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/blin/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/blin/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

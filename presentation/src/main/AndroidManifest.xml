@@ -109,6 +109,8 @@
                 android:value=".common.util.QkChooserTargetService" />
         </activity>
         <activity android:name=".feature.settings.SettingsActivity" />
+        <activity android:name=".feature.assistant.AssistantActivity"
+            android:theme="@style/AssistantActivity.Theme" />
         <activity android:name=".feature.plus.PlusActivity" />
         <activity
             android:name=".feature.gallery.GalleryActivity"
@@ -169,11 +171,11 @@
         <receiver
             android:name=".receiver.MmsSentReceiver"
             android:exported="false"
-            android:taskAffinity="com.moez.QKSMS.MMS_SENT" />
+            android:taskAffinity="com.silentpulse.messenger.MMS_SENT" />
         <receiver
             android:name=".receiver.MmsUpdatedReceiver"
             android:exported="false"
-            android:taskAffinity="com.moez.QKSMS.MMS_UPDATED" />
+            android:taskAffinity="com.silentpulse.messenger.MMS_UPDATED" />
         <receiver
             android:name=".receiver.MmsReceivedReceiver"
             android:exported="false"
@@ -211,7 +213,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.moez.QKSMS.intent.action.ACTION_NOTIFY_DATASET_CHANGED" />
+                <action android:name="com.silentpulse.messenger.intent.action.ACTION_NOTIFY_DATASET_CHANGED" />
             </intent-filter>
 
             <meta-data
@@ -221,6 +223,15 @@
         <receiver
             android:name=".receiver.SendSmsReceiver"
             android:exported="false" />
+
+        <!-- Debug only: ADB-triggered test notifications with RemoteInput reply support -->
+        <receiver
+            android:name=".feature.debug.DebugTestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.silentpulse.messenger.POST_TEST_MESSAGE" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name="com.android.mms.transaction.TransactionService"
@@ -241,9 +252,6 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-            <meta-data
-                android:name="android.service.notification.default_filter_types"
-                android:value="conversations|alerting" />
         </service>
         <service
             android:name=".feature.widget.WidgetService"
@@ -268,9 +276,6 @@
         <!-- QkChooserTargetService removed: ChooserTargetService is deprecated in API 30+.
              Use Sharing Shortcuts API (ShortcutManagerCompat) instead. -->
 
-        <meta-data
-            android:name="com.callcontrol.datashare.messaging"
-            android:value="true" />
         <meta-data
             android:name="preloaded_fonts"
             android:resource="@array/preloaded_fonts" />

@@ -1,0 +1,146 @@
+/*
+ * Copyright (C) 2017 Moez Bhatti <moez.bhatti@gmail.com>
+ *
+ * This file is part of QKSMS.
+ *
+ * QKSMS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * QKSMS is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with QKSMS.  If not, see <http://www.gnu.org/licenses/>.
+ */
+@file:Suppress("OPT_IN_USAGE")
+package com.silentpulse.messenger.common
+
+import android.app.Application
+import android.os.Build
+import androidx.core.provider.FontRequest
+import androidx.emoji2.text.EmojiCompat
+import androidx.emoji2.text.FontRequestEmojiCompatConfig
+import com.silentpulse.messenger.BuildConfig
+import com.silentpulse.messenger.R
+import com.silentpulse.messenger.common.util.CrashlyticsTree
+import com.silentpulse.messenger.common.util.FileLoggingTree
+import com.silentpulse.messenger.injection.AppComponentManager
+import com.silentpulse.messenger.injection.appComponent
+import com.silentpulse.messenger.manager.AnalyticsManager
+import com.silentpulse.messenger.manager.BillingManager
+import com.silentpulse.messenger.manager.ReferralManager
+import com.silentpulse.messenger.migration.QkMigration
+import com.silentpulse.messenger.migration.QkRealmMigration
+import com.silentpulse.messenger.util.NightModeManager
+import com.uber.rxdogtag.RxDogTag
+import com.uber.rxdogtag.autodispose.AutoDisposeConfigurer
+import dagger.android.AndroidInjector
+import dagger.android.DispatchingAndroidInjector
+import dagger.android.HasAndroidInjector
+import io.realm.Realm
+import io.realm.RealmConfiguration
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import javax.inject.Inject
+
+class QKApplication : Application(), HasAndroidInjector {
+
+    /**
+     * Inject these so that they are forced to initialize
+     */
+    @Suppress("unused")
+    @Inject lateinit var analyticsManager: AnalyticsManager
+    @Suppress("unused")
+    @Inject lateinit var qkMigration: QkMigration
+
+    @Inject lateinit var billingManager: BillingManager
+    @Inject lateinit var androidInjector: DispatchingAndroidInjector<Any>
+    @Inject lateinit var fileLoggingTree: FileLoggingTree
+    @Inject lateinit var nightModeManager: NightModeManager
+    @Inject lateinit var realmMigration: QkRealmMigration
+    @Inject lateinit var referralManager: ReferralManager
+
+    override fun onCreate() {
+        super.onCreate()
+
+        AppComponentManager.init(this)
+        appComponent.inject(this)
+
+        // Debug builds: full logcat output via DebugTree
+        // Release builds: only crash reporting + file logging (no logcat spam)
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree(), CrashlyticsTree(), fileLoggingTree)
+        } else {
+            Timber.plant(CrashlyticsTree(), fileLoggingTree)
+        }
+
+        // Set up uncaught exception handler
+        setupUncaughtExceptionHandler()
+
+        // Log diagnostic startup information
+        Timber.i("SilentPulse started - version ${BuildConfig.VERSION_NAME}, SDK ${Build.VERSION.SDK_INT}, device ${Build.MODEL}")
+
+        Realm.init(this)
+        Realm.setDefaultConfiguration(RealmConfiguration.Builder()
+                .compactOnLaunch()
+                .migration(realmMigration)
+                .schemaVersion(QkRealmMigration.SchemaVersion)
+                .build())
+
+        qkMigration.performMigration()
+
+        GlobalScope.launch(Dispatchers.IO) {
+            referralManager.trackReferrer()
+            billingManager.checkForPurchases()
+            billingManager.queryProducts()
+        }
+
+        nightModeManager.updateCurrentTheme()
+
+        val fontRequest = FontRequest(
+                "com.google.android.gms.fonts",
+                "com.google.android.gms",
+                "Noto Color Emoji Compat",
+                R.array.com_google_android_gms_fonts_certs)
+
+        EmojiCompat.init(FontRequestEmojiCompatConfig(this, fontRequest))
+
+        RxDogTag.builder()
+                .configureWith(AutoDisposeConfigurer::configure)
+                .install()
+    }
+
+    /**
+     * Set up an uncaught exception handler that logs full stack traces before crashing
+     */
+    private fun setupUncaughtExceptionHandler() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                // Log the crash to Timber (which will write to file and Crashlytics)
+                Timber.e(throwable, "FATAL EXCEPTION in thread ${thread.name}")
+                
+                // Give some time for logs to be written
+                Thread.sleep(500)
+            } catch (e: Exception) {
+                // If logging fails, at least try to print to logcat
+                android.util.Log.e("QKApplication", "Error in uncaught exception handler", e)
+            } finally {
+                // Call the default handler to perform the actual crash
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
+    override fun androidInjector(): AndroidInjector<Any> {
+        return androidInjector
+    }
+
+}

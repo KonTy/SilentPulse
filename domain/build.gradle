@@ -22,7 +22,7 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 
 android {
-    namespace 'com.moez.QKSMS.domain'
+    namespace 'com.silentpulse.messenger.domain'
     compileSdkVersion 35
 
     compileOptions {
@@ -41,6 +41,10 @@ android {
 }
 
 dependencies {
+
+    // realm annotation processor (must be kapt for Kotlin modules; plugin adds it
+    // as annotationProcessor which kapt ignores, so we explicitly add it here)
+    kapt "io.realm:realm-annotations-processor:$realm_version"
 
     // dagger
     implementation "com.google.dagger:dagger:$dagger_version"

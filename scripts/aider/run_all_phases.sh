@@ -24,6 +24,63 @@ SUMMARY_LOG="$LOG_DIR/run_$(date '+%Y%m%d_%H%M%S').log"
 
 log() { echo "$*" | tee -a "$SUMMARY_LOG"; }
 
+# =============================================================================
+# Build-fix loop: detect compile errors and hand them to aider to fix.
+# Runs up to MAX_FIX_ROUNDS (default 5). Called before phases and after each phase.
+# =============================================================================
+fix_build_if_broken() {
+    local context_label="${1:-preflight}"
+    local MAX_FIX_ROUNDS=5
+    local round=0
+
+    while [ $round -lt $MAX_FIX_ROUNDS ]; do
+        round=$((round + 1))
+        local errors
+        errors=$(cd "$REPO" && ./gradlew assembleNoAnalyticsDebug 2>&1 | grep -E "^e:|error:|defined multiple times" | head -40)
+
+        if [ -z "$errors" ]; then
+            log "✓ Build is clean ($context_label, round $round)"
+            return 0
+        fi
+
+        log "⚠  Build errors detected ($context_label, round $round/$MAX_FIX_ROUNDS) — asking aider to fix..."
+        log "$errors"
+
+        # Write prompt to temp file to avoid shell quoting issues with special chars in $errors
+        local fix_prompt_file
+        fix_prompt_file=$(mktemp /tmp/aider_fix_prompt_XXXXXX.txt)
+        cat > "$fix_prompt_file" << 'PROMPT_EOF'
+The project has compile errors. Fix ALL errors listed below. Rules:
+- Do NOT add new features, only fix existing errors.
+- If a file in data/ defines a class that also exists in domain/, delete the data/ copy.
+- If a drawable or resource is referenced but missing, create a minimal valid version of it.
+- If a Kotlin type mismatch, resolve it by using the correct type.
+Errors:
+PROMPT_EOF
+        # Append the actual errors (sanitized) separately
+        printf '%s\n' "$errors" >> "$fix_prompt_file"
+
+        # Extract file paths from errors so aider has context to edit
+        local error_files
+        error_files=$(printf '%s\n' "$errors" | grep -oE '[a-zA-Z0-9_/.-]+\.kt' | sort -u | while read f; do
+            full=$(find "$REPO" -path "*/$f" -not -path "*/build/*" 2>/dev/null | head -1)
+            [ -n "$full" ] && echo "$full"
+        done)
+        local drivemode_files
+        drivemode_files=$(find "$REPO/presentation/src/main/java/com/moez/QKSMS/feature/drivemode" -name "*.kt" 2>/dev/null | tr '\n' ' ')
+
+        cd "$REPO" && bash "$SCRIPTS/aider_safe.sh" \
+            $error_files $drivemode_files \
+            --message "$(cat "$fix_prompt_file")" \
+            --yes-always \
+            2>&1 | tee -a "$LOG_DIR/build_fix_${context_label}_round${round}.log"
+        rm -f "$fix_prompt_file"
+    done
+
+    log "✗ Build still broken after $MAX_FIX_ROUNDS fix rounds ($context_label) — continuing anyway"
+    return 1
+}
+
 run_phase() {
     local phase=$1
     local script="$SCRIPTS/phase_${phase}.sh"
@@ -57,6 +114,9 @@ run_phase() {
         log "⚠  Phase $phase exited with code $exit_code — see $phase_log"
         log "   Continuing to next phase..."
     fi
+
+    # After each phase: check build health and auto-fix any new compile errors
+    fix_build_if_broken "post_phase_${phase}"
 }
 
 # Mark phase 1 as done since compilation is already at 0 errors
@@ -66,6 +126,31 @@ if [ ! -f "$PHASE_DONE_DIR/phase_1.done" ]; then
 fi
 
 TARGET="${1:-all}"
+
+# Pre-flight: fix empty XML files (aider crashes leave zero-byte XML that breaks Gradle)
+log ""
+log "→ Pre-flight XML sanity check..."
+while IFS= read -r -d '' xml_file; do
+    log "   ⚠  Empty XML found: $xml_file — writing minimal skeleton"
+    echo '<?xml version="1.0" encoding="utf-8"?><resources></resources>' > "$xml_file"
+done < <(find "$REPO" -name "*.xml" -not -path "*/build/*" -empty -print0)
+
+# Pre-flight: delete any duplicate class files in data/ that shadow domain/ classes
+log ""
+log "→ Pre-flight duplicate class check..."
+while IFS= read -r -d '' data_file; do
+    relative="${data_file#$REPO/data/src/main/}"
+    domain_equiv="$REPO/domain/src/main/$relative"
+    if [ -f "$domain_equiv" ]; then
+        log "   ⚠  Duplicate class: $data_file shadows $domain_equiv — deleting data/ copy"
+        rm -f "$data_file"
+    fi
+done < <(find "$REPO/data/src/main" -name "*.kt" -not -path "*/build/*" -print0)
+
+# Pre-flight: fix any compile errors before starting phases
+log ""
+log "→ Pre-flight build check..."
+fix_build_if_broken "preflight"
 
 if [ "$TARGET" = "all" ]; then
     log "Starting all phases from phase 2 onward..."

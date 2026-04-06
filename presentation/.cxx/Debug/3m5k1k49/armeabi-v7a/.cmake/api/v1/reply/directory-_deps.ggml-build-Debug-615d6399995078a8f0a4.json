@@ -1,0 +1,107 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 339,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 340,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 408,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/armeabi-v7a/libggml.so"
+			],
+			"targetId" : "ggml::@13ca10ed1afff475bcb7",
+			"targetIndex" : 0,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-cpu.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-alloc.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-backend.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-blas.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-cann.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-cpp.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-cuda.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-opt.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-metal.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-rpc.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-virtgpu.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-sycl.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-vulkan.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-webgpu.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-zendnn.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/ggml-openvino.h",
+				"/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/include/gguf.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"/home/blin/Documents/source/SilentPulse/presentation/build/intermediates/cxx/Debug/3m5k1k49/obj/armeabi-v7a/libggml-base.so"
+			],
+			"targetId" : "ggml-base::@13ca10ed1afff475bcb7",
+			"targetIndex" : 1,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/ggml",
+			"paths" : 
+			[
+				"/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-build/ggml-config.cmake",
+				"/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-build/ggml-version.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/ggml-build",
+		"source" : "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml"
+	}
+}

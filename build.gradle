@@ -31,6 +31,7 @@ buildscript {
     ext.rxkotlin_version = '2.4.0'
     ext.rx_preferences_version = '2.0.1'
     ext.timber_version = '5.0.1'
+    ext.ksp_version = '2.0.21-1.0.28'
 
     ext.abiCodes = ['armeabi-v7a': 1, 'arm64-v8a': 2]
 
@@ -44,6 +45,7 @@ buildscript {
         classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.2'
         classpath 'com.google.gms:google-services:4.4.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.google.devtools.ksp:symbol-processing-gradle-plugin:$ksp_version"
         classpath "io.realm:realm-gradle-plugin:$realm_version"
     }
 }
@@ -64,11 +66,18 @@ subprojects {
     afterEvaluate {
         if (project.hasProperty('kapt')) {
             kapt {
-                // we expect this closure to run over a org.jetbrains.kotlin.gradle.plugin.KaptExtension
+                correctErrorTypes = true
                 javacOptions {
-                    option("-source", "8")
-                    option("-target", "8")
+                    option("-source", "17")
+                    option("-target", "17")
                 }
+            }
+        }
+        // Pin kapt stub generation to Kotlin 1.9 to suppress the "Kapt does not
+        // support language version 2.0+" warning while keeping main compilation at 2.0
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KaptGenerateStubs).configureEach {
+            compilerOptions {
+                languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
             }
         }
     }

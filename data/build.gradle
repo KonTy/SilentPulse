@@ -21,7 +21,7 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 
 android {
-    namespace 'com.moez.QKSMS.data'
+    namespace 'com.silentpulse.messenger.data'
     compileSdkVersion 35
     flavorDimensions "analytics"
 

@@ -1,0 +1,113 @@
+/*
+ * Copyright (C) 2017 Moez Bhatti <moez.bhatti@gmail.com>
+ *
+ * This file is part of QKSMS.
+ *
+ * QKSMS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * QKSMS is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with QKSMS.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.silentpulse.messenger.interactor
+
+import com.silentpulse.messenger.repository.MessageRepository
+import org.junit.Before
+import org.junit.Test
+import org.mockito.Mock
+import org.mockito.Mockito.verify
+import org.mockito.MockitoAnnotations
+
+class MarkDeliveredTest {
+
+    @Mock private lateinit var messageRepo: MessageRepository
+
+    private lateinit var markDelivered: MarkDelivered
+
+    @Before
+    fun setUp() {
+        MockitoAnnotations.initMocks(this)
+        markDelivered = MarkDelivered(messageRepo)
+    }
+
+    @Test
+    fun `valid message ID triggers markDelivered on repository`() {
+        // Arrange
+        val messageId = 123L
+
+        // Act
+        val testObserver = markDelivered.buildObservable(messageId).test()
+
+        // Assert
+        testObserver.assertComplete()
+        testObserver.assertNoErrors()
+        testObserver.assertValue(Unit)
+        
+        verify(messageRepo).markDelivered(123L)
+    }
+
+    @Test
+    fun `correct message ID is passed to repository`() {
+        // Arrange
+        val messageId = 456L
+
+        // Act
+        val testObserver = markDelivered.buildObservable(messageId).test()
+
+        // Assert
+        testObserver.assertComplete()
+        testObserver.assertNoErrors()
+        
+        verify(messageRepo).markDelivered(456L)
+    }
+
+    @Test
+    fun `zero message ID is handled`() {
+        // Arrange
+        val messageId = 0L
+
+        // Act
+        val testObserver = markDelivered.buildObservable(messageId).test()
+
+        // Assert
+        testObserver.assertComplete()
+        testObserver.assertNoErrors()
+        
+        verify(messageRepo).markDelivered(0L)
+    }
+
+    @Test
+    fun `negative message ID is handled`() {
+        // Arrange
+        val messageId = -1L
+
+        // Act
+        val testObserver = markDelivered.buildObservable(messageId).test()
+
+        // Assert
+        testObserver.assertComplete()
+        testObserver.assertNoErrors()
+        
+        verify(messageRepo).markDelivered(-1L)
+    }
+
+    @Test
+    fun `multiple sequential calls work correctly`() {
+        // Act
+        markDelivered.buildObservable(100L).test()
+        markDelivered.buildObservable(200L).test()
+        markDelivered.buildObservable(300L).test()
+
+        // Assert
+        verify(messageRepo).markDelivered(100L)
+        verify(messageRepo).markDelivered(200L)
+        verify(messageRepo).markDelivered(300L)
+    }
+}

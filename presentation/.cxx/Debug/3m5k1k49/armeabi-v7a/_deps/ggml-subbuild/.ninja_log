@@ -1,0 +1,21 @@
+# ninja log v5
+0	12	1775413366777090653	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-mkdir	3c83e11d87be8678
+0	12	1775413366777090653	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-mkdir	3c83e11d87be8678
+12	16	1775413366778931010	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-download	7a50de8ef34d680e
+12	16	1775413366778931010	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-download	7a50de8ef34d680e
+16	20	1775413366782264473	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-update	c4f3105999228d81
+16	20	1775413366782264473	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-update	c4f3105999228d81
+20	24	1775413366788931398	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-patch	17c0184d8ae37246
+20	24	1775413366788931398	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-patch	17c0184d8ae37246
+25	29	1775413366792264861	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-configure	2ef463ac15c4eeb1
+25	29	1775413366792264861	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-configure	2ef463ac15c4eeb1
+29	34	1775413366795598324	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-build	f5c110c267e6cfcf
+29	34	1775413366795598324	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-build	f5c110c267e6cfcf
+34	38	1775413366802265249	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-install	f4777b78f9a52ca0
+34	38	1775413366802265249	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-install	f4777b78f9a52ca0
+38	42	1775413366805598711	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-test	11fbc432839e72be
+38	42	1775413366805598711	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-test	11fbc432839e72be
+42	47	1775413366812265636	CMakeFiles/ggml-populate-complete	7cf764460ba8f325
+42	47	1775413366812265636	ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-done	7cf764460ba8f325
+42	47	1775413366812265636	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/CMakeFiles/ggml-populate-complete	7cf764460ba8f325
+42	47	1775413366812265636	/home/blin/Documents/source/SilentPulse/presentation/.cxx/Debug/3m5k1k49/armeabi-v7a/_deps/ggml-subbuild/ggml-populate-prefix/src/ggml-populate-stamp/ggml-populate-done	7cf764460ba8f325

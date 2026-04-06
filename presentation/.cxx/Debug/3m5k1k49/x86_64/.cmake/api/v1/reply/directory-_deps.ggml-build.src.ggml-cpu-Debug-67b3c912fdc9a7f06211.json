@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "_deps/ggml-build/src/ggml-cpu",
+		"source" : "/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/ggml-cpu"
+	}
+}

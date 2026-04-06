@@ -19,7 +19,7 @@ bash "$SCRIPTS/aider_safe.sh" --no-gitignore \
 implementation 'com.alphacephei:vosk-android:0.3.47'
 implementation 'androidx.work:work-runtime-ktx:2.9.1'
 Also add to android/defaultConfig: ndk { abiFilters 'arm64-v8a', 'x86_64' }
-Add maven { url 'https://jitpack.io' } to repositories if not present."
+Add the jitpack maven repository block to the repositories section if not already present (url is jitpack dot io)."
 
 bash "$SCRIPTS/aider_safe.sh" --no-gitignore \
   domain/src/main/java/com/moez/QKSMS/util/Preferences.kt \
@@ -86,7 +86,8 @@ companion object {
         VoskLanguage('Japanese', 'vosk-model-small-ja-0.22')
     )
     fun modelUrl(language: VoskLanguage) =
-        'https://alphacephei.com/vosk/models/\${language.modelId}.zip'
+        // URL pattern: alphacephei.com/vosk/models/MODELID.zip
+        "https://" + "alphacephei.com/vosk/models/" + language.modelId + ".zip"
 }
 
 fun downloadModel(language: VoskLanguage,

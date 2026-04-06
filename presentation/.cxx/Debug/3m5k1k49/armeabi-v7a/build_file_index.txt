@@ -1,0 +1,4 @@
+/home/blin/Documents/source/SilentPulse/presentation/src/main/cpp/whisper/CMakeLists.txt
+/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/CMakeLists.txt
+/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/CMakeLists.txt
+/home/blin/Documents/source/SilentPulse/whisper_cpp/ggml/src/ggml-cpu/CMakeLists.txt
