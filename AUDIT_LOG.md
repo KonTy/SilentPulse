@@ -148,7 +148,68 @@ adb logcat -s MicrocoreVoice:V SilentPulse:V
 
 ---
 
-## Previous sessions (summary from conversation history)
+## Session 2026-04-08b — Comprehensive Debug Logging
+
+### Goal
+Cover every stage of the voice pipeline with `BuildConfig.DEBUG`-gated logs
+so the complete flow from wake word → STT → routing → cross-app dispatch →
+Microcore parse → TTS reply is traceable in a single logcat session.
+
+### Changes (SilentPulse — commit `10f95c39`)
+
+#### `VoiceDebugLog.kt` — NEW
+- `inline fun` methods wrapping `Log.v/d/w` gated on `BuildConfig.DEBUG`
+- R8 eliminates the entire call site (including string concatenation) in release
+- Tags: `SP_WAKE`, `SP_STT`, `SP_ROUTE`, `SP_XAPP`, `SP_SESSION`, `SP_LAUNCH`
+
+#### `VoskWakeWordDetector.kt`
+- `[PRIME]` now logs the actual partial text (not just "primed") → debug false primes
+- `[FIRE]` logs confidence, wasPrimed flag, ms since prime
+- `[COOLDOWN]` / `[COLD-SUPPRESS]` / `[STALE-PRIME]` all use `SP_WAKE` tag
+- Consistent tag enables: `adb logcat SP_WAKE:V '*:S'`
+
+#### `AndroidSttEngine.kt`
+- `BuildConfig` import added
+- All 3 STT alternatives logged as `alt[0]`, `alt[1]`, `alt[2]` (was only #1)
+- `onReadyForSpeech` says "MIC HOT" for instant visual identification
+
+#### `VoiceAssistantService.kt`
+- `SP_XAPP`: `[TTS_REPLY]` logs text + requireFollowup + session at receipt
+- `SP_XAPP`: `[DISPATCH]` logs pkg + cmd + session at cross-app send
+- `SP_ROUTE`: `[ROUTE-IN]` dumps active session label + all known app names
+- `SP_SESSION`: `[FOLLOW-UP]` logs pkg + session when re-routing a follow-up
+
+### Changes (Microcore — commit `31ce68a`)
+
+#### `build.gradle.kts`
+- `buildFeatures { buildConfig = true }` — Flutter's AGP 8+ disables it by default
+
+#### `VoiceCommandReceiver.kt`
+- `BuildConfig` import added
+- `[CONFIDENCE]` log: action, confidence value vs HIGH/MEDIUM thresholds
+- `[HIGH-CONF]` / `[MED-CONF]` / `[REJECT]` show which confidence band was hit
+- `[TTS_REPLY]` includes `pendingCache` count (session tracking visibility)
+
+#### `MicrocoreCommandParser.kt`
+- `[METRIC-MATCH-P1]` logs which alias triggered an exact match
+- `[METRIC-MATCH-P2]` logs fuzzy best candidate, Levenshtein distance, confidence
+
+### Logcat filter for full end-to-end trace
+
+```bash
+# Full pipeline — paste into Android Studio logcat search bar:
+# tag:SP_WAKE | tag:SP_STT | tag:SP_ROUTE | tag:SP_XAPP | tag:SP_SESSION | tag:MicrocoreVoice
+
+# Or via adb:
+adb logcat SP_WAKE:V SP_STT:V SP_ROUTE:V SP_XAPP:V SP_SESSION:V MicrocoreVoice:V '*:S'
+```
+
+### Release stripping guarantee
+- SilentPulse: `VoiceDebugLog` uses `inline fun` + `BuildConfig.DEBUG` → R8 dead-code-eliminates in release
+- Microcore: `BuildConfig.DEBUG` guard on all verbose blocks → same R8 elimination
+- `Timber.d` calls in release: DebugTree not planted → Timber is a no-op stub, but string concat still runs. **TODO**: wrap remaining `Timber.d` calls in `VoiceDebugLog.stt/wake {}` lambdas to eliminate concat overhead in release.
+
+
 
 ### Session ~2026-04-06 — Privacy hardening + Voice Engine UI
 
