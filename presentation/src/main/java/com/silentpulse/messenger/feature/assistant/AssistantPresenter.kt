@@ -25,6 +25,10 @@ class AssistantPresenter @Inject constructor(
             .autoDispose(view.scope())
             .subscribe { newState { copy(driveModeReadAll = it) } }
 
+        prefs.driveModeWakeWordEnabled.asObservable()
+            .autoDispose(view.scope())
+            .subscribe { newState { copy(driveModeWakeWordEnabled = it) } }
+
         prefs.driveModeVoiceReplyEnabled.asObservable()
             .autoDispose(view.scope())
             .subscribe { newState { copy(driveModeVoiceReplyEnabled = it) } }
@@ -41,6 +45,17 @@ class AssistantPresenter @Inject constructor(
                     else -> "$secs seconds"
                 }
                 newState { copy(driveModeTimeoutSummary = summary) }
+            }
+
+        prefs.driveModeMaxSttRetries.asObservable()
+            .autoDispose(view.scope())
+            .subscribe { retries ->
+                val summary = when (retries) {
+                    0    -> "No retries (give up immediately)"
+                    1    -> "1 retry"
+                    else -> "$retries retries"
+                }
+                newState { copy(driveModeMaxRetriesSummary = summary) }
             }
 
         prefs.driveModeSttEngine.asObservable()
@@ -64,7 +79,7 @@ class AssistantPresenter @Inject constructor(
             .autoDispose(view.scope())
             .subscribe { engine ->
                 val summary = when (engine) {
-                    "piper"  -> "Piper TTS"
+                    "kokoro" -> "Kokoro TTS (Expressive AI)"
                     else     -> "Android TTS (Offline)"
                 }
                 newState { copy(ttsEngineSummary = summary) }

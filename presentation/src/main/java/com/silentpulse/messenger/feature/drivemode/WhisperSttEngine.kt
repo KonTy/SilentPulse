@@ -44,10 +44,17 @@ class WhisperSttEngine(
     companion object {
         private const val SAMPLE_RATE        = 16_000          // Hz — Whisper requirement
         private const val CHUNK_SAMPLES      = 1_600           // 100 ms per chunk
-        private const val MIN_SPEECH_SAMPLES = 8_000           // 500 ms minimum recording
-        private const val SILENCE_CHUNKS     = 15              // 1.5 s of silence → stop
+        private const val MIN_RECORD_SAMPLES = 48_000          // 3 s minimum before silence detection
+        private const val SILENCE_CHUNKS     = 20              // 2 s of trailing silence → stop
         private const val SILENCE_RMS_THRESH = 0.01f           // normalised RMS threshold
         private const val MAX_RECORD_SECONDS = 30              // hard cap
+
+        /**
+         * Minimum average RMS the recording must have to be worth transcribing.
+         * Below this, the recording is pure silence / background noise and we
+         * skip the expensive Whisper inference entirely (saves ~60 s on ggml-small).
+         */
+        private const val MIN_SPEECH_ENERGY  = 0.002f
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -60,7 +67,7 @@ class WhisperSttEngine(
 
     init {
         // Pre-load model on background thread immediately so it's ready when the user speaks
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             loadModelIfNeeded()
         }
     }
@@ -96,19 +103,27 @@ class WhisperSttEngine(
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    private suspend fun loadModelIfNeeded(): WhisperContext? {
+    /**
+     * Thread-safe model loader with double-checked locking.
+     * The model is loaded once and cached for the lifetime of this engine.
+     * Blocks the calling thread during the first load (~3-5 s for ggml-small).
+     */
+    private fun loadModelIfNeeded(): WhisperContext? {
+        // Fast path — already loaded
+        whisperCtx?.let { return it }
+        if (modelPath.isBlank()) return null
+        // Slow path — synchronize to prevent two threads loading simultaneously
         synchronized(modelLock) {
+            // Double-check inside lock
             whisperCtx?.let { return it }
-        }
-        return withContext(Dispatchers.IO) {
-            try {
+            return try {
                 Timber.d("WhisperSTT: loading model from $modelPath")
                 val ctx = WhisperContext(modelPath)
                 Timber.d("WhisperSTT: model loaded. System info: ${ctx.systemInfo}")
-                synchronized(modelLock) { whisperCtx = ctx }
+                whisperCtx = ctx
                 ctx
-            } catch (e: Exception) {
-                Timber.e(e, "WhisperSTT: failed to load model")
+            } catch (e: Throwable) {
+                Timber.e(e, "WhisperSTT: failed to load model (${e.javaClass.simpleName})")
                 null
             }
         }
@@ -118,6 +133,16 @@ class WhisperSttEngine(
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        // ── 1. Pre-load model BEFORE recording ──────────────────────────────
+        // This ensures the model is warm when we need it and prevents the
+        // race where recording finishes before the model is loaded.
+        val ctx = withContext(Dispatchers.IO) { loadModelIfNeeded() }
+        if (ctx == null) {
+            mainHandler.post { onError("whisper_model_load_failed") }
+            return
+        }
+
+        // ── 2. Record audio ──────────────────────────────────────────────────
         val minBufSize = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -142,7 +167,19 @@ class WhisperSttEngine(
         val allSamples = mutableListOf<Short>()
         val chunkBuf   = ShortArray(CHUNK_SAMPLES)
         var silentChunks = 0
+        var peakRms = 0.0f
+        var speechChunks = 0
         val maxSamples = SAMPLE_RATE * MAX_RECORD_SECONDS
+
+        // Play a short beep so the user knows we're listening (like Google STT)
+        try {
+            val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
+            toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 150)
+            Thread.sleep(200) // let the beep finish before recording
+            toneGen.release()
+        } catch (e: Exception) {
+            Timber.w(e, "WhisperSTT: beep failed (non-fatal)")
+        }
 
         Timber.d("WhisperSTT: recording started")
         recorder.startRecording()
@@ -155,8 +192,8 @@ class WhisperSttEngine(
                 // Add chunk to buffer
                 for (i in 0 until read) allSamples.add(chunkBuf[i])
 
-                // VAD: skip silence detection until we have minimum speech
-                if (allSamples.size < MIN_SPEECH_SAMPLES) continue
+                // VAD: skip silence detection until minimum recording duration
+                if (allSamples.size < MIN_RECORD_SAMPLES) continue
 
                 // RMS of this chunk
                 var sumSq = 0.0
@@ -165,14 +202,16 @@ class WhisperSttEngine(
                     sumSq += f * f
                 }
                 val rms = sqrt(sumSq / read).toFloat()
+                if (rms > peakRms) peakRms = rms
 
                 if (rms < SILENCE_RMS_THRESH) {
                     silentChunks++
                     if (silentChunks >= SILENCE_CHUNKS) {
-                        Timber.d("WhisperSTT: end of speech detected (${allSamples.size} samples)")
+                        Timber.d("WhisperSTT: end of speech detected (${allSamples.size} samples, peakRms=%.5f, speechChunks=$speechChunks)".format(peakRms))
                         break
                     }
                 } else {
+                    speechChunks++
                     silentChunks = 0
                 }
             }
@@ -186,27 +225,60 @@ class WhisperSttEngine(
             return
         }
 
-        if (allSamples.size < MIN_SPEECH_SAMPLES) {
-            Timber.d("WhisperSTT: too short, treating as silence")
+        if (allSamples.size < 8_000) { // < 500ms means something went wrong
+            Timber.d("WhisperSTT: too short (${allSamples.size} samples), treating as silence")
             mainHandler.post { onError("no_match") }
             return
         }
 
-        // Load model (usually already loaded from init)
-        val ctx = loadModelIfNeeded()
-        if (ctx == null) {
-            mainHandler.post { onError("whisper_model_load_failed") }
+        // ── 3. Energy pre-filter ─────────────────────────────────────────────
+        // If the entire recording is just silence / low background noise,
+        // skip the expensive Whisper inference (~60 s on ggml-small) and
+        // return "no_match" immediately.
+        val floats = WhisperContext.shortsToFloats(allSamples.toShortArray())
+        var energySum = 0.0
+        for (f in floats) energySum += f * f
+        val avgRms = sqrt(energySum / floats.size).toFloat()
+        Timber.d("WhisperSTT: recording avgRms=%.5f peakRms=%.5f speechChunks=%d (threshold=%.5f) samples=%d".format(avgRms, peakRms, speechChunks, MIN_SPEECH_ENERGY, allSamples.size))
+        if (avgRms < MIN_SPEECH_ENERGY) {
+            // avgRms == 0.0 usually means Android silenced the mic (background service)
+            val errorCode = if (avgRms == 0.0f) "mic_silenced" else "no_match"
+            Timber.d("WhisperSTT: recording is silence (avgRms=$avgRms), skipping transcription (errorCode=$errorCode)")
+            mainHandler.post { onError(errorCode) }
             return
         }
 
-        // Convert to float and transcribe
-        Timber.d("WhisperSTT: transcribing ${allSamples.size} samples…")
-        val floats = WhisperContext.shortsToFloats(allSamples.toShortArray())
+        // ── 4. Trim leading silence ──────────────────────────────────────────
+        // Whisper works better when speech starts near the beginning of the buffer.
+        // Find the first chunk where energy exceeds the silence threshold and
+        // start from there (keep 200ms of lead-in for natural onset).
+        val chunkSize = CHUNK_SAMPLES  // 100ms per chunk in samples
+        var trimStart = 0
+        for (i in floats.indices step chunkSize) {
+            val end = minOf(i + chunkSize, floats.size)
+            var cs = 0.0
+            for (j in i until end) cs += floats[j] * floats[j]
+            val chunkRms = sqrt(cs / (end - i)).toFloat()
+            if (chunkRms >= SILENCE_RMS_THRESH) {
+                // Found speech — back up 200ms (3200 samples) for natural onset
+                trimStart = maxOf(0, i - 3200)
+                break
+            }
+        }
+        val trimmedFloats = if (trimStart > 0) {
+            Timber.d("WhisperSTT: trimmed %d samples (%.1fs) of leading silence".format(trimStart, trimStart.toFloat() / SAMPLE_RATE))
+            floats.copyOfRange(trimStart, floats.size)
+        } else {
+            floats
+        }
+
+        // ── 5. Transcribe ────────────────────────────────────────────────────
+        Timber.d("WhisperSTT: transcribing ${trimmedFloats.size} samples (avgRms=$avgRms, trimmed from ${floats.size})…")
 
         val text = try {
-            ctx.transcribe(floats, language)
-        } catch (e: Exception) {
-            Timber.e(e, "WhisperSTT: transcription failed")
+            ctx.transcribe(trimmedFloats, language)
+        } catch (e: Throwable) {
+            Timber.e(e, "WhisperSTT: transcription failed (${e.javaClass.simpleName})")
             mainHandler.post { onError("whisper_error:${e.message}") }
             return
         }

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SilentPulse Network Security Configuration
+  ============================================
+  CORPORATE POLICY: Zero data leakage to Google or any unauthorized server.
+
+  How this works:
+    - base-config trusts ZERO certificate authorities → any HTTPS connection
+      to a non-whitelisted domain fails at the TLS handshake (no trusted CA).
+    - Cleartext HTTP is blocked globally.
+    - ONLY the domains listed in domain-config sections can be connected to
+      because only they have system CAs trusted.
+
+  If Google STT (Soda), Firebase stubs, Play Services, or ANY dependency
+  tries to reach *.google.com, *.googleapis.com, *.gstatic.com, etc.,
+  the SSL handshake will fail with "Trust anchor for certification path not found".
+
+  Whitelisted domains (open-source, privacy-respecting):
+    - open-meteo.com                  → weather API (no API key, open-source)
+    - wttr.in                         → weather service (open-source)
+    - api.duckduckgo.com              → instant answers API (no API key, open-source)
+    - nominatim.openstreetmap.org     → geocoding (OpenStreetMap, no API key)
+    - router.project-osrm.org         → routing/drive time (OSRM, open-source)
+-->
+<network-security-config>
+
+    <!-- DEFAULT: Trust nothing. All connections to non-whitelisted domains fail. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Intentionally empty — no CAs trusted by default.
+                 This is the firewall: unknown domains cannot complete TLS. -->
+        </trust-anchors>
+    </base-config>
+
+    <!-- WHITELIST: Open-Meteo weather API (open-source, no tracking) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">open-meteo.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: wttr.in weather service (open-source, text output) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">wttr.in</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: DuckDuckGo Instant Answers API (no API key, open-source) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.duckduckgo.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Wikipedia (open knowledge, no API key) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">en.wikipedia.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Nominatim geocoding (OpenStreetMap, no API key) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">nominatim.openstreetmap.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: OSRM routing engine (open-source, no API key) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">router.project-osrm.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Yahoo Finance (unofficial chart API, no API key, real-time prices) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">query1.finance.yahoo.com</domain>
+        <domain includeSubdomains="true">query2.finance.yahoo.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+</network-security-config>

@@ -53,3 +53,9 @@ freeline.py
 freeline/
 freeline_project_description.json
 .aider*
+
+# CMake / NDK cache
+.cxx/
+
+# Backup files
+*.bak

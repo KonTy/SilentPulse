@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-ONLY manifest overlay.
+  Merged into the main manifest for debug builds only.
+  Adds DebugMockAssistantReceiver which fakes "Microcore" for voice assistant testing.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+          Mock "Microcore" receiver for testing the voice assistant pipeline.
+          The label "Microcore" is what CommandRouter discovers and matches against
+          when you say "Computer, tell Microcore to …"
+        -->
+        <receiver
+            android:name=".feature.assistant.DebugMockAssistantReceiver"
+            android:label="Microcore"
+            android:exported="true">
+
+            <!-- So CommandRouter.refreshApps() discovers this as an assistant-capable "app" -->
+            <intent-filter>
+                <action android:name="com.silentpulse.action.ASSISTANT_CAPABLE" />
+            </intent-filter>
+
+            <!-- So CommandRouter.dispatch() delivers commands here -->
+            <intent-filter>
+                <action android:name="com.silentpulse.action.EXECUTE_COMMAND" />
+            </intent-filter>
+
+            <!-- So CommandRouter.requestSchema() delivers schema requests here -->
+            <intent-filter>
+                <action android:name="com.silentpulse.action.REQUEST_SCHEMA" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

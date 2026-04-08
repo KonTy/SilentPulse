@@ -11,12 +11,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.util.Preferences
 import kotlinx.coroutines.*
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 class DriveModeService : NotificationListenerService() {
@@ -37,6 +39,12 @@ class DriveModeService : NotificationListenerService() {
     private var activeSttEngine: SttEngine? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isDriveModeActive = false
+
+    // ── Anti-repeat guards ────────────────────────────────────────────────────
+    /** Tracks how many times each notification key+text combo was announced. */
+    private val announcementCounts = ConcurrentHashMap<String, Int>()
+    /** True while TTS is speaking or STT is listening for a command. */
+    @Volatile private var isProcessing = false
 
     companion object {
         private const val CHANNEL_ID = "drive_mode_channel"
@@ -74,6 +82,30 @@ class DriveModeService : NotificationListenerService() {
 
     fun handleIncomingNotification(app: String, sender: String, messageBody: String, notificationKey: String) {
         Timber.d("Handling notification from $app - $sender: $messageBody")
+
+        // ── Guard: drive mode still on? ──────────────────────────────────────
+        if (!isDriveModeEnabledFromPrefs()) {
+            Timber.d("Drive mode disabled — ignoring notification")
+            return
+        }
+
+        // ── Guard: already speaking / listening? ─────────────────────────────
+        if (isProcessing) {
+            Timber.d("Already processing a notification — skipping")
+            return
+        }
+
+        // ── Guard: max announcements per unique message ──────────────────────
+        val dedupeKey = "$notificationKey|$messageBody"
+        val maxAnnouncements = getMaxAnnouncementsPerMessage()
+        val count = announcementCounts.getOrDefault(dedupeKey, 0)
+        if (count >= maxAnnouncements) {
+            Timber.d("Already announced $count/$maxAnnouncements times — skipping")
+            return
+        }
+        announcementCounts[dedupeKey] = count + 1
+
+        isProcessing = true
         
         val textToSpeak = buildString {
             append("Message from $sender. ")
@@ -94,6 +126,12 @@ class DriveModeService : NotificationListenerService() {
         ttsEngine?.speak(
             text = textToSpeak,
             onDone = {
+                // Check drive mode is still on before starting STT
+                if (!isDriveModeEnabledFromPrefs()) {
+                    Timber.d("Drive mode turned off during TTS — stopping")
+                    isProcessing = false
+                    return@speak
+                }
                 // After TTS finishes, start listening
                 startVoiceListening()
             }
@@ -158,11 +196,13 @@ class DriveModeService : NotificationListenerService() {
 
     private fun startVoiceListening() {
         if (!hasRecordAudioPermission()) {
+            Log.w("DriveModeService", "RECORD_AUDIO permission NOT granted")
             Timber.w("RECORD_AUDIO permission not granted")
             ttsEngine?.speak("Microphone permission is required for voice replies.")
             return
         }
 
+        Log.d("DriveModeService", "Starting STT listening")
         Timber.d("Starting STT listening")
         updateNotification("Listening for your reply...")
 
@@ -170,19 +210,28 @@ class DriveModeService : NotificationListenerService() {
         activeSttEngine?.shutdown()
         val engine = sttEngineFactory.create()
         activeSttEngine = engine
+        Log.d("DriveModeService", "Created STT engine: ${engine.javaClass.simpleName}")
 
         engine.startListening(
             onResult = { recognizedText ->
+                Log.d("DriveModeService", "STT result: \"$recognizedText\"")
                 Timber.d("Recognized speech: $recognizedText")
                 activeSttEngine = null
+                isProcessing = false
                 updateNotification("Drive Mode Active")
-                voiceCommandProcessor.processCommand(recognizedText, voiceCommandProcessor.getCurrentContext())
+                if (isDriveModeEnabledFromPrefs()) {
+                    voiceCommandProcessor.processCommand(recognizedText, voiceCommandProcessor.getCurrentContext())
+                }
             },
             onError = { errorCode ->
+                Log.e("DriveModeService", "STT error code: \"$errorCode\"")
                 Timber.e("STT error: $errorCode")
                 activeSttEngine = null
+                isProcessing = false
                 updateNotification("Drive Mode Active")
-                handleSttError(errorCode)
+                if (isDriveModeEnabledFromPrefs()) {
+                    handleSttError(errorCode)
+                }
             }
         )
     }
@@ -193,6 +242,7 @@ class DriveModeService : NotificationListenerService() {
      * what they need to do to fix it.
      */
     private fun handleSttError(code: String) {
+        Log.e("DriveModeService", "handleSttError: code=\"$code\"")
         val msg = when {
             code == "whisper_no_model_path" ->
                 "Whisper model path is not configured. " +
@@ -253,6 +303,33 @@ class DriveModeService : NotificationListenerService() {
         return messagingApps.contains(packageName)
     }
 
+    /**
+     * Returns the maximum number of times a single notification message will be
+     * announced aloud.  Reads from SharedPreferences each time so it picks up
+     * runtime changes immediately.
+     */
+    private fun getMaxAnnouncementsPerMessage(): Int {
+        return try {
+            applicationContext.getSharedPreferences(
+                "${applicationContext.packageName}_preferences",
+                Context.MODE_PRIVATE
+            ).getInt("drive_mode_max_announcements", 1)
+        } catch (_: Exception) { 1 }
+    }
+
+    /**
+     * Stops any in-flight TTS / STT and resets processing state.
+     * Called when drive mode is toggled off or service is destroyed.
+     */
+    private fun stopAllProcessing() {
+        isProcessing = false
+        ttsEngine?.stop()
+        activeSttEngine?.stopListening()
+        activeSttEngine?.shutdown()
+        activeSttEngine = null
+        announcementCounts.clear()
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -303,10 +380,8 @@ class DriveModeService : NotificationListenerService() {
         super.onDestroy()
         Timber.d("DriveModeService destroyed")
         isDriveModeActive = false
+        stopAllProcessing()
         serviceScope.cancel()
         ttsEngine?.shutdown()
-        activeSttEngine?.stopListening()
-        activeSttEngine?.shutdown()
-        activeSttEngine = null
     }
 }

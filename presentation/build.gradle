@@ -31,8 +31,8 @@ android {
         applicationId "com.silentpulse.messenger"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode (System.getenv("GITHUB_RUN_NUMBER")?.toInteger() ?: 1)
-        versionName "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: 0}"
+        versionCode 10
+        versionName "1.0.10"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -125,6 +125,12 @@ configurations {
 }
 
 dependencies {
+    // Sherpa-ONNX for Kokoro TTS (fully offline, on-device)
+    implementation files('../libs/sherpa-onnx-1.12.35.aar')
+
+    // Vosk offline speech recognition (fully on-device, no network)
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+
     // ML Kit language identification (offline after first model download)
     implementation 'com.google.mlkit:language-id:17.0.6'
 

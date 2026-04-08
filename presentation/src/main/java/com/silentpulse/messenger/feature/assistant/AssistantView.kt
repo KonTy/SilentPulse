@@ -4,5 +4,6 @@ import com.silentpulse.messenger.common.base.QkViewContract
 
 interface AssistantView : QkViewContract<AssistantState> {
     fun showTimeoutPicker(currentSecs: Int)
+    fun showRetryLimitPicker(currentRetries: Int)
     fun showTtsEnginePicker(current: String)
 }

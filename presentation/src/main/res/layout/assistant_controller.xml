@@ -13,21 +13,6 @@
     android:layout_height="match_parent">
 
     <!-- ── Collapsing toolbar ──────────────────────────────────────────── -->
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appbar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:elevation="0dp"
-        app:liftOnScroll="true">
-
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            app:navigationIcon="@drawable/ic_arrow_back_black_24dp"
-            app:title="@string/assistant_title" />
-
-    </com.google.android.material.appbar.AppBarLayout>
 
     <!-- ── Scrollable content ─────────────────────────────────────────── -->
     <androidx.core.widget.NestedScrollView
@@ -245,91 +230,18 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <!-- Engine radio buttons -->
-                    <RadioGroup
-                        android:id="@+id/sttRadioGroup"
+                    <!-- Whisper engine label -->
+                    <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingBottom="4dp">
+                        android:paddingStart="4dp"
+                        android:paddingBottom="8dp"
+                        android:text="@string/assistant_engine_whisper"
+                        android:textSize="16sp"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textStyle="bold" />
 
-                        <RadioButton
-                            android:id="@+id/sttRadioGoogle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="44dp"
-                            android:paddingStart="4dp"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:text="@string/assistant_engine_google"
-                            android:textSize="16sp"
-                            android:textColor="?android:attr/textColorPrimary" />
-
-                        <RadioButton
-                            android:id="@+id/sttRadioWhisper"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="44dp"
-                            android:paddingStart="4dp"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:text="@string/assistant_engine_whisper"
-                            android:textSize="16sp"
-                            android:textColor="?android:attr/textColorPrimary" />
-
-                    </RadioGroup>
-
-                    <!-- ── Google section (visible when Google selected) ─────── -->
-                    <LinearLayout
-                        android:id="@+id/googleSection"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="4dp"
-                            android:paddingTop="4dp"
-                            android:paddingEnd="4dp"
-                            android:paddingBottom="8dp"
-                            android:text="@string/assistant_google_stt_desc"
-                            android:textSize="13sp"
-                            android:textColor="?android:attr/textColorSecondary" />
-
-                        <LinearLayout
-                            android:id="@+id/googleInstallRow"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:gravity="center_vertical"
-                            android:minHeight="48dp"
-                            android:orientation="horizontal"
-                            android:paddingStart="4dp"
-                            android:paddingEnd="4dp"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/assistant_google_stt_install"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                            <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:src="@drawable/ic_chevron_right_black_24dp"
-                                android:tint="?android:attr/textColorSecondary" />
-
-                        </LinearLayout>
-
-                    </LinearLayout>
-
-                    <!-- ── Whisper section (visible when Whisper selected) ───── -->
+                    <!-- ── Whisper section (always visible) ───── -->
                     <LinearLayout
                         android:id="@+id/whisperSection"
                         android:layout_width="match_parent"
@@ -589,6 +501,48 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
+                    <!-- Wake word row -->
+                    <LinearLayout
+                        android:id="@+id/wakeWordRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:paddingStart="16dp"
+                        android:paddingTop="8dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="8dp"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/wakeWordLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Wait for keyword"
+                                android:textSize="16sp"
+                                android:textColor="?android:attr/textColorPrimary" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Constantly listens offline for the wake word to start"
+                                android:textSize="14sp"
+                                android:textColor="?android:attr/textColorSecondary" />
+                        </LinearLayout>
+
+                        <com.silentpulse.messenger.common.widget.QkSwitch
+                            android:id="@+id/wakeWordSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+
+                    </LinearLayout>
+
                     <!-- Voice reply row -->
                     <LinearLayout
                         android:id="@+id/voiceReplyRow"
@@ -666,6 +620,95 @@
                                 android:textSize="14sp"
                                 android:textColor="?android:attr/textColorSecondary"
                                 tools:text="30 seconds" />
+
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_chevron_right_black_24dp"
+                            android:tint="?android:attr/textColorSecondary" />
+
+                    </LinearLayout>
+
+                    <!-- Voice command retry limit row -->
+                    <LinearLayout
+                        android:id="@+id/retryRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_drive_mode_retry_title"
+                                android:textSize="16sp"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:id="@+id/retrySummary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="14sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                tools:text="2 retries" />
+
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_chevron_right_black_24dp"
+                            android:tint="?android:attr/textColorSecondary" />
+
+                    </LinearLayout>
+
+                    <!-- Max announcements per message row -->
+                    <LinearLayout
+                        android:id="@+id/announcementsRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:orientation="horizontal"
+                        tools:visibility="visible">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Max repeats per message"
+                                android:textSize="16sp"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:id="@+id/announcementsSummary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="14sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                tools:text="1 time" />
 
                         </LinearLayout>
 

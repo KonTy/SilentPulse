@@ -9,6 +9,36 @@ import java.io.Closeable
 import java.util.concurrent.Executors
 
 /**
+ * JNI bindings for whisper.cpp.
+ *
+ * The native library exports symbols like:
+ *   Java_com_silentpulse_messenger_feature_drivemode_WhisperLib_00024Companion_initContext
+ *
+ * In Kotlin this corresponds to external functions declared in a companion object
+ * WITHOUT @JvmStatic — so JNI dispatches through the Companion class.
+ */
+class WhisperLib {
+    companion object {
+        init {
+            System.loadLibrary("whisper_silentpulse")
+        }
+
+        external fun initContext(modelPath: String): Long
+        external fun freeContext(ctxPtr: Long)
+        external fun fullTranscribe(
+            ctxPtr: Long,
+            audioData: FloatArray,
+            language: String?,
+            translate: Boolean
+        )
+        external fun getTextSegmentCount(ctxPtr: Long): Int
+        external fun getTextSegment(ctxPtr: Long, index: Int): String
+        external fun getDetectedLanguage(ctxPtr: Long): String
+        external fun getSystemInfo(): String
+    }
+}
+
+/**
  * Kotlin wrapper around the whisper.cpp JNI bridge.
  *
  * Thread safety: whisper inference is single-threaded by design. All
@@ -70,27 +100,6 @@ class WhisperContext(private val modelPath: String) : Closeable {
     override fun close() {
         WhisperLib.freeContext(nativePtr)
         inferenceDispatcher.close()
-    }
-
-    // ── JNI bindings ──────────────────────────────────────────────────────────
-
-    private object WhisperLib {
-        init {
-            System.loadLibrary("whisper_silentpulse")
-        }
-
-        @JvmStatic external fun initContext(modelPath: String): Long
-        @JvmStatic external fun freeContext(ctxPtr: Long)
-        @JvmStatic external fun fullTranscribe(
-            ctxPtr: Long,
-            audioData: FloatArray,
-            language: String?,
-            translate: Boolean
-        )
-        @JvmStatic external fun getTextSegmentCount(ctxPtr: Long): Int
-        @JvmStatic external fun getTextSegment(ctxPtr: Long, index: Int): String
-        @JvmStatic external fun getDetectedLanguage(ctxPtr: Long): String
-        @JvmStatic external fun getSystemInfo(): String
     }
 
     companion object {

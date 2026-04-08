@@ -5,8 +5,10 @@ data class AssistantState(
     val driveModeReadSms: Boolean = true,
     val driveModeReadAll: Boolean = false,
     val driveModeVoiceReplyEnabled: Boolean = false,
+    val driveModeWakeWordEnabled: Boolean = false,
     val driveModeTimeoutSummary: String = "30 seconds",
-    val sttEngine: String = "android",
+    val driveModeMaxRetriesSummary: String = "2 retries",
+    val sttEngine: String = "whisper",
     val whisperModelName: String = "No model selected",
     val whisperModelsDir: String = "",
     val ttsEngineSummary: String = "Android TTS (Offline)"

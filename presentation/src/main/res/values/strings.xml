@@ -322,6 +322,8 @@
     <string name="settings_drive_mode_voice_reply_title">Enable voice replies</string>
     <string name="settings_drive_mode_voice_reply_summary">Reply using voice commands</string>
     <string name="settings_drive_mode_timeout_title">Reply timeout</string>
+    <string name="settings_drive_mode_retry_title">Voice command retries</string>
+    <string name="settings_drive_mode_retry_summary">Max times to retry when speech is not recognized</string>
     <string name="settings_drive_mode_tts_engine_title">TTS Engine</string>
     <string name="settings_drive_mode_stt_engine_title">Speech Recognition Engine</string>
     <string-array name="drive_mode_stt_engines">

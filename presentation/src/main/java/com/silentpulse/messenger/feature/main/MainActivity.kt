@@ -344,6 +344,7 @@ class MainActivity : QkThemedActivity(), MainView {
         super.onResume()
         activityResumedIntent.onNext(true)
         checkDriveModeNotificationAccess()
+        ensureDriveModeMicService()
     }
 
     override fun onPause() {
@@ -392,6 +393,20 @@ class MainActivity : QkThemedActivity(), MainView {
             }
             .setNegativeButton("Not Now", null)
             .show()
+    }
+
+    /**
+     * If Drive Mode is enabled, (re-)start [DriveModeMicService] so
+     * the process holds a foreground‐with‐MICROPHONE token.
+     * Must be called from an Activity context so Android 14+ allows
+     * the foreground service transition.
+     */
+    private fun ensureDriveModeMicService() {
+        val driveModeOn = getSharedPreferences("${packageName}_preferences", android.content.Context.MODE_PRIVATE)
+            .getBoolean("drive_mode_enabled", false)
+        if (driveModeOn) {
+            com.silentpulse.messenger.feature.drivemode.DriveModeMicService.start(this)
+        }
     }
 
     override fun requestPermissions() {

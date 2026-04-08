@@ -5,27 +5,26 @@ import com.silentpulse.messenger.util.Preferences
 import timber.log.Timber
 import javax.inject.Inject
 
+/**
+ * Creates the appropriate offline TTS engine based on the user's preference.
+ * All engines are fully on-device — no audio data leaves the hardware.
+ */
 class TtsEngineFactory @Inject constructor(
     private val context: Context,
     private val prefs: Preferences
 ) {
-    
     companion object {
         const val ENGINE_ANDROID = "android"
-        const val ENGINE_PIPER = "piper"
+        const val ENGINE_KOKORO  = "kokoro"
     }
-    
-    /**
-     * Creates the appropriate TTS engine based on user preferences
-     * All engines are completely offline - no network calls
-     */
+
     fun createEngine(): TtsEngine {
         val engineType = prefs.driveModeTtsEngine.get()
-        
+
         return when (engineType) {
-            ENGINE_PIPER -> {
-                Timber.d("Creating Piper TTS engine (with Android fallback)")
-                PiperTtsEngine(context)
+            ENGINE_KOKORO -> {
+                Timber.d("Creating Kokoro TTS engine (Sherpa-ONNX)")
+                KokoroTtsEngine(context, prefs)
             }
             ENGINE_ANDROID -> {
                 Timber.d("Creating Android TTS engine")

@@ -298,8 +298,8 @@ class SettingsPresenter @Inject constructor(
     }
 
     private fun ttsEngineLabel(engine: String) = when (engine) {
-        "piper" -> "Piper TTS (Offline)"
-        else    -> "Android TTS (Offline)"
+        "kokoro" -> "Kokoro TTS (Expressive AI)"
+        else     -> "Android TTS (Offline)"
     }
 
 }

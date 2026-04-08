@@ -123,9 +123,13 @@ class Preferences @Inject constructor(
     val driveModeEnabled = rxPrefs.getBoolean("drive_mode_enabled", false)
     val driveModeReadSms = rxPrefs.getBoolean("drive_mode_read_sms", true)
     val driveModeReadAllNotifications = rxPrefs.getBoolean("drive_mode_read_all_notif", false)
-    val driveModeTtsEngine = rxPrefs.getString("drive_mode_tts_engine", "android") // "android" or "piper"
+    val driveModeTtsEngine = rxPrefs.getString("drive_mode_tts_engine", "android") // "android" or "kokoro"
     val driveModeVoiceReplyEnabled = rxPrefs.getBoolean("drive_mode_voice_reply", false)
+    val driveModeWakeWordEnabled = rxPrefs.getBoolean("drive_mode_wake_word", false)
     val driveModeReplyTimeoutSecs = rxPrefs.getInteger("drive_mode_reply_timeout", 30)
+    val driveModeMaxSttRetries = rxPrefs.getInteger("drive_mode_stt_max_retries", 2)
+    // Max times the same notification message will be announced aloud (prevents repeat loop)
+    val driveModeMaxAnnouncements = rxPrefs.getInteger("drive_mode_max_announcements", 1)
     val driveModeAutoToggleOnCarplay = rxPrefs.getBoolean("drive_mode_auto_carplay", true)
     val driveModeSttEngine = rxPrefs.getString("drivemode_stt_engine", "android")
     val driveModeVoskLanguage = rxPrefs.getString("drivemode_vosk_language", "en-us")
@@ -136,6 +140,12 @@ class Preferences @Inject constructor(
     val driveModeWhisperLanguage  = rxPrefs.getString("drivemode_whisper_language", "")
     // Directory that is scanned when opening the model picker.
     val driveModeWhisperModelsDir = rxPrefs.getString("drivemode_whisper_models_dir", "")
+    // Path to the Kokoro TTS model directory (contains model.onnx, voices.bin, tokens.txt, espeak-ng-data/)
+    val driveModeKokoroModelDir = rxPrefs.getString("drivemode_kokoro_model_dir", "")
+    // Kokoro speaker ID (0-10 for kokoro-en-v0_19)
+    val driveModeKokoroSpeakerId = rxPrefs.getInteger("drivemode_kokoro_speaker_id", 0)
+    // Kokoro speech speed multiplier (1.0 = normal), stored as String for rx-preferences
+    val driveModeKokoroSpeed = rxPrefs.getString("drivemode_kokoro_speed", "1.0")
 
     init {
         // Migrate from old night mode preference to new one, now that we support android Q night mode

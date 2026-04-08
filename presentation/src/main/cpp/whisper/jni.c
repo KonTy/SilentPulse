@@ -102,8 +102,8 @@ JNI_FUN(fullTranscribe)(JNIEnv *env, jobject thiz,
     params.print_special    = false;
     params.translate        = (bool)translate;
     params.no_context       = true;      /* don't carry context between calls */
-    params.single_segment   = false;
-    params.no_speech_thold  = 0.6f;      /* suppress non-speech segments */
+    params.single_segment   = true;       /* expect one short command, not a conversation */
+    params.no_speech_thold  = 0.3f;      /* lower threshold — short commands were being suppressed at 0.6 */
     params.offset_ms        = 0;
 
     /* Language: null → auto-detect, set detect_language=true */
