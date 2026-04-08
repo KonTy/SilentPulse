@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
- Offline Assistant screen — Material Design 3 layout.
- Sections are grouped into MaterialCardViews with generous spacing.
- All toggle preferences use MaterialSwitch; engine selection uses a
- MaterialButtonToggleGroup (inline chip-style — no dialogs for engine choice).
--->
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -12,13 +6,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- ── Collapsing toolbar ──────────────────────────────────────────── -->
-
-    <!-- ── Scrollable content ─────────────────────────────────────────── -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:layout_height="match_parent">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -29,9 +19,9 @@
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
-            <!-- ══════════════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════════
                  CARD 1 · Enable Offline Assistant
-                 ══════════════════════════════════════════════════════════ -->
+                 ══════════════════════════════════════════════════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -46,7 +36,6 @@
                     android:orientation="vertical"
                     android:paddingBottom="4dp">
 
-                    <!-- Section label -->
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -61,7 +50,7 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <!-- Enable toggle row -->
+                    <!-- Enable Offline Assistant -->
                     <LinearLayout
                         android:id="@+id/driveModeRow"
                         android:layout_width="match_parent"
@@ -111,43 +100,7 @@
 
                     </LinearLayout>
 
-                    <!-- Auto-start on Bluetooth row (shown only when enabled) -->
-                    <LinearLayout
-                        android:id="@+id/btAutoRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="56dp"
-                        android:paddingEnd="16dp"
-                        android:orientation="horizontal"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_drive_mode_read_sms_title"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                        </LinearLayout>
-
-                        <com.silentpulse.messenger.common.widget.QkSwitch
-                            android:id="@+id/readSmsSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-
-                    </LinearLayout>
-
-                    <!-- Read all notifications row -->
+                    <!-- Read Notifications -->
                     <LinearLayout
                         android:id="@+id/readAllRow"
                         android:layout_width="match_parent"
@@ -190,14 +143,48 @@
 
                     </LinearLayout>
 
-                </LinearLayout>
+                    <!-- Read SMS (hidden sub-row) -->
+                    <LinearLayout
+                        android:id="@+id/btAutoRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:paddingStart="56dp"
+                        android:paddingEnd="16dp"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
 
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_drive_mode_read_sms_title"
+                                android:textSize="16sp"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                        </LinearLayout>
+
+                        <com.silentpulse.messenger.common.widget.QkSwitch
+                            android:id="@+id/readSmsSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
 
-            <!-- ══════════════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════════
                  CARD 2 · Speech to Text (Voice Input)
-                 ══════════════════════════════════════════════════════════ -->
+                 ══════════════════════════════════════════════════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/sttCard"
                 android:layout_width="match_parent"
@@ -218,7 +205,6 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="12dp">
 
-                    <!-- Section label -->
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -230,29 +216,72 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <!-- Whisper engine label -->
-                    <TextView
+                    <!-- Engine toggle: Google | Vosk -->
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/sttEngineToggle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingStart="4dp"
-                        android:paddingBottom="8dp"
-                        android:text="@string/assistant_engine_whisper"
-                        android:textSize="16sp"
-                        android:textColor="?android:attr/textColorPrimary"
-                        android:textStyle="bold" />
+                        android:layout_marginBottom="16dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
 
-                    <!-- ── Whisper section (always visible) ───── -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/sttBtnGoogle"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Google (Recommended)" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/sttBtnVosk"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Vosk (Air-gapped)" />
+
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <!-- Google STT info (visible when Google selected) -->
                     <LinearLayout
-                        android:id="@+id/whisperSection"
+                        android:id="@+id/googleSttSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="visible">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:text="Uses Android's on-device SODA recognizer (com.google.android.as). EXTRA_PREFER_OFFLINE is enabled to prevent audio from leaving the device."
+                            android:textSize="13sp"
+                            android:textColor="?android:attr/textColorSecondary" />
+
+                    </LinearLayout>
+
+                    <!-- Vosk STT section (visible when Vosk selected) -->
+                    <LinearLayout
+                        android:id="@+id/voskSection"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:visibility="gone"
                         tools:visibility="visible">
 
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingBottom="8dp"
+                            android:text="100% air-gapped. No Google process involved."
+                            android:textSize="13sp"
+                            android:textColor="?android:attr/textColorSecondary" />
+
                         <!-- Download models row -->
                         <LinearLayout
-                            android:id="@+id/whisperDownloadRow"
+                            android:id="@+id/voskDownloadRow"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -271,14 +300,14 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/assistant_whisper_download"
+                                    android:text="Browse Vosk models"
                                     android:textSize="16sp"
                                     android:textColor="?android:attr/textColorPrimary" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/assistant_whisper_download_desc"
+                                    android:text="Opens alphacephei.com/vosk/models — download a .zip"
                                     android:textSize="14sp"
                                     android:textColor="?android:attr/textColorSecondary" />
 
@@ -292,9 +321,9 @@
 
                         </LinearLayout>
 
-                        <!-- Models folder row -->
+                        <!-- Import model zip row -->
                         <LinearLayout
-                            android:id="@+id/whisperFolderRow"
+                            android:id="@+id/voskImportRow"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -313,17 +342,16 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/assistant_whisper_folder_title"
+                                    android:text="Import model (.zip)"
                                     android:textSize="16sp"
                                     android:textColor="?android:attr/textColorPrimary" />
 
                                 <TextView
-                                    android:id="@+id/whisperFolderSummary"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
+                                    android:text="Pick the downloaded .zip — copies to app storage"
                                     android:textSize="14sp"
-                                    android:textColor="?android:attr/textColorSecondary"
-                                    tools:text="…/files/whisper" />
+                                    android:textColor="?android:attr/textColorSecondary" />
 
                             </LinearLayout>
 
@@ -337,7 +365,7 @@
 
                         <!-- Active model row -->
                         <LinearLayout
-                            android:id="@+id/whisperModelRow"
+                            android:id="@+id/voskModelRow"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -356,17 +384,17 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/assistant_whisper_model_title"
+                                    android:text="Active model"
                                     android:textSize="16sp"
                                     android:textColor="?android:attr/textColorPrimary" />
 
                                 <TextView
-                                    android:id="@+id/whisperModelSummary"
+                                    android:id="@+id/voskModelSummary"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:textSize="14sp"
                                     android:textColor="?android:attr/textColorSecondary"
-                                    tools:text="Small · 488 MB" />
+                                    tools:text="vosk-model-small-en-us-0.15" />
 
                             </LinearLayout>
 
@@ -381,13 +409,12 @@
                     </LinearLayout>
 
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
 
-            <!-- ══════════════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════════
                  CARD 3 · Text to Speech (Voice Output)
-                 ══════════════════════════════════════════════════════════ -->
+                 ══════════════════════════════════════════════════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/ttsCard"
                 android:layout_width="match_parent"
@@ -419,57 +446,291 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <!-- TTS engine row -->
-                    <LinearLayout
-                        android:id="@+id/ttsEngineRow"
+                    <!-- Engine toggle: Google TTS | Kokoro -->
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/ttsEngineToggle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
+                        android:layout_marginBottom="16dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
 
-                        <LinearLayout
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/ttsBtnAndroid"
+                            style="?attr/materialButtonOutlinedStyle"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:text="Google TTS" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_drive_mode_tts_engine_title"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/ttsBtnKokoro"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Kokoro (Expressive)" />
 
-                            <TextView
-                                android:id="@+id/ttsEngineSummary"
-                                android:layout_width="wrap_content"
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <!-- Google TTS info -->
+                    <LinearLayout
+                        android:id="@+id/googleTtsSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="visible">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:text="Uses Android's on-device TextToSpeech engine. No model download needed."
+                            android:textSize="13sp"
+                            android:textColor="?android:attr/textColorSecondary" />
+
+                    </LinearLayout>
+
+                    <!-- Kokoro TTS section (visible when Kokoro selected) -->
+                    <LinearLayout
+                        android:id="@+id/kokoroSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingBottom="8dp"
+                            android:text="Neural expressive TTS — fully offline via sherpa-onnx."
+                            android:textSize="13sp"
+                            android:textColor="?android:attr/textColorSecondary" />
+
+                        <!-- Download Kokoro model row -->
+                        <LinearLayout
+                            android:id="@+id/kokoroDownloadRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="56dp"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorSecondary"
-                                tools:text="Android TTS (Offline)" />
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Browse Kokoro voices"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:attr/textColorPrimary" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Opens GitHub release page — download kokoro-en-v0_19.zip"
+                                    android:textSize="14sp"
+                                    android:textColor="?android:attr/textColorSecondary" />
+
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_chevron_right_black_24dp"
+                                android:tint="?android:attr/textColorSecondary" />
 
                         </LinearLayout>
 
-                        <ImageView
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:src="@drawable/ic_chevron_right_black_24dp"
-                            android:tint="?android:attr/textColorSecondary" />
+                        <!-- Import Kokoro model zip row -->
+                        <LinearLayout
+                            android:id="@+id/kokoroImportRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="56dp"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Import voice model (.zip)"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:attr/textColorPrimary" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Pick the downloaded .zip — copies to app storage"
+                                    android:textSize="14sp"
+                                    android:textColor="?android:attr/textColorSecondary" />
+
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_chevron_right_black_24dp"
+                                android:tint="?android:attr/textColorSecondary" />
+
+                        </LinearLayout>
+
+                        <!-- Active voice model row -->
+                        <LinearLayout
+                            android:id="@+id/kokoroModelRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="56dp"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Active voice"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:attr/textColorPrimary" />
+
+                                <TextView
+                                    android:id="@+id/kokoroModelSummary"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="14sp"
+                                    android:textColor="?android:attr/textColorSecondary"
+                                    tools:text="kokoro-en-v0_19" />
+
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_chevron_right_black_24dp"
+                                android:tint="?android:attr/textColorSecondary" />
+
+                        </LinearLayout>
+
+                        <!-- Speaker row -->
+                        <LinearLayout
+                            android:id="@+id/kokoroSpeakerRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="56dp"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Speaker"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:attr/textColorPrimary" />
+
+                                <TextView
+                                    android:id="@+id/kokoroSpeakerSummary"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="14sp"
+                                    android:textColor="?android:attr/textColorSecondary"
+                                    tools:text="Voice 0 (default)" />
+
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_chevron_right_black_24dp"
+                                android:tint="?android:attr/textColorSecondary" />
+
+                        </LinearLayout>
+
+                        <!-- Speed row -->
+                        <LinearLayout
+                            android:id="@+id/kokoroSpeedRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="56dp"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Speed"
+                                    android:textSize="16sp"
+                                    android:textColor="?android:attr/textColorPrimary" />
+
+                                <TextView
+                                    android:id="@+id/kokoroSpeedSummary"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="14sp"
+                                    android:textColor="?android:attr/textColorSecondary"
+                                    tools:text="1.0× (normal)" />
+
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_chevron_right_black_24dp"
+                                android:tint="?android:attr/textColorSecondary" />
+
+                        </LinearLayout>
 
                     </LinearLayout>
 
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
 
-            <!-- ══════════════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════════
                  CARD 4 · Voice Reply / Behavior
-                 ══════════════════════════════════════════════════════════ -->
+                 ══════════════════════════════════════════════════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/behaviorCard"
                 android:layout_width="match_parent"
@@ -528,12 +789,14 @@
                                 android:text="Wait for keyword"
                                 android:textSize="16sp"
                                 android:textColor="?android:attr/textColorPrimary" />
+
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Constantly listens offline for the wake word to start"
                                 android:textSize="14sp"
                                 android:textColor="?android:attr/textColorSecondary" />
+
                         </LinearLayout>
 
                         <com.silentpulse.messenger.common.widget.QkSwitch
@@ -686,8 +949,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:orientation="horizontal"
-                        tools:visibility="visible">
+                        android:orientation="horizontal">
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -721,10 +983,9 @@
                     </LinearLayout>
 
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ── Privacy notice ─────────────────────────────────────── -->
+            <!-- Privacy notice -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -738,7 +999,6 @@
                 android:textSize="13sp" />
 
         </LinearLayout>
-
     </androidx.core.widget.NestedScrollView>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

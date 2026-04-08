@@ -11,9 +11,15 @@
     - ONLY the domains listed in domain-config sections can be connected to
       because only they have system CAs trusted.
 
-  If Google STT (Soda), Firebase stubs, Play Services, or ANY dependency
-  tries to reach *.google.com, *.googleapis.com, *.gstatic.com, etc.,
-  the SSL handshake will fail with "Trust anchor for certification path not found".
+  This config constrains only the APP'S OWN PROCESS.
+  System processes (e.g. com.google.android.as / Android System Intelligence)
+  have their own network privileges and are NOT affected by this config.
+  For SODA / SpeechRecognizer, EXTRA_PREFER_OFFLINE=true is set in AndroidSttEngine
+  to force on-device recognition as the actual privacy control.
+
+  If any in-process dependency (Firebase stubs, Play Services SDK, etc.) tries
+  to reach *.google.com, *.googleapis.com, *.gstatic.com from within the app,
+  the SSL handshake will fail: "Trust anchor for certification path not found".
 
   Whitelisted domains (open-source, privacy-respecting):
     - open-meteo.com                  → weather API (no API key, open-source)
@@ -84,6 +90,14 @@
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">query1.finance.yahoo.com</domain>
         <domain includeSubdomains="true">query2.finance.yahoo.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Brave Search API (AI summarizer for general questions, requires API key) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.search.brave.com</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

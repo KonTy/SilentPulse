@@ -4,6 +4,7 @@ import com.silentpulse.messenger.common.base.QkPresenter
 import com.silentpulse.messenger.util.Preferences
 import com.uber.autodispose.android.lifecycle.scope
 import com.uber.autodispose.autoDispose
+import java.io.File
 import javax.inject.Inject
 
 class AssistantPresenter @Inject constructor(
@@ -58,41 +59,36 @@ class AssistantPresenter @Inject constructor(
                 newState { copy(driveModeMaxRetriesSummary = summary) }
             }
 
+        // STT engine selection
         prefs.driveModeSttEngine.asObservable()
             .autoDispose(view.scope())
             .subscribe { engine -> newState { copy(sttEngine = engine) } }
 
-        prefs.driveModeWhisperModelPath.asObservable()
+        // Vosk model name
+        prefs.driveModeVoskModelPath.asObservable()
             .autoDispose(view.scope())
             .subscribe { path ->
                 val name = when {
-                    path.isBlank() -> "No model selected"
-                    else -> java.io.File(path).nameWithoutExtension
-                        .removePrefix("ggml-")
-                        .replaceFirstChar { it.uppercase() }
-                        .let { "$it  ·  ${formatSize(java.io.File(path).length())}" }
+                    path.isBlank() -> "No model — tap to import"
+                    else -> File(path).name.ifBlank { File(path).parentFile?.name ?: "Unknown" }
                 }
-                newState { copy(whisperModelName = name) }
+                newState { copy(voskModelName = name) }
             }
 
+        // TTS engine selection
         prefs.driveModeTtsEngine.asObservable()
             .autoDispose(view.scope())
-            .subscribe { engine ->
-                val summary = when (engine) {
-                    "kokoro" -> "Kokoro TTS (Expressive AI)"
-                    else     -> "Android TTS (Offline)"
-                }
-                newState { copy(ttsEngineSummary = summary) }
-            }
+            .subscribe { engine -> newState { copy(ttsEngine = engine) } }
 
-        prefs.driveModeWhisperModelsDir.asObservable()
+        // Kokoro model name
+        prefs.driveModeKokoroModelDir.asObservable()
             .autoDispose(view.scope())
-            .subscribe { dir -> newState { copy(whisperModelsDir = dir) } }
-    }
-
-    private fun formatSize(bytes: Long): String = when {
-        bytes >= 1_000_000_000L -> "%.1f GB".format(bytes / 1_000_000_000.0)
-        bytes >= 1_000_000L     -> "%.0f MB".format(bytes / 1_000_000.0)
-        else                    -> "%.0f KB".format(bytes / 1_000.0)
+            .subscribe { dir ->
+                val name = when {
+                    dir.isBlank() -> "No model — tap to import"
+                    else -> File(dir).name.ifBlank { "Unknown" }
+                }
+                newState { copy(kokoroModelName = name) }
+            }
     }
 }

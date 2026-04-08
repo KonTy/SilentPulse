@@ -453,7 +453,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             val appList = if (names.isNotEmpty()) {
                 " I can also talk to ${names.joinToString(", ")}. Say the app name in your command."
             } else ""
-            speak("I am Silent Pulse. I can read your messages, help you reply by voice, check weather, get directions, and open apps.$appList") {
+            speak("Here is what I can do. Navigation: say navigate to, or directions to, followed by a destination. Say stop navigation to end. Weather: say weather in a city, or what is the weather. Drive time: say how long to, followed by a destination. Music: say play music followed by a song or artist. Say resume to continue paused media. Audiobooks: say listen to book or open voice. Notifications: say read my notifications. Then say skip, next, reply, dismiss, or stop. Stock prices: say price of gold, bitcoin, or any ticker. General questions: ask any what, who, where, when, or how question. Apps: say open or close followed by an app name.$appList") {
                 resumeWakeWord()
             }
             return

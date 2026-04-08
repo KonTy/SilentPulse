@@ -30,9 +30,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- INTERNET is allowed but LOCKED DOWN via network_security_config.xml.
-         Only open-meteo.com is whitelisted.  All other domains (Google, Firebase,
-         etc.) fail at TLS handshake because the base-config trusts zero CAs. -->
+    <!-- INTERNET is required for voice-assistant query features (weather, navigation,
+         stocks, general questions via DuckDuckGo/Wikipedia/Yahoo Finance).
+
+         PRIVACY ARCHITECTURE:
+         network_security_config.xml (base-config = empty trust anchors) blocks ALL
+         outbound TLS from the APP's own process to non-whitelisted domains.
+
+         !! IMPORTANT — android.speech.SpeechRecognizer runs in com.google.android.as
+         (Android System Intelligence), a separate SYSTEM process with its own network
+         privileges.  This manifest and network_security_config do NOT bind it.
+         AudioSttEngine sets EXTRA_PREFER_OFFLINE=true to force on-device SODA
+         recognition and prevent audio from leaving the device via that path. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -262,6 +271,16 @@
             android:exported="false" />
 
         <!-- Debug only: ADB-triggered test notifications with RemoteInput reply support -->
+        <!-- ApiKeyReceiver: accepts Brave Search API key via adb broadcast (debug only).
+             android:exported="false" — not reachable by other apps. -->
+        <receiver
+            android:name=".feature.assistant.ApiKeyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.silentpulse.SET_BRAVE_KEY" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".feature.debug.DebugTestReceiver"
             android:exported="true">

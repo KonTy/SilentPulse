@@ -67,11 +67,12 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // NOTE: EXTRA_PREFER_OFFLINE intentionally omitted.
-            // INTERNET is kernel-blocked (manifest tools:node="remove"), so
-            // privacy is guaranteed regardless. Omitting this flag lets Soda
-            // use its normal (non-degraded) code path which produces better
-            // transcriptions from foreground services.
+            // PRIVACY: Force on-device (offline) recognition.
+            // SpeechRecognizer binds to com.google.android.as which is a
+            // SEPARATE SYSTEM PROCESS with its own network privileges.
+            // network_security_config.xml does NOT constrain it.
+            // EXTRA_PREFER_OFFLINE is the only reliable guard against cloud STT.
+            putExtra("android.speech.extra.PREFER_OFFLINE", true)
 
             // ── Keep the session alive much longer ──────────────────────────
             // By default Soda times out after ~5 seconds of silence, which
