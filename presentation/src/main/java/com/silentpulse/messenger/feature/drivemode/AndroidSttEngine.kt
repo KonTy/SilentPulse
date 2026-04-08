@@ -9,6 +9,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import timber.log.Timber
+import com.silentpulse.messenger.BuildConfig
 
 /**
  * STT engine wrapping Android's built-in [SpeechRecognizer] (Google Soda on-device).
@@ -165,7 +166,7 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
 
         sr.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                Timber.d("AndroidSTT: ready for speech")
+                Timber.d("AndroidSTT: [SP_STT] MIC HOT - ready for speech")
             }
             override fun onBeginningOfSpeech() {
                 Timber.d("AndroidSTT: speech started")
@@ -210,6 +211,11 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val best = matches?.firstOrNull()?.trim() ?: ""
                 Timber.d("AndroidSTT: result=\"$best\" (${matches?.size ?: 0} alternatives)")
+                if (BuildConfig.DEBUG) {
+                    matches?.forEachIndexed { i, alt ->
+                        Timber.d("AndroidSTT:   alt[$i]=\"$alt\"")
+                    }
+                }
 
                 if (best.isNotBlank()) {
                     // Deliver result immediately — no continuation restart.

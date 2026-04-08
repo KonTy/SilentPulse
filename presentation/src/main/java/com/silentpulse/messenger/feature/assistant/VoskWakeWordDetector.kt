@@ -288,7 +288,7 @@ class VoskWakeWordDetector(private val context: Context) {
                 val text = json.optString("partial", "").trim()
                 if (text.equals("computer", ignoreCase = true)) {
                     if (!wakeWordPrimed) {
-                        Log.d(TAG, "Wake word primed by partial")
+                        Log.d("SP_WAKE", "[PRIME] partial text=\"$text\"")
                     }
                     wakeWordPrimed = true
                     primedAtMs    = now
@@ -304,7 +304,7 @@ class VoskWakeWordDetector(private val context: Context) {
 
             // Expire stale primes (e.g., Vosk gave a late final after a long pause)
             if (wakeWordPrimed && now - primedAtMs > 3_000L) {
-                Log.d(TAG, "Stale wake-word prime discarded (${now - primedAtMs}ms)")
+                Log.d("SP_WAKE", "[STALE-PRIME] discarded after ${now - primedAtMs}ms")
                 wakeWordPrimed = false
             }
 
@@ -328,14 +328,14 @@ class VoskWakeWordDetector(private val context: Context) {
             if (!wakeWordPrimed) {
                 val threshold = MIN_CONFIDENCE_COLD
                 if (conf > 0.0 && conf < threshold) {
-                    Log.d(TAG, "Cold wake word suppressed: conf=${"%.2f".format(conf)} < $threshold")
+                    Log.d("SP_WAKE", "[COLD-SUPPRESS] conf=${"%.2f".format(conf)} < $threshold")
                     return
                 }
             }
 
             // Cooldown guard
             if (now - lastTriggerMs < COOLDOWN_MS) {
-                Log.d(TAG, "Wake word suppressed by cooldown (${now - lastTriggerMs}ms since last)")
+                Log.d("SP_WAKE", "[COOLDOWN] suppressed ${now - lastTriggerMs}ms ago (min ${COOLDOWN_MS}ms)")
                 wakeWordPrimed = false
                 return
             }
@@ -343,7 +343,7 @@ class VoskWakeWordDetector(private val context: Context) {
             val wasPrimed = wakeWordPrimed
             lastTriggerMs  = now
             wakeWordPrimed = false
-            Log.d(TAG, ">>> WAKE WORD fired (final, conf=${"%.2f".format(conf)}, wasPrimed=$wasPrimed)")
+            Log.d("SP_WAKE", ">>>[FIRE] conf=${"%.2f".format(conf)} primed=$wasPrimed msSincePrime=${now-primedAtMs}")
             isPaused = true
             stopInternalService()
             onWakeWord?.invoke()

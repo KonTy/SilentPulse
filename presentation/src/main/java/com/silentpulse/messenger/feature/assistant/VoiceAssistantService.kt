@@ -83,6 +83,10 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 val spokenText = intent.getStringExtra(CommandRouter.EXTRA_SPOKEN_TEXT) ?: return
                 val requireFollowup = intent.getBooleanExtra(CommandRouter.EXTRA_REQUIRE_FOLLOWUP, false)
                 val sessionId = intent.getStringExtra(CommandRouter.EXTRA_SESSION_ID)
+                if (android.util.Log.isLoggable("SP_XAPP", android.util.Log.DEBUG)) {
+                    android.util.Log.d("SP_XAPP",
+                        "[TTS_REPLY\u200b] text=\"$spokenText\" requireFollowup=$requireFollowup session=$sessionId")
+                }
 
                 if (requireFollowup) {
                     sessionManager.touch()
@@ -327,6 +331,9 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
 
     private fun routeCommand(command: String) {
         Log.d(TAG, "routeCommand(\"$command\")")
+        if (android.util.Log.isLoggable("SP_ROUTE", android.util.Log.VERBOSE)) {
+            android.util.Log.v("SP_ROUTE", "[ROUTE] transcript=\"$command\" knownApps=${commandRouter.getAppNames()}")
+        }
         val c = command.lowercase(Locale.getDefault())
 
         // ── 0. Notification reading mode intercept ────────────────
@@ -339,7 +346,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         // ── 1. Active follow-up session? Route back to same app ──────────────
         val activeSession = sessionManager.getActive()
         if (activeSession != null) {
-            Log.d(TAG, "Follow-up → ${activeSession.appLabel} (session=${activeSession.sessionId})")
+            Log.d("SP_SESSION",
+                    "[FOLLOW-UP\u200b] re-routing to ${activeSession.appLabel} (${activeSession.targetPackage}) session=${activeSession.sessionId}")
             speak("Sending to ${activeSession.appLabel}.") {
                 commandRouter.dispatch(
                     CommandRouter.RouteResult(
@@ -533,7 +541,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             val sessionId = sessionManager.open(routeResult.targetPackage, routeResult.appLabel)
             speak("Sending to ${routeResult.appLabel}.") {
                 commandRouter.dispatch(routeResult, sessionId)
-                Log.d(TAG, "Dispatched to ${routeResult.appLabel}: \"${routeResult.rawCommand}\"")
+                Log.d("SP_XAPP",
+                    "[DISPATCH\u200b] ➡ ${routeResult.appLabel} (${routeResult.targetPackage}) cmd=\"${routeResult.rawCommand}\" session=$sessionId")
                 // Wait for TTS_REPLY broadcast from the app
             }
             return
