@@ -51,8 +51,11 @@ class CommandRouter(private val context: Context) {
         val intent = Intent(ACTION_ASSISTANT_CAPABLE)
         val resolved = context.packageManager.queryBroadcastReceivers(intent, PackageManager.GET_META_DATA)
 
+        val ownPackage = context.packageName
         discoveredApps = resolved.mapNotNull { info ->
             val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
+            // Skip our own package — debug mock receivers must not shadow real external apps
+            if (pkg == ownPackage) return@mapNotNull null
             val label = info.activityInfo?.loadLabel(context.packageManager)?.toString() ?: pkg
             DiscoveredApp(
                 packageName = pkg,
@@ -61,7 +64,7 @@ class CommandRouter(private val context: Context) {
             )
         }.distinctBy { it.packageName }
 
-        Timber.d("CommandRouter: discovered ${discoveredApps.size} assistant-capable apps: ${discoveredApps.map { it.label }}")
+        Timber.d("CommandRouter: discovered ${discoveredApps.size} assistant-capable apps (excluded self=$ownPackage): ${discoveredApps.map { it.label }}")
     }
 
     /**

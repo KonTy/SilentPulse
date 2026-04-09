@@ -33,7 +33,7 @@ class DebugTestReceiver : BroadcastReceiver() {
         const val ACTION_POST_TEST_MESSAGE = "com.silentpulse.messenger.POST_TEST_MESSAGE"
         const val KEY_REPLY = "key_text_reply"
         private const val CHANNEL_ID = "debug_test_channel"
-        private const val NOTIFICATION_ID = 9998
+        private var nextNotificationId = 9998
         private const val EXTRA_IS_REPLY = "extra_is_reply"
     }
 
@@ -43,8 +43,10 @@ class DebugTestReceiver : BroadcastReceiver() {
         if (intent.getBooleanExtra(EXTRA_IS_REPLY, false)) {
             handleReply(intent)
         } else {
-            val sender = intent.getStringExtra("sender") ?: "Mike"
-            val message = intent.getStringExtra("message") ?: "Hey, are you free this weekend? We are thinking of a barbecue Saturday."
+            val sender = intent.getStringExtra("sender")
+                ?: intent.getStringExtra("title") ?: "Mike"
+            val message = intent.getStringExtra("message")
+                ?: intent.getStringExtra("text") ?: "Hey, are you free this weekend? We are thinking of a barbecue Saturday."
             postTestNotification(context, sender, message)
         }
     }
@@ -60,6 +62,7 @@ class DebugTestReceiver : BroadcastReceiver() {
 
     private fun postTestNotification(context: Context, sender: String, message: String) {
         val nm = context.getSystemService(NotificationManager::class.java)
+        val notifId = nextNotificationId++
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -81,7 +84,7 @@ class DebugTestReceiver : BroadcastReceiver() {
             putExtra(EXTRA_IS_REPLY, true)
         }
         val replyPi = PendingIntent.getBroadcast(
-            context, 1, replyIntent,
+            context, notifId, replyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
@@ -100,9 +103,9 @@ class DebugTestReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .build()
 
-        nm.notify(NOTIFICATION_ID, notification)
+        nm.notify(notifId, notification)
 
-        android.util.Log.d("DebugTestReceiver", "Test notification posted — from: $sender, msg: $message")
+        android.util.Log.d("DebugTestReceiver", "Test notification posted (id=$notifId) — from: $sender, msg: $message")
         Timber.d("DebugTest: posted test notification from $sender: $message")
     }
 }

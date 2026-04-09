@@ -131,9 +131,6 @@ dependencies {
     // Vosk offline speech recognition (fully on-device, no network)
     implementation 'com.alphacephei:vosk-android:0.3.47'
 
-    // ML Kit language identification (offline after first model download)
-    implementation 'com.google.mlkit:language-id:17.0.6'
-
     // lifecycle
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"

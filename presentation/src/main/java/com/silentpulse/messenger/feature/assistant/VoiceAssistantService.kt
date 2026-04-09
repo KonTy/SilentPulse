@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+// Language detection via Unicode script ranges — zero deps, fully offline
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import timber.log.Timber
@@ -782,20 +783,114 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
 
     // ── TTS helper ────────────────────────────────────────────────────────────
 
-    private fun speak(text: String, onDone: (() -> Unit)? = null) {
+    /**
+     * Speak [text] and optionally run [onDone] when the utterance finishes.
+     *
+     * While TTS is playing, a lightweight Vosk stop-listener runs concurrently
+     * on the mic.  If the user says **"stop"** or **"computer stop"**, TTS is
+     * killed immediately, the notification reader (if active) is cancelled, and
+     * the assistant returns to wake-word mode without calling [onDone].
+     */
+    private fun speak(text: String, bargeIn: Boolean = true, onDone: (() -> Unit)? = null) {
         if (!ttsReady) {
             onDone?.invoke()
             return
         }
-        val utteranceId = UUID.randomUUID().toString()
-        if (onDone != null) {
-            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(id: String?) {}
-                override fun onDone(id: String?) { if (id == utteranceId) onDone() }
-                @Deprecated("Deprecated in Java")
-                override fun onError(id: String?) { if (id == utteranceId) onDone() }
-            })
+
+        // Detect language via Unicode script ranges — zero external deps
+        val detectedLocale = detectLocaleByScript(text)
+        if (detectedLocale != null) {
+            val available = tts.isLanguageAvailable(detectedLocale)
+            if (available >= TextToSpeech.LANG_AVAILABLE) {
+                tts.language = detectedLocale
+                Log.d(TAG, "TTS language set to ${detectedLocale.toLanguageTag()}")
+            } else {
+                Log.w(TAG, "TTS locale ${detectedLocale.toLanguageTag()} not available, keeping English")
+                tts.language = Locale.US
+            }
+        } else {
+            tts.language = Locale.US
         }
+        speakInternal(text, bargeIn, onDone)
+    }
+
+    /**
+     * Detect the primary language from Unicode script ranges.
+     * Returns a [Locale] for the dominant non-Latin script, or null if Latin/ASCII
+     * (which stays English).  Zero external dependencies — fully offline.
+     */
+    private fun detectLocaleByScript(text: String): Locale? {
+        var cyrillic = 0; var arabic = 0; var cjk = 0; var hangul = 0
+        var kana = 0; var devanagari = 0; var thai = 0; var hebrew = 0
+        var greek = 0; var total = 0
+        for (c in text) {
+            if (c.isWhitespace() || c.isDigit()) continue
+            total++
+            when {
+                c in 'Ѐ'..'ӿ' || c in 'Ԁ'..'ԯ' -> cyrillic++
+                c in '؀'..'ۿ' || c in 'ݐ'..'ݿ' || c in 'ﭐ'..'﷿' || c in 'ﹰ'..'﻿' -> arabic++
+                c in '一'..'鿿' || c in '㐀'..'䶿' || c in '豈'..'﫿' -> cjk++
+                c in '가'..'힯' || c in 'ᄀ'..'ᇿ' -> hangul++
+                c in '぀'..'ゟ' || c in '゠'..'ヿ' -> kana++
+                c in 'ऀ'..'ॿ' -> devanagari++
+                c in '฀'..'๿' -> thai++
+                c in '֐'..'׿' || c in 'יִ'..'ﭏ' -> hebrew++
+                c in 'Ͱ'..'Ͽ' -> greek++
+            }
+        }
+        if (total == 0) return null
+        val threshold = total * 0.3 // 30% of non-whitespace chars
+        return when {
+            cyrillic > threshold    -> Locale("ru")
+            arabic > threshold      -> Locale("ar")
+            cjk > threshold && kana > 0 -> Locale("ja")  // CJK + kana = Japanese
+            cjk > threshold         -> Locale.SIMPLIFIED_CHINESE
+            hangul > threshold      -> Locale.KOREAN
+            kana > threshold        -> Locale("ja")
+            devanagari > threshold  -> Locale("hi")
+            thai > threshold        -> Locale("th")
+            hebrew > threshold      -> Locale("he")
+            greek > threshold       -> Locale("el")
+            else                    -> null // Latin or mixed — keep English
+        }
+    }
+
+    /** Speak after language has been detected and set. */
+    private fun speakInternal(text: String, bargeIn: Boolean, onDone: (() -> Unit)?) {
+        val utteranceId = UUID.randomUUID().toString()
+
+        // Barge-in: run Vosk stop-listener while TTS is speaking
+        if (bargeIn) {
+            wakeWordDetector?.startStopListening {
+                Log.d(TAG, "Barge-in: user said STOP — killing TTS")
+                mainHandler.post {
+                    tts.stop()
+                    wakeWordDetector?.stopStopListening()
+                    if (notifReaderActive) {
+                        notifReaderActive = false
+                        notifReaderAwaitingReply = false
+                    }
+                    speak("Stopped.", bargeIn = false) { resumeWakeWord() }
+                }
+            }
+        }
+
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) {
+                if (id == utteranceId) {
+                    wakeWordDetector?.stopStopListening()
+                    onDone?.invoke()
+                }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) {
+                if (id == utteranceId) {
+                    wakeWordDetector?.stopStopListening()
+                    onDone?.invoke()
+                }
+            }
+        })
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 

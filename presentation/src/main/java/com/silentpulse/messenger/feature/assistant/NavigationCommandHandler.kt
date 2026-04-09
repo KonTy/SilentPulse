@@ -216,23 +216,28 @@ class NavigationCommandHandler(private val context: Context) {
         )
         onSpeak("Starting navigation to $destination with Google Maps.") {
             try {
-                // API 34+: explicitly grant BAL permission for this send() call.
-                val opts = android.app.ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }
-                pending.send(context, 0, null, null, null, null, opts.toBundle())
-                Log.d(TAG, "Google Maps navigation PendingIntent sent (BAL-allowed)")
+                // Try direct startActivity first — works from foreground services
+                context.startActivity(intent)
+                Log.d(TAG, "Google Maps launched via startActivity")
             } catch (e: Exception) {
-                Log.e(TAG, "Google Maps PendingIntent failed", e)
-                // Last-resort: bare geo: URI via system chooser
+                Log.w(TAG, "startActivity failed ($e), trying PendingIntent")
                 try {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
-                            .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                    )
-                } catch (e2: Exception) { Log.e(TAG, "Fallback also failed", e2) }
+                    val opts = android.app.ActivityOptions.makeBasic().apply {
+                        setPendingIntentBackgroundActivityStartMode(
+                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        )
+                    }
+                    pending.send(context, 0, null, null, null, null, opts.toBundle())
+                    Log.d(TAG, "Google Maps PendingIntent sent (BAL-allowed)")
+                } catch (e2: Exception) {
+                    Log.e(TAG, "PendingIntent also failed", e2)
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
+                                .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        )
+                    } catch (e3: Exception) { Log.e(TAG, "All launch methods failed", e3) }
+                }
             }
         }
     }

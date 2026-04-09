@@ -68,6 +68,10 @@
 
     <!-- Required on API 30+ for package visibility -->
     <queries>
+        <!-- Discover any app that declares itself assistant-capable (cross-app voice routing) -->
+        <intent>
+            <action android:name="com.silentpulse.action.ASSISTANT_CAPABLE" />
+        </intent>
         <!-- geo: URI for map navigation -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

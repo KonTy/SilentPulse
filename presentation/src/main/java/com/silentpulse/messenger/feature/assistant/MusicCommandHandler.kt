@@ -47,7 +47,7 @@ class MusicCommandHandler(private val context: Context) {
         private const val TAG          = "MusicCmd"
         const val VLC_PACKAGE          = "org.videolan.vlc"
         const val VOICE_PACKAGE        = "de.ph1b.audiobook"
-        private val TRIGGER_WORDS      = listOf("play music", "play song", "play a song", "play the song")
+        private val TRIGGER_WORDS      = listOf("play music", "play song", "play a song", "play the song", "play some")
         private val BOOK_TRIGGERS      = listOf(
             "listen to book", "listen to the book",
             "play book", "play the book",
@@ -72,7 +72,7 @@ class MusicCommandHandler(private val context: Context) {
 
     /** Returns true if the (lowercased) command is a music play command. */
     fun isMusicCommand(c: String): Boolean =
-        TRIGGER_WORDS.any { c.contains(it) }
+        TRIGGER_WORDS.any { c.contains(it) } || c.startsWith("play ")
 
     /** Returns true if the command is an audiobook command. */
     fun isBookCommand(c: String): Boolean =
