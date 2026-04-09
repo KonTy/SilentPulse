@@ -143,6 +143,15 @@ class CommandRouter(private val context: Context) {
 
     // ── Fuzzy app name matching ───────────────────────────────────────────────
 
+    /**
+     * Public entry point: checks if a string matches a known app name.
+     * Returns the matched app or null.
+     */
+    fun findAppByName(lowerCommand: String): DiscoveredApp? {
+        if (discoveredApps.isEmpty()) refreshApps()
+        return findApp(lowerCommand)
+    }
+
     private fun findApp(lowerCommand: String): DiscoveredApp? {
         // Exact substring match first
         for (app in discoveredApps) {

@@ -22,6 +22,7 @@ import android.Manifest
 import android.animation.ObjectAnimator
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
@@ -33,6 +34,7 @@ import android.view.View
 import android.view.ViewStub
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
@@ -52,6 +54,7 @@ import com.silentpulse.messenger.common.util.extensions.scrapViews
 import com.silentpulse.messenger.common.util.extensions.setBackgroundTint
 import com.silentpulse.messenger.common.util.extensions.setTint
 import com.silentpulse.messenger.common.util.extensions.setVisible
+import com.silentpulse.messenger.feature.assistant.VoiceAssistantService
 import com.silentpulse.messenger.feature.blocking.BlockingDialog
 import com.silentpulse.messenger.feature.changelog.ChangelogDialog
 import com.silentpulse.messenger.feature.conversations.ConversationItemTouchCallback
@@ -345,6 +348,8 @@ class MainActivity : QkThemedActivity(), MainView {
         activityResumedIntent.onNext(true)
         checkDriveModeNotificationAccess()
         ensureDriveModeMicService()
+        autoStartVoiceAssistant()
+        updateAssistantMenuIcon()
     }
 
     override fun onPause() {
@@ -409,6 +414,60 @@ class MainActivity : QkThemedActivity(), MainView {
         }
     }
 
+    /**
+     * If the wake-word preference is enabled, (re-)start VoiceAssistantService
+     * automatically when the app opens — no need to navigate to Settings.
+     */
+    private fun autoStartVoiceAssistant() {
+        val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
+        val wakeWordOn = prefs.getBoolean("drive_mode_wake_word", false)
+        if (!wakeWordOn) return
+        // Check RECORD_AUDIO — can't start without it
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) return
+        val intent = Intent(this, VoiceAssistantService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun updateAssistantMenuIcon() {
+        val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
+        val isOn = prefs.getBoolean("drive_mode_wake_word", false)
+        toolbar?.menu?.findItem(R.id.assistant_toggle)?.let { item ->
+            item.setIcon(if (isOn) R.drawable.ic_mic_black_24dp else R.drawable.ic_mic_off_black_24dp)
+            item.title = if (isOn) "Stop offline assistant" else "Start offline assistant"
+        }
+    }
+
+    private fun toggleVoiceAssistant() {
+        val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
+        val isOn = prefs.getBoolean("drive_mode_wake_word", false)
+        if (isOn) {
+            // Turn off
+            prefs.edit().putBoolean("drive_mode_wake_word", false).apply()
+            stopService(Intent(this, VoiceAssistantService::class.java))
+        } else {
+            // Check RECORD_AUDIO first
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(Manifest.permission.RECORD_AUDIO), 445)
+                return
+            }
+            prefs.edit().putBoolean("drive_mode_wake_word", true).apply()
+            val intent = Intent(this, VoiceAssistantService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        }
+        updateAssistantMenuIcon()
+    }
+
     override fun requestPermissions() {
         ActivityCompat.requestPermissions(this, arrayOf(
                 Manifest.permission.READ_SMS,
@@ -461,8 +520,20 @@ class MainActivity : QkThemedActivity(), MainView {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.assistant_toggle) {
+            toggleVoiceAssistant()
+            return true
+        }
         optionsItemIntent.onNext(item.itemId)
         return true
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 445 && grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            toggleVoiceAssistant()
+        }
     }
 
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
