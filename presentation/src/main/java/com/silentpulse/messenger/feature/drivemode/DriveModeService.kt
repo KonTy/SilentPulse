@@ -110,7 +110,7 @@ class DriveModeService : NotificationListenerService() {
         val textToSpeak = buildString {
             append("Message from $sender. ")
             append(messageBody)
-            append(". Say respond to reply.")
+            append(". Say reply, repeat, or stop.")
         }
 
         // Store notification context for potential voice reply
@@ -178,6 +178,12 @@ class DriveModeService : NotificationListenerService() {
             "com.google.android.gm" -> "Gmail"
             "com.facebook.orca" -> "Messenger"
             "com.android.mms", "com.google.android.apps.messaging" -> "SMS"
+            "com.microsoft.teams" -> "Teams"
+            "com.microsoft.office.outlook" -> "Outlook"
+            "eu.faircode.email" -> "FairMail"
+            "com.fsck.k9" -> "K-9 Mail"
+            "ch.protonmail.android" -> "ProtonMail"
+            "com.tutao.tutanota" -> "Tutanota"
             else -> {
                 try {
                     val appInfo = packageManager.getApplicationInfo(packageName, 0)
@@ -217,10 +223,53 @@ class DriveModeService : NotificationListenerService() {
                 Log.d("DriveModeService", "STT result: \"$recognizedText\"")
                 Timber.d("Recognized speech: $recognizedText")
                 activeSttEngine = null
-                isProcessing = false
-                updateNotification("Drive Mode Active")
-                if (isDriveModeEnabledFromPrefs()) {
-                    voiceCommandProcessor.processCommand(recognizedText, voiceCommandProcessor.getCurrentContext())
+
+                val lower = recognizedText.lowercase()
+                when {
+                    // ── Stop: leave notification as-is, stop prompting ───────
+                    lower.contains("stop") || lower.contains("done") ||
+                    lower.contains("cancel") || lower.contains("enough") -> {
+                        Timber.d("Stop command — going idle, notification preserved")
+                        isProcessing = false
+                        updateNotification("Drive Mode Active")
+                        // No further action — notification stays for manual reading
+                    }
+
+                    // ── Repeat: re-read current message, then listen again ───
+                    lower.contains("repeat") || lower.contains("read again") ||
+                    lower.contains("again") || lower.contains("say again") -> {
+                        val ctx = voiceCommandProcessor.getCurrentContext()
+                        if (ctx != null) {
+                            Timber.d("Repeat command — re-reading message")
+                            val replayText = buildString {
+                                append("Message from ${ctx.sender}. ")
+                                append(ctx.messageBody)
+                                append(". Say reply, repeat, or stop.")
+                            }
+                            ttsEngine?.speak(
+                                text = replayText,
+                                onDone = {
+                                    if (isDriveModeEnabledFromPrefs()) {
+                                        startVoiceListening()
+                                    } else {
+                                        isProcessing = false
+                                    }
+                                }
+                            )
+                        } else {
+                            isProcessing = false
+                            updateNotification("Drive Mode Active")
+                        }
+                    }
+
+                    // ── Everything else: delegate to VoiceCommandProcessor ───
+                    else -> {
+                        isProcessing = false
+                        updateNotification("Drive Mode Active")
+                        if (isDriveModeEnabledFromPrefs()) {
+                            voiceCommandProcessor.processCommand(recognizedText, voiceCommandProcessor.getCurrentContext())
+                        }
+                    }
                 }
             },
             onError = { errorCode ->
@@ -264,7 +313,7 @@ class DriveModeService : NotificationListenerService() {
                 "and download a language pack for your language."
 
             code == "speech_timeout" || code == "no_match" ->
-                "I did not hear anything. Say read, reply, or dismiss."
+                "I did not hear anything. Say reply, repeat, or stop."
 
             code == "recognizer_busy" ->
                 "Speech recognizer is busy. Please try again in a moment."
@@ -298,7 +347,14 @@ class DriveModeService : NotificationListenerService() {
             "com.facebook.orca",
             "com.telegram.messenger",
             "com.snapchat.android",
-            "com.instagram.android"
+            "com.instagram.android",
+            "com.microsoft.teams",
+            "com.microsoft.office.outlook",
+            "eu.faircode.email",
+            "com.fsck.k9",
+            "com.google.android.gm",
+            "ch.protonmail.android",
+            "com.tutao.tutanota"
         )
         return messagingApps.contains(packageName)
     }

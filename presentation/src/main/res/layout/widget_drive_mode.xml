@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center"
+    android:padding="4dp"
+    android:background="@android:color/transparent">
+
+    <!-- Hidden status view kept so RemoteViews calls don't crash -->
+    <TextView
+        android:id="@+id/widget_status"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/btn_on"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:src="@android:drawable/ic_media_play"
+        android:background="@android:color/transparent"
+        android:contentDescription="Turn Drive Mode On"
+        android:scaleType="centerInside"
+        android:padding="8dp"
+        android:layout_marginEnd="2dp" />
+
+    <ImageButton
+        android:id="@+id/btn_off"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:src="@android:drawable/ic_media_pause"
+        android:background="@android:color/transparent"
+        android:contentDescription="Turn Drive Mode Off"
+        android:scaleType="centerInside"
+        android:padding="8dp"
+        android:layout_marginEnd="2dp" />
+
+    <ImageButton
+        android:id="@+id/btn_stop"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:src="@android:drawable/ic_delete"
+        android:background="@android:color/transparent"
+        android:contentDescription="Stop Speaking"
+        android:scaleType="centerInside"
+        android:padding="8dp" />
+
+</LinearLayout>

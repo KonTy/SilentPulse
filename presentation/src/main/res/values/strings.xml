@@ -572,4 +572,7 @@
         <item>That\'s okay</item>
     </string-array>
 
+    <!-- Drive Mode control widget -->
+    <string name="drive_mode_widget_desc">Toggle Drive Mode on/off and stop TTS reading</string>
+
 </resources>

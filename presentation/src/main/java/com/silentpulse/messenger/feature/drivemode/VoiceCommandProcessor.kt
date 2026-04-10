@@ -32,18 +32,27 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     fun setCurrentContext(context: NotificationContext) {
+        Timber.d("VCP: setCurrentContext(${context.app}/${context.sender})")
         currentContext = context
     }
 
     fun getCurrentContext(): NotificationContext? = currentContext
 
     fun processCommand(command: String, notificationContext: NotificationContext?) {
+        Timber.d("processCommand(\"$command\") context=${notificationContext?.app}/${notificationContext?.sender}")
         when {
             command.contains("read", ignoreCase = true) -> {
+                Timber.d("VCP: READ command")
                 notificationContext?.let { readMessage(it) }
             }
             command.contains("reply", ignoreCase = true) || command.contains("respond", ignoreCase = true) -> {
+                Timber.d("VCP: REPLY command")
                 notificationContext?.let { initiateReply(it) }
+            }
+            command.contains("dismiss", ignoreCase = true) || command.contains("delete", ignoreCase = true) ||
+            command.contains("skip", ignoreCase = true) || command.contains("next", ignoreCase = true) -> {
+                Timber.d("Dismiss/skip command — clearing context")
+                currentContext = null
             }
             command.contains("yes", ignoreCase = true) -> {
                 handleYesCommand(command)
@@ -55,6 +64,7 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     private fun handleYesCommand(command: String) {
+        Timber.d("VCP: YES command — pendingOpen=${pendingOpenAppContext != null} pendingReply=${pendingReplyContext != null}")
         when {
             pendingOpenAppContext != null -> {
                 // User confirmed they want to open the app
@@ -72,6 +82,7 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     private fun handleNoCommand() {
+        Timber.d("VCP: NO command — pendingOpen=${pendingOpenAppContext != null} pendingReply=${pendingReplyContext != null}")
         when {
             pendingOpenAppContext != null -> {
                 speak("Okay, I won't open the app.")
@@ -176,10 +187,12 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     private fun speak(text: String) {
+        Timber.d("VCP TTS: \"${if (text.length > 60) text.take(60) + "…" else text}\"")
         ttsEngine?.speak(text)
     }
 
     fun shutdown() {
+        Timber.d("VCP: shutdown()")
         ttsEngine?.shutdown()
         pendingReplyContext = null
         pendingOpenAppContext = null

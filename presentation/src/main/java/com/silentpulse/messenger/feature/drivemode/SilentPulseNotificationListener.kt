@@ -26,6 +26,7 @@ import javax.inject.Inject
 
 /** Snapshot of a notification for voice presentation by the assistant. */
 data class NotifSnapshot(
+    val packageName: String,
     val key: String,
     val appName: String,
     val title: String,
@@ -55,14 +56,15 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     /** Counts ALL voice command attempts (error + unrecognized) for the current notification. */
     private var totalVoiceAttempts = 0
     /** Absolute cap: after this many failed attempts for one notification, give up. */
-    private val MAX_VOICE_ATTEMPTS = 3
+    private val MAX_VOICE_ATTEMPTS = 5
     /** Delay (ms) after TTS finishes before starting the microphone — prevents TTS echo bleed. */
-    private val STT_START_DELAY_MS = 400L
+    private val STT_START_DELAY_MS = 800L
 
     // ── Persistent STT engine — avoids reloading the 488 MB model each time ──
     private var cachedSttEngine: SttEngine? = null
     /** Monotonically incrementing session ID — stale callbacks are discarded. */
     private var sttSessionId = 0
+
 
 
     companion object {
@@ -230,18 +232,18 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         // Cancel any ongoing listening session for a previous message
         stopListeningNow()
         pendingNotification = sbn
+        Timber.d("Drive Mode: listenState → READING")
         listenState = ListenState.READING  // block duplicate notifications during TTS
         totalVoiceAttempts = 0  // reset for this new notification
 
         val readAloud = "Message from $sender via $appName. $text"
         if (isVoiceReplyEnabled()) {
+            // Pre-load STT engine while TTS speaks
+            ensureSttEngine()
             // Read the message, then prompt for a voice command
             speak(readAloud) {
                 mainHandler.post {
-                    // Pre-load STT engine while TTS speaks (model loads in ~3s background)
-            ensureSttEngine()
-            speak("Say dismiss, delete, or reply.") {
-                        // Delay before starting microphone to let speaker audio settle
+                    speak("Say dismiss, delete, reply, repeat, or stop.") {
                         mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS)
                     }
                 }
@@ -336,7 +338,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         }
     }
 
-    // ── Voice command state machine ────────────────────────────────────────
+            // ── Voice command state machine ────────────────────────────────────────
 
     private fun startCommandListening() {
         if (!hasRecordPermission()) {
@@ -358,6 +360,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             return
         }
 
+        Timber.d("Drive Mode: listenState → AWAITING_COMMAND")
         listenState = ListenState.AWAITING_COMMAND
         Timber.d("Drive Mode STT: starting command listen (attempt $totalVoiceAttempts/$MAX_VOICE_ATTEMPTS)")
         startSttListening { recognized ->
@@ -407,12 +410,12 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         // Filter Whisper hallucinations — treat as silence
         if (isHallucination(text)) {
             Timber.d("Drive Mode: ignoring Whisper hallucination: \"$text\"")
-            retryOrGiveUp("I did not hear anything. Say dismiss, delete, or reply.")
+            retryOrGiveUp("I did not hear anything. Say dismiss, delete, reply, repeat, or stop.")
             return
         }
 
         // Fuzzy match: Whisper often mishears short commands.
-        // Use word-level edit-distance matching for the 4 commands.
+        // Use word-level edit-distance matching for the 5 commands.
         val words = lower.replace(Regex("[^a-z\\s]"), "").split("\\s+".toRegex()).filter { it.isNotEmpty() }
         val matchesDismiss = lower.contains("dismiss") || lower.contains("skip") || lower.contains("next") ||
             words.any { fuzzyMatch(it, "dismiss", 3) || fuzzyMatch(it, "skip", 2) || fuzzyMatch(it, "next", 2) }
@@ -421,9 +424,13 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             words.any { fuzzyMatch(it, "reply", 2) || fuzzyMatch(it, "respond", 3) }
         val matchesRead = lower.contains("read") || lower.contains("repeat") ||
             words.any { fuzzyMatch(it, "read", 2) || fuzzyMatch(it, "repeat", 2) }
+        val matchesStop = lower.contains("stop") || lower.contains("done") || lower.contains("cancel") || lower.contains("enough") ||
+            words.any { fuzzyMatch(it, "stop", 2) || fuzzyMatch(it, "done", 2) || fuzzyMatch(it, "cancel", 3) }
 
+        Timber.d("Drive Mode: match results: dismiss=$matchesDismiss delete=$matchesDelete reply=$matchesReply read=$matchesRead stop=$matchesStop")
         when {
             matchesDismiss -> {
+                Timber.d("Drive Mode: → DISMISS")
                 totalVoiceAttempts = 0
                 pendingNotification?.key?.let { cancelNotification(it) }
                 pendingNotification = null
@@ -431,6 +438,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 speak("Message dismissed.")
             }
             matchesDelete -> {
+                Timber.d("Drive Mode: → DELETE")
                 totalVoiceAttempts = 0
                 val sbn = pendingNotification
                 pendingNotification = null
@@ -444,12 +452,14 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 speak("Message deleted.")
             }
             matchesReply -> {
+                Timber.d("Drive Mode: → REPLY")
                 totalVoiceAttempts = 0
                 speak("What would you like to say?") {
                     mainHandler.postDelayed({ startReplyListening() }, STT_START_DELAY_MS)
                 }
             }
             matchesRead -> {
+                Timber.d("Drive Mode: → READ/REPEAT")
                 // Re-read the message
                 totalVoiceAttempts = 0
                 val sbn = pendingNotification
@@ -458,7 +468,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                     val sender = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "Unknown"
                     val body = (extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
                         ?: extras?.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
-                    speak("$sender said: $body. Say dismiss, delete, or reply.") {
+                    speak("$sender said: $body. Say dismiss, delete, reply, repeat, or stop.") {
                         mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS)
                     }
                 } else {
@@ -467,10 +477,18 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                     }
                 }
             }
+            matchesStop -> {
+                Timber.d("Drive Mode: → STOP")
+                // Stop: leave notification in place, go idle — user can read it later
+                totalVoiceAttempts = 0
+                pendingNotification = null
+                listenState = ListenState.IDLE
+                speak("Stopped. Notification is still there for you to read later.")
+            }
             else -> {
                 // Unrecognized command — DO NOT reset totalVoiceAttempts
                 Timber.d("Drive Mode: unrecognized command \"$text\", re-prompting")
-                retryOrGiveUp("I heard \"${text.take(30)}\". Say dismiss, delete, or reply.")
+                retryOrGiveUp("I heard \"${text.take(30)}\". Say dismiss, delete, reply, repeat, or stop.")
             }
         }
     }
@@ -481,6 +499,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
      * during the TTS prompt to block duplicate notifications.
      */
     private fun retryOrGiveUp(prompt: String) {
+        Timber.d("Drive Mode: retryOrGiveUp attempt=$totalVoiceAttempts/$MAX_VOICE_ATTEMPTS")
         if (totalVoiceAttempts >= MAX_VOICE_ATTEMPTS) {
             Timber.w("Drive Mode: giving up after $totalVoiceAttempts attempts")
             speak("Voice commands not available right now.") {
@@ -490,7 +509,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 }
             }
         } else {
-            // Keep listenState as AWAITING_COMMAND to block duplicates during TTS
+            // Speak the prompt then restart
             speak(prompt) {
                 mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS)
             }
@@ -503,6 +522,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             listenState = ListenState.IDLE
             return
         }
+        Timber.d("Drive Mode: listenState → AWAITING_REPLY_TEXT")
         listenState = ListenState.AWAITING_REPLY_TEXT
         Timber.d("Drive Mode STT: starting reply-text listen")
         startSttListening { replyText ->
@@ -627,7 +647,8 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun startSttListening(onResult: (String) -> Unit) {
+
+        private fun startSttListening(onResult: (String) -> Unit) {
         // Start foreground mic service so Android unsilences the microphone
         startMicService()
 
@@ -670,7 +691,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                     // Empty result - treat like no match
                     mainHandler.post {
                         if (listenState == ListenState.AWAITING_COMMAND) {
-                            retryOrGiveUp("I did not catch that. Say dismiss, delete, or reply.")
+                            retryOrGiveUp("Say dismiss, delete, reply, repeat, or stop.")
                         } else if (listenState == ListenState.AWAITING_REPLY_TEXT) {
                             speak("I did not hear your reply. Say dismiss to cancel.") {
                                 mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS)
@@ -699,7 +720,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                         "whisper_model_load_failed" ->
                             "Failed to load the Whisper model. Check the path in settings."
                         "speech_timeout", "no_match" ->
-                            "I did not hear anything. Say dismiss, delete, or reply."
+                            "I did not hear anything. Say dismiss, delete, reply, repeat, or stop."
                         "network_error", "server_error", "server_disconnected" ->
                             "Offline speech model is not available. Download it in Android settings."
                         "permission_denied" ->
@@ -712,7 +733,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
 
                     val retryable = (errorCode == "speech_timeout" || errorCode == "no_match") && errorCode != "mic_silenced"
                     if (retryable) {
-                        // retryOrGiveUp handles the cap check and prompt
+                        // Silent restart on first attempt — no wasted time speaking
                         retryOrGiveUp(userMsg)
                     } else {
                         // Non-retryable error — bail out
@@ -753,7 +774,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 ?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val appName = getAppName(sbn.packageName)
             val hasReplyAction = sbn.notification?.actions?.any { it.remoteInputs?.isNotEmpty() == true } == true
-            NotifSnapshot(sbn.key, appName, title, text, hasReplyAction)
+            NotifSnapshot(sbn.packageName, sbn.key, appName, title, text, hasReplyAction)
         }
     }
 
@@ -761,6 +782,21 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         // Stop recording but keep the engine alive (model stays in memory)
         cachedSttEngine?.stopListening()
         stopMicService()
+    }
+
+    /**
+     * Public: immediately stop all TTS and STT, reset state to IDLE.
+     * Called from [DriveModeWidgetProvider] STOP button and OFF button.
+     */
+    fun stopReading() {
+        Timber.d("Drive Mode: stopReading() called (widget or external)")
+        mainHandler.post {
+            ttsEngine?.stop()
+            stopListeningNow()
+            pendingNotification = null
+            listenState = ListenState.IDLE
+            totalVoiceAttempts = 0
+        }
     }
 
     // ── Preference helpers ────────────────────────────────────────────────
@@ -788,6 +824,11 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         "com.android.messaging"        -> "SMS"
         "com.microsoft.teams"          -> "Teams"
         "com.microsoft.office.outlook" -> "Outlook"
+        "eu.faircode.email"            -> "FairMail"
+        "com.fsck.k9"                  -> "K-9 Mail"
+        "com.google.android.gm"       -> "Gmail"
+        "ch.protonmail.android"        -> "ProtonMail"
+        "com.tutao.tutanota"           -> "Tutanota"
         applicationContext.packageName -> "SMS"
         else -> try {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
@@ -807,6 +848,11 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         packageName == "com.instagram.android" ||
         packageName == "com.microsoft.teams" ||
         packageName == "com.microsoft.office.outlook" ||
+        packageName == "eu.faircode.email" ||                    // FairMail
+        packageName == "com.fsck.k9" ||                           // K-9 Mail / Thunderbird
+        packageName == "com.google.android.gm" ||                 // Gmail
+        packageName == "ch.protonmail.android" ||                  // ProtonMail
+        packageName == "com.tutao.tutanota" ||                     // Tutanota
         (BuildConfig.DEBUG && packageName == "com.android.shell") // debug builds only: adb test notifications
 
     private fun hasRecordPermission() =

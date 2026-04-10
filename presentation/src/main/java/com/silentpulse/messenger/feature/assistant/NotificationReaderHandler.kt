@@ -51,6 +51,23 @@ class NotificationReaderHandler(private val context: Context) {
         c.contains("check alerts") ||
         c.contains("my notification") ||
         c == "notifications"
+    fun isReadEmailCommand(c: String): Boolean =
+        c.contains("read my email") || c.contains("read email") ||
+        c.contains("check my email") || c.contains("check email") ||
+        c.contains("any email") || c.contains("new email") ||
+        c.contains("read my mail") || c.contains("check my mail") ||
+        c.contains("unread email") || c.contains("read unread") ||
+        c == "emails" || c == "email"
+
+    /** Package names considered email apps for filtered reading. */
+    private val EMAIL_PACKAGES = setOf(
+        "eu.faircode.email",            // FairMail
+        "com.fsck.k9",                  // K-9 Mail / Thunderbird
+        "com.google.android.gm",       // Gmail
+        "com.microsoft.office.outlook", // Outlook (personal + work profile)
+        "ch.protonmail.android",        // ProtonMail
+        "com.tutao.tutanota"            // Tutanota
+    )
 
     // ── Notification snapshot ─────────────────────────────────────────────────
 
@@ -66,6 +83,16 @@ class NotificationReaderHandler(private val context: Context) {
         }
         return listener.getVoiceAssistantNotifications().also {
             Log.d(TAG, "Fetched ${it.size} notifications")
+        }
+    }
+    /**
+     * Fetches only email app notifications — unread emails from the shade.
+     * Notifications only appear for unread items, so this naturally returns
+     * only unread emails.
+     */
+    fun fetchEmailNotifications(): List<NotifSnapshot> {
+        return fetchNotifications().filter { it.packageName in EMAIL_PACKAGES }.also {
+            Log.d(TAG, "Fetched ${it.size} email notifications")
         }
     }
 
@@ -86,9 +113,9 @@ class NotificationReaderHandler(private val context: Context) {
      */
     fun promptForCommands(item: NotifSnapshot): String {
         return if (item.hasReplyAction) {
-            "Say skip, reply, dismiss, or stop."
+            "Say skip, reply, repeat, dismiss, or stop."
         } else {
-            "Say skip, dismiss, or stop."
+            "Say skip, repeat, dismiss, or stop."
         }
     }
 

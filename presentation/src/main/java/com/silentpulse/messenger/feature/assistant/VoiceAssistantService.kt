@@ -109,9 +109,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         }
     }
-
     // ── Broadcast receiver for schema replies from target apps ────────────────
-
     private val schemaReplyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == CommandRouter.ACTION_REPORT_SCHEMA) {
@@ -121,9 +119,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         }
     }
-
     // ── Lifecycle ─────────────────────────────────────────────────────────────
-
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate()")
@@ -137,7 +133,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         stockQueryHandler  = StockQueryHandler(applicationContext)
         musicHandler       = MusicCommandHandler(applicationContext)
         notifReaderHandler = NotificationReaderHandler(applicationContext)
-
         val filter = IntentFilter().apply {
             addAction(CommandRouter.ACTION_TTS_REPLY)
             addAction(CommandRouter.ACTION_REPORT_SCHEMA)
@@ -150,11 +145,9 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             this, schemaReplyReceiver, IntentFilter(CommandRouter.ACTION_REPORT_SCHEMA),
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
         )
-
         initSttEngine()
         initVoskModel()
     }
-
     override fun onInit(status: Int) {
         Log.d(TAG, "TTS onInit status=$status (SUCCESS=0)")
         if (status == TextToSpeech.SUCCESS) {
@@ -167,20 +160,18 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             Timber.e("TTS Initialization failed")
         }
     }
-
     /**
      * Start listening only when both TTS *and* Vosk model are ready.
      * Whichever finishes last triggers the actual start.
      */
     private fun maybeStartListening() {
+        Log.d(TAG, "maybeStartListening() ttsReady=$ttsReady voskModelReady=$voskModelReady")
         if (ttsReady && voskModelReady) {
             speak("Voice assistant ready.") { startWakeWordDetection() }
         }
     }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand()")
-
         val sp = applicationContext.getSharedPreferences(
             "${applicationContext.packageName}_preferences", Context.MODE_PRIVATE
         )
@@ -189,7 +180,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             stopSelf()
             return START_NOT_STICKY
         }
-
         val channelId = com.silentpulse.messenger.common.util.NotificationManagerImpl.DEFAULT_CHANNEL_ID
         val notification = androidx.core.app.NotificationCompat.Builder(this, channelId)
             .setContentTitle("SilentPulse Assistant")
@@ -204,9 +194,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         }
         return START_NOT_STICKY
     }
-
     override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
         super.onDestroy()
@@ -221,9 +209,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
     }
-
     // ── Vosk model init ───────────────────────────────────────────────────────
-
     private fun initVoskModel() {
         wakeWordDetector = VoskWakeWordDetector(this)
         wakeWordDetector!!.init(
@@ -238,9 +224,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         )
     }
-
     // ── Phase 1: Vosk keyword spotter (silent, no beeps, low CPU) ───────────
-
     private fun startWakeWordDetection() {
         Log.d(TAG, "Starting Vosk wake word detection")
         wakeWordDetector?.start(
@@ -262,31 +246,29 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         )
     }
-
     private fun resumeWakeWord() {
         Log.d(TAG, "Resuming Vosk wake word detection")
         isListening = false
         wakeWordDetector?.resume()
     }
-
     // ── Phase 2: One-shot SpeechRecognizer (single beep, then done) ─────────
-
     private fun initSttEngine() {
         Log.d(TAG, "Creating AndroidSttEngine (on-device, INTERNET blocked)")
         sttEngine = AndroidSttEngine(this)
     }
-
-    private fun startSttOneShot() {
+    private fun startSttOneShot(commandPrefix: String? = null) {
         if (isListening) return
         val engine = sttEngine ?: run {
             Log.w(TAG, "startSttOneShot() ABORTED — no STT engine")
             speak("Speech recognition unavailable.") { resumeWakeWord() }
             return
         }
-
         isListening = true
-        Log.d(TAG, "STT one-shot — listening for command")
-
+        if (commandPrefix != null) {
+            Log.d(TAG, "STT one-shot — listening for command (prefix=\"$commandPrefix\")")
+        } else {
+            Log.d(TAG, "STT one-shot — listening for command")
+        }
         engine.startListening(
             onResult = { transcript ->
                 isListening = false
@@ -294,7 +276,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 // restart so it can't fire a spurious no_match error callback.
                 engine.stopListening()
                 Log.d(TAG, "STT transcript: \"$transcript\"")
-
                 // Strip any leading "computer" in case the user said it again
                 // or it bled over from the wake word.
                 val command = transcript
@@ -303,9 +284,13 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                     .trim()
                     .removeSuffix(".")
                     .trim()
-
                 if (command.isNotEmpty()) {
-                    routeCommand(command)
+                    val fullCommand = if (commandPrefix != null) {
+                        "$commandPrefix $command"
+                    } else {
+                        command
+                    }
+                    routeCommand(fullCommand)
                 } else {
                     // User only said "computer" again or something unintelligible
                     speak("I'm listening.") { startSttOneShot() }
@@ -327,23 +312,19 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         )
     }
-
     // ── Command routing ───────────────────────────────────────────────────────
-
     private fun routeCommand(command: String) {
         Log.d(TAG, "routeCommand(\"$command\")")
         if (android.util.Log.isLoggable("SP_ROUTE", android.util.Log.VERBOSE)) {
             android.util.Log.v("SP_ROUTE", "[ROUTE] transcript=\"$command\" knownApps=${commandRouter.getAppNames()}")
         }
         val c = command.lowercase(Locale.getDefault())
-
         // ── 0. Notification reading mode intercept ────────────────
         if (notifReaderActive) {
             if (notifReaderAwaitingReply) handleNotifReplyText(command)
             else handleNotifReaderCommand(c)
             return
         }
-
         // ── 1. Active follow-up session? Route back to same app ──────────────
         val activeSession = sessionManager.getActive()
         if (activeSession != null) {
@@ -362,7 +343,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 2. Built-in: weather queries ─────────────────────────────────
         if (weatherHandler.isWeatherCommand(c)) {
             Log.d(TAG, "Weather command detected")
@@ -385,7 +365,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 3. Built-in: stop navigation ────────────────────────────
         if (navigationHandler.isStopNavigationCommand(c)) {
             Log.d(TAG, "Stop navigation command detected")
@@ -394,7 +373,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 4. Built-in: navigation / directions ───────────────────────
         if (navigationHandler.isNavigationCommand(c)) {
             Log.d(TAG, "Navigation command detected")
@@ -419,7 +397,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             speak("Resuming.") { resumeWakeWord() }
             return
         }
-
         // ── 4c. Audiobook via Voice app ──────────────────────────────────────────────
         if (musicHandler.isBookCommand(c)) {
             speak("Opening your audiobook.") {
@@ -427,7 +404,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 4d. Music playback via VLC ────────────────────────────────────────────────
         if (musicHandler.isMusicCommand(c)) {
             speak("Searching your music library.") {
@@ -435,13 +411,16 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 4e. Read notifications ───────────────────────────────────────────────────────
         if (notifReaderHandler.isReadNotificationsCommand(c)) {
             startNotificationReading()
             return
         }
-
+        // ── 4f. Read unread emails only ─────────────────────────────────────
+        if (notifReaderHandler.isReadEmailCommand(c)) {
+            startEmailReading()
+            return
+        }
         // ── 4. Built-in: "what apps can you talk to?" ───────────────────────
         if (c.contains("what apps") || c.contains("which apps") || c.contains("who can you talk to")) {
             commandRouter.refreshApps()
@@ -454,7 +433,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             speak(text) { resumeWakeWord() }
             return
         }
-
         // ── 3. Built-in: help ────────────────────────────────────────────────
         if (c.contains("what can you do") || c.contains("help") || c.contains("available commands")) {
             commandRouter.refreshApps()
@@ -462,12 +440,11 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             val appList = if (names.isNotEmpty()) {
                 " I can also talk to ${names.joinToString(", ")}. Say the app name in your command."
             } else ""
-            speak("Here is what I can do. Navigation: say navigate to, or directions to, followed by a destination. Say stop navigation to end. Weather: say weather in a city, or what is the weather. Drive time: say how long to, followed by a destination. Music: say play music followed by a song or artist. Say resume to continue paused media. Audiobooks: say listen to book or open voice. Notifications: say read my notifications. Then say skip, next, reply, dismiss, or stop. Stock prices: say price of gold, bitcoin, or any ticker. General questions: ask any what, who, where, when, or how question. Apps: say open or close followed by an app name.$appList") {
+            speak("Here is what I can do. Navigation: say navigate to, or directions to, followed by a destination. Say stop navigation to end. Weather: say weather in a city, or what is the weather. Drive time: say how long to, followed by a destination. Music: say play music followed by a song or artist. Say resume to continue paused media. Audiobooks: say listen to book or open voice. Notifications and Email: say read my notifications, or read my email. Then say skip, reply, repeat, dismiss, or stop. Stock prices: say price of gold, bitcoin, or any ticker. General questions: ask any what, who, where, when, or how question. Apps: say open or close followed by an app name.$appList") {
                 resumeWakeWord()
             }
             return
         }
-
         // ── 4a. Built-in: "close <app>" / "quit <app>" / "kill <app>" ──────────
         if (c.contains("close ") || c.contains("quit ") || c.contains("kill ")) {
             val appName = c
@@ -478,7 +455,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 return
             }
         }
-
         // ── 4. Built-in: "open <app>" / "launch <app>" ───────────────────────
         if (c.contains("open ") || c.contains("launch ") || c.contains("start ")) {
             val appName = c
@@ -522,7 +498,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 return
             }
         }
-
         // ── 5. Built-in: "give me commands in <app>" / "what can <app> do?" ─
         if (c.contains("commands in") || c.contains("what can") && c.contains("do")) {
             commandRouter.refreshApps()
@@ -535,7 +510,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-
         // ── 6. Try cross-app routing via CommandRouter ───────────────────────
         val routeResult = commandRouter.route(command)
         if (routeResult != null) {
@@ -573,17 +547,25 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
+        // ── 8. Just an app name with no command — re-listen ─────────────────
+        val appMatch = commandRouter.findAppByName(c)
+        if (appMatch != null) {
+            Log.d(TAG, "App name only (\"${appMatch.label}\") — re-listening for command")
+            speak("What would you like ${appMatch.label} to do?") {
+                startSttOneShot(commandPrefix = appMatch.labelLower)
+            }
+            return
+        }
 
-        // ── 8. No app matched — tell the user ────────────────────────────────
+        // ── 9. No app matched — tell the user ────────────────────────────────
         Log.d(TAG, "No app matched for: \"$command\"")
         speak("Sorry, I don't know how to handle that. Say open and an app name, or try an assistant command.") {
             resumeWakeWord()
         }
     }
-
     // ── Notification reading ───────────────────────────────────────────────
-
     private fun startNotificationReading() {
+        Log.d(TAG, "startNotificationReading()")
         notifReaderList  = notifReaderHandler.fetchNotifications()
         notifReaderIndex = 0
         if (notifReaderList.isEmpty()) {
@@ -593,67 +575,89 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         notifReaderActive = true
         val count = notifReaderList.size
         val countSuffix = if (count > 1) "s" else ""
-        speak("You have $count notification$countSuffix.") { readCurrentNotification() }
+        speak("You have $count notification$countSuffix.", bargeIn = false) { readCurrentNotification() }
+    }
+
+    private fun startEmailReading() {
+        Log.d(TAG, "startEmailReading()")
+        notifReaderList  = notifReaderHandler.fetchEmailNotifications()
+        notifReaderIndex = 0
+        if (notifReaderList.isEmpty()) {
+            speak("You have no unread emails.") { resumeWakeWord() }
+            return
+        }
+        notifReaderActive = true
+        val count = notifReaderList.size
+        val countSuffix = if (count > 1) "s" else ""
+        speak("You have $count unread email$countSuffix.", bargeIn = false) { readCurrentNotification() }
     }
 
     private fun readCurrentNotification() {
+        Log.d(TAG, "readCurrentNotification() index=$notifReaderIndex/${notifReaderList.size}")
         if (notifReaderIndex >= notifReaderList.size) {
+            Log.d(TAG, "notifReader: all done, no more notifications")
             notifReaderActive = false
-            speak("No more notifications.") { resumeWakeWord() }
+            speak("No more notifications.", bargeIn = false) { resumeWakeWord() }
             return
         }
         val item   = notifReaderList[notifReaderIndex]
         val text   = notifReaderHandler.formatForSpeech(item, notifReaderIndex + 1, notifReaderList.size)
         val prompt = notifReaderHandler.promptForCommands(item)
-        speak("$text. $prompt") { startSttOneShot() }
+        speak("$text. $prompt", bargeIn = false) { startSttOneShot() }
     }
-
     private fun handleNotifReaderCommand(c: String) {
+        Log.d(TAG, "handleNotifReaderCommand(\"$c\") index=$notifReaderIndex/${notifReaderList.size}")
         val item = notifReaderList.getOrNull(notifReaderIndex)
         when {
             notifReaderHandler.isStopCommand(c) -> {
+                Log.d(TAG, "notifReader: STOP command")
                 notifReaderActive = false
-                speak("Done reading notifications.") { resumeWakeWord() }
+                speak("Done reading notifications.", bargeIn = false) { resumeWakeWord() }
             }
             notifReaderHandler.isSkipCommand(c) -> {
+                Log.d(TAG, "notifReader: SKIP → index=${notifReaderIndex + 1}")
                 notifReaderIndex++
                 readCurrentNotification()
             }
             notifReaderHandler.isDismissCommand(c) -> {
+                Log.d(TAG, "notifReader: DISMISS key=${item?.key}")
                 if (item != null) notifReaderHandler.dismiss(item.key)
                 notifReaderIndex++
-                speak("Dismissed.") { readCurrentNotification() }
+                speak("Dismissed.", bargeIn = false) { readCurrentNotification() }
             }
             notifReaderHandler.isReplyCommand(c) -> {
+                Log.d(TAG, "notifReader: REPLY (hasReplyAction=${item?.hasReplyAction})")
                 if (item == null || !item.hasReplyAction) {
-                    speak("This notification doesn't support replies. Say skip or dismiss.") { startSttOneShot() }
+                    speak("This notification doesn't support replies. Say skip or dismiss.", bargeIn = false) { startSttOneShot() }
                 } else {
                     notifReaderAwaitingReply = true
-                    speak("What would you like to say?") { startSttOneShot() }
+                    speak("What would you like to say?", bargeIn = false) { startSttOneShot() }
                 }
             }
-            notifReaderHandler.isRepeatCommand(c) -> readCurrentNotification()
+            notifReaderHandler.isRepeatCommand(c) -> {
+                Log.d(TAG, "notifReader: REPEAT")
+                readCurrentNotification()
+            }
             else -> {
+                Log.d(TAG, "notifReader: UNRECOGNIZED command \"$c\"")
                 val hint = if (item?.hasReplyAction == true)
-                    "Say skip, reply, dismiss, or stop."
-                else "Say skip, dismiss, or stop."
-                speak(hint) { startSttOneShot() }
+                    "Say skip, reply, repeat, dismiss, or stop."
+                else "Say skip, repeat, dismiss, or stop."
+                speak(hint, bargeIn = false) { startSttOneShot() }
             }
         }
     }
-
     private fun handleNotifReplyText(replyText: String) {
+        Log.d(TAG, "handleNotifReplyText() len=${replyText.length}")
         notifReaderAwaitingReply = false
         val item = notifReaderList.getOrNull(notifReaderIndex)
         if (item == null) { notifReaderActive = false; resumeWakeWord(); return }
         val sent = notifReaderHandler.sendReply(item.key, replyText)
         notifReaderIndex++
         val replyMsg = if (sent) "Sent: $replyText." else "Couldn't send the reply. Moving on."
-        speak(replyMsg) { readCurrentNotification() }
+        speak(replyMsg, bargeIn = false) { readCurrentNotification() }
     }
-
     // ── App launcher ─────────────────────────────────────────────────────────
-
     /**
      * Fuzzy-match an app name from the user's speech against installed apps
      * and launch it.  Uses Levenshtein distance for tolerance.
@@ -663,27 +667,22 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         val launchableApps = pm.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
         )
-
         data class Match(val label: String, val packageName: String, val distance: Int)
         val target = spokenName.lowercase(Locale.getDefault())
-
         val matches = launchableApps.mapNotNull { ri ->
             val label = ri.loadLabel(pm).toString()
             val labelLower = label.lowercase(Locale.getDefault())
-
             // Exact substring match gets distance 0
             val dist = if (labelLower.contains(target) || target.contains(labelLower)) {
                 0
             } else {
                 levenshtein(target, labelLower)
             }
-
             // Only consider reasonable matches (distance <= 40% of target length)
             if (dist <= (target.length * 0.4).toInt().coerceAtLeast(3)) {
                 Match(label, ri.activityInfo.packageName, dist)
             } else null
         }.sortedBy { it.distance }
-
         val best = matches.firstOrNull()
         if (best != null) {
             val launchIntent = pm.getLaunchIntentForPackage(best.packageName)
@@ -700,7 +699,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             speak("I couldn't find an app called $spokenName.") { resumeWakeWord() }
         }
     }
-
     /**
      * Fuzzy-match an app by name, dismiss it to the home screen, then kill it.
      * killBackgroundProcesses only works on background processes, so we first
@@ -713,10 +711,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         val launchableApps = pm.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
         )
-
         data class Match(val label: String, val packageName: String, val distance: Int)
         val target = spokenName.lowercase(Locale.getDefault())
-
         val matches = launchableApps.mapNotNull { ri ->
             val label = ri.loadLabel(pm).toString()
             val labelLower = label.lowercase(Locale.getDefault())
@@ -726,36 +722,30 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 Match(label, ri.activityInfo.packageName, dist)
             else null
         }.sortedBy { it.distance }
-
         val best = matches.firstOrNull()
         if (best == null) {
             speak("I couldn't find an app called $spokenName.") { resumeWakeWord() }
             return
         }
-
         Log.d(TAG, "Closing app: ${best.label} (${best.packageName})")
-
         val navPackages = setOf(
             "com.google.android.apps.maps",
             "net.osmand", "net.osmand.plus", "net.osmand.dev",
             "app.organicmaps", "app.organicmaps.debug"
         )
         val isNavApp = best.packageName in navPackages
-
         speak("Closing ${best.label}.") {
             if (isNavApp) {
                 // Fire the notification Stop action — ends turn-by-turn guidance.
                 com.silentpulse.messenger.feature.drivemode.SilentPulseNotificationListener
                     .fireStopNavAction(best.packageName)
             }
-
             // Go home — pushes whatever is foreground to the background.
             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             try { startActivity(homeIntent) } catch (_: Exception) {}
-
             // Attempt background kill for all apps after the home transition.
             // Works for most apps; silently no-ops for system-protected ones (e.g. Google Maps).
             android.os.Handler(mainLooper).postDelayed({
@@ -763,11 +753,9 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 am?.killBackgroundProcesses(best.packageName)
                 Log.d(TAG, "killBackgroundProcesses attempted for ${best.packageName}")
             }, 800)
-
             resumeWakeWord()
         }
     }
-
     private fun levenshtein(a: String, b: String): Int {
         val dp = Array(a.length + 1) { IntArray(b.length + 1) }
         for (i in 0..a.length) dp[i][0] = i
@@ -780,9 +768,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         }
         return dp[a.length][b.length]
     }
-
     // ── TTS helper ────────────────────────────────────────────────────────────
-
     /**
      * Speak [text] and optionally run [onDone] when the utterance finishes.
      *
@@ -794,9 +780,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private fun speak(text: String, bargeIn: Boolean = true, onDone: (() -> Unit)? = null) {
         if (!ttsReady) {
             onDone?.invoke()
-            return
         }
-
         // Detect language via Unicode script ranges — zero external deps
         val detectedLocale = detectLocaleByScript(text)
         if (detectedLocale != null) {
@@ -813,7 +797,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         }
         speakInternal(text, bargeIn, onDone)
     }
-
     /**
      * Detect the primary language from Unicode script ranges.
      * Returns a [Locale] for the dominant non-Latin script, or null if Latin/ASCII
@@ -854,11 +837,11 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             else                    -> null // Latin or mixed — keep English
         }
     }
-
     /** Speak after language has been detected and set. */
     private fun speakInternal(text: String, bargeIn: Boolean, onDone: (() -> Unit)?) {
+        val preview = if (text.length > 80) text.take(80) + "…" else text
+        Log.d(TAG, "TTS speak (bargeIn=$bargeIn): \"$preview\"")
         val utteranceId = UUID.randomUUID().toString()
-
         // Barge-in: run Vosk stop-listener while TTS is speaking
         if (bargeIn) {
             wakeWordDetector?.startStopListening {
@@ -874,11 +857,11 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 }
             }
         }
-
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
             override fun onDone(id: String?) {
                 if (id == utteranceId) {
+                    Log.d(TAG, "TTS utterance done")
                     wakeWordDetector?.stopStopListening()
                     onDone?.invoke()
                 }
@@ -886,6 +869,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) {
                 if (id == utteranceId) {
+                    Log.w(TAG, "TTS utterance ERROR")
                     wakeWordDetector?.stopStopListening()
                     onDone?.invoke()
                 }
@@ -893,7 +877,6 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         })
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
-
     /**
      * Enqueue a TTS utterance after whatever is already playing (QUEUE_ADD).
      * Use this for corridor weather so each city is spoken in sequence

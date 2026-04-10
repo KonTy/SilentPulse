@@ -277,6 +277,21 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
+        <!-- Drive Mode control widget: ON / OFF / STOP -->
+        <receiver
+            android:name=".feature.drivemode.DriveModeWidgetProvider"
+            android:exported="true"
+            android:label="Drive Mode Control">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.silentpulse.messenger.DRIVE_MODE_ON" />
+                <action android:name="com.silentpulse.messenger.DRIVE_MODE_OFF" />
+                <action android:name="com.silentpulse.messenger.DRIVE_MODE_STOP" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_drive_mode_info" />
+        </receiver>
         <receiver
             android:name=".receiver.SendSmsReceiver"
             android:exported="false" />

@@ -121,6 +121,7 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
     }
 
     override fun stopListening() {
+        Timber.d("AndroidSTT: stopListening()")
         // Null callbacks immediately (on caller's thread) so any in-flight
         // continuation-window results/errors are silently dropped.
         savedOnResult = null
@@ -133,6 +134,7 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
     }
 
     override fun shutdown() {
+        Timber.d("AndroidSTT: shutdown()")
         mainHandler.post {
             listening = false
             cancelPendingSubmit()
@@ -197,6 +199,7 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
                 if (error == SpeechRecognizer.ERROR_CLIENT ||
                     error == SpeechRecognizer.ERROR_AUDIO ||
                     code.startsWith("unknown_error")) {
+                    Timber.w("AndroidSTT: destroying recognizer after fatal error $error")
                     try { recognizer?.destroy() } catch (_: Exception) {}
                     recognizer = null
                 }
