@@ -58,6 +58,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private lateinit var stockQueryHandler: StockQueryHandler
     private lateinit var musicHandler: MusicCommandHandler
     private lateinit var notifReaderHandler: NotificationReaderHandler
+    private lateinit var timeHandler: TimeHandler
 
     // ── Notification reading state ─────────────────────────────────────────
     private var notifReaderActive           = false
@@ -133,6 +134,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         stockQueryHandler  = StockQueryHandler(applicationContext)
         musicHandler       = MusicCommandHandler(applicationContext)
         notifReaderHandler = NotificationReaderHandler(applicationContext)
+        timeHandler        = TimeHandler()
         val filter = IntentFilter().apply {
             addAction(CommandRouter.ACTION_TTS_REPLY)
             addAction(CommandRouter.ACTION_REPORT_SCHEMA)
@@ -343,7 +345,14 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-        // ── 2. Built-in: weather queries ─────────────────────────────────
+        // ── 2. Built-in: time queries ──────────────────────────────────
+        if (timeHandler.isTimeCommand(c)) {
+            Log.d(TAG, "Time command detected")
+            val response = timeHandler.getTimeResponse(command)
+            speak(response) { resumeWakeWord() }
+            return
+        }
+        // ── 3. Built-in: weather queries ─────────────────────────────────
         if (weatherHandler.isWeatherCommand(c)) {
             Log.d(TAG, "Weather command detected")
             val isCorridorQuery = Regex("(?:along|on)\\s+i-?\\d+").containsMatchIn(c)
