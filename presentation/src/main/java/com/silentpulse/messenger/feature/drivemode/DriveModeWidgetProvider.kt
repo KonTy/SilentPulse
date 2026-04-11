@@ -44,6 +44,8 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
             "com.silentpulse.messenger.NEXT_NOTIFICATION"
         private const val ACTION_TOGGLE_VOICE_AST =
             "com.silentpulse.messenger.TOGGLE_VOICE_AST"
+        private const val ACTION_STOP_SPEAKING =
+            WidgetPrefs.ACTION_STOP_SPEAKING
 
         /** Push all live widget instances to re-draw from current prefs. */
         fun refreshAll(context: Context) {
@@ -79,6 +81,7 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
             ACTION_TOGGLE_NOTIF_READER       -> handleToggleNotifReader(context)
             ACTION_NEXT_NOTIF                -> handleNextNotif(context)
             ACTION_TOGGLE_VOICE_AST          -> handleToggleVoiceAst(context)
+            ACTION_STOP_SPEAKING             -> handleStopSpeaking(context)
             // QS tile or in-app toggle changed state — redraw the widget too
             WidgetPrefs.ACTION_STATE_CHANGED -> refreshAll(context)
         }
@@ -122,6 +125,13 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
             speakOnce(context, "Voice assistant off.")
         }
         notifyAndRefresh(context)
+    }
+
+    private fun handleStopSpeaking(context: Context) {
+        Timber.d("DriveModeWidget: stop speaking")
+        context.sendBroadcast(
+            Intent(WidgetPrefs.ACTION_STOP_SPEAKING).apply { setPackage(context.packageName) }
+        )
     }
 
     private fun notifyAndRefresh(context: Context) {
@@ -193,6 +203,13 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         views.setFloat(R.id.btn_voice_ast, "setAlpha", if (voiceOn) 1.0f else 0.4f)
         views.setOnClickPendingIntent(R.id.btn_voice_ast,
             pendingBroadcast(context, ACTION_TOGGLE_VOICE_AST))
+
+        // Slot 4 — Stop Speaking (always active, no on/off state)
+        views.setImageViewResource(R.id.btn_stop_speaking, R.drawable.ic_cancel_black_24dp)
+        views.setInt(R.id.btn_stop_speaking, "setColorFilter", iconColor)
+        views.setFloat(R.id.btn_stop_speaking, "setAlpha", 1.0f)
+        views.setOnClickPendingIntent(R.id.btn_stop_speaking,
+            pendingBroadcast(context, ACTION_STOP_SPEAKING))
 
         manager.updateAppWidget(widgetId, views)
     }

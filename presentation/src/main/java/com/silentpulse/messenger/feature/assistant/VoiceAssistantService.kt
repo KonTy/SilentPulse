@@ -148,6 +148,15 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         }
     }
+
+    // ── Broadcast receiver for widget "Stop speaking" button ──────────────────
+    private val stopSpeakingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != WidgetPrefs.ACTION_STOP_SPEAKING) return
+            Log.d(TAG, "stopSpeakingReceiver: stopping TTS")
+            if (ttsReady) tts.stop()
+        }
+    }
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onCreate() {
         super.onCreate()
@@ -182,6 +191,11 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         androidx.core.content.ContextCompat.registerReceiver(
             this, nextNotifReceiver,
             IntentFilter(WidgetPrefs.ACTION_NEXT_NOTIFICATION),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, stopSpeakingReceiver,
+            IntentFilter(WidgetPrefs.ACTION_STOP_SPEAKING),
             androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         initSttEngine()
@@ -253,6 +267,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(nextNotifReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(stopSpeakingReceiver) } catch (_: Exception) {}
         webAiSearchScraper.destroy()
     }
     // ── Vosk model init ───────────────────────────────────────────────────────

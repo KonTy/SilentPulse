@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  3×1 home-screen AppWidget — icons only, no text labels.
+  4×1 home-screen AppWidget — icons only, no text labels.
 
-  Slot 1 (btn_notif_reader): Notification Reader toggle
-  Slot 2 (btn_next_notif):   Jump to next notification
-  Slot 3 (btn_voice_ast):    Voice Assistant toggle
+  Slot 1 (btn_notif_reader):   Notification Reader toggle
+  Slot 2 (btn_next_notif):     Jump to next notification
+  Slot 3 (btn_voice_ast):      Voice Assistant toggle
+  Slot 4 (btn_stop_speaking):  Interrupt / stop current TTS immediately
 
   Icons and alpha are set dynamically in DriveModeWidgetProvider.
 -->
@@ -49,6 +50,18 @@
         android:src="@drawable/ic_mic_black_24dp"
         android:background="@android:color/transparent"
         android:contentDescription="Toggle Voice Assistant"
+        android:scaleType="centerInside"
+        android:padding="10dp" />
+
+    <!-- Slot 4: Stop speaking — interrupt TTS immediately -->
+    <ImageButton
+        android:id="@+id/btn_stop_speaking"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:src="@drawable/ic_cancel_black_24dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Stop Speaking"
         android:scaleType="centerInside"
         android:padding="10dp" />
 

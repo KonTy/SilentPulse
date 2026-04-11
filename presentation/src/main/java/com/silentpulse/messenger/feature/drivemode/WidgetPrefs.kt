@@ -43,6 +43,12 @@ object WidgetPrefs {
      */
     const val ACTION_NEXT_NOTIFICATION = "com.silentpulse.messenger.NEXT_NOTIFICATION"
 
+    /**
+     * Broadcast action sent by the widget's "Stop speaking" button.
+     * [VoiceAssistantService] receives this and immediately calls [TextToSpeech.stop].
+     */
+    const val ACTION_STOP_SPEAKING = "com.silentpulse.messenger.STOP_SPEAKING"
+
     fun getPrefs(ctx: Context) = ctx.getSharedPreferences(
         "${ctx.packageName}$PREFS_SUFFIX", Context.MODE_PRIVATE
     )
