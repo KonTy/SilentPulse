@@ -114,7 +114,7 @@ class DriveModeService : NotificationListenerService() {
         val textToSpeak = buildString {
             append("Message from $sender. ")
             append(messageBody)
-            append(". Say reply, repeat, or stop.")
+            append(". Say reply, delete, or repeat.")
         }
 
         // Store notification context for potential voice reply
@@ -224,18 +224,20 @@ class DriveModeService : NotificationListenerService() {
 
                 val lower = recognizedText.lowercase()
                 when {
-                    // ── Stop: leave notification as-is, stop prompting ───────
-                    lower.contains("stop") || lower.contains("done") ||
-                    lower.contains("cancel") || lower.contains("enough") -> {
-                        Timber.d("Stop command — going idle, notification preserved")
+                    // ── Delete: dismiss the notification and go idle ──────────
+                    lower.contains("delete") -> {
+                        val ctx = voiceCommandProcessor.getCurrentContext()
+                        if (ctx != null) {
+                            SilentPulseNotificationListener.sInstance
+                                ?.dismissNotification(ctx.notificationKey)
+                            Timber.d("Delete command — notification dismissed")
+                        }
                         isProcessing = false
                         updateNotification("Drive Mode Active")
-                        // No further action — notification stays for manual reading
                     }
 
-                    // ── Repeat: re-read current message, then listen again (capped at MAX_REPEATS) ───
-                    lower.contains("repeat") || lower.contains("read again") ||
-                    lower.contains("again") || lower.contains("say again") -> {
+                    // ── Repeat: re-read current message (capped at MAX_REPEATS) ──
+                    lower.contains("repeat") -> {
                         val ctx = voiceCommandProcessor.getCurrentContext()
                         if (ctx != null && currentMessageRepeatCount < MAX_REPEATS) {
                             currentMessageRepeatCount++
@@ -243,7 +245,7 @@ class DriveModeService : NotificationListenerService() {
                             val replayText = buildString {
                                 append("Message from ${ctx.sender}. ")
                                 append(ctx.messageBody)
-                                append(". Say reply, repeat, or stop.")
+                                append(". Say reply, delete, or repeat.")
                             }
                             ttsEngine?.speak(
                                 text = replayText,
@@ -256,7 +258,7 @@ class DriveModeService : NotificationListenerService() {
                                 }
                             )
                         } else {
-                            Timber.d("Repeat limit reached or no context — stopping")
+                            Timber.d("Repeat limit reached or no context — going idle")
                             isProcessing = false
                             updateNotification("Drive Mode Active")
                         }
@@ -313,7 +315,7 @@ class DriveModeService : NotificationListenerService() {
                 "and download a language pack for your language."
 
             code == "speech_timeout" || code == "no_match" ->
-                "I did not hear anything. Say reply, repeat, or stop."
+                "I did not hear anything. Say reply, delete, or repeat."
 
             code == "recognizer_busy" ->
                 "Speech recognizer is busy. Please try again in a moment."

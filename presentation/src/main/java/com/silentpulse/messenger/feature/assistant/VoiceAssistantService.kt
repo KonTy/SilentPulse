@@ -643,26 +643,16 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         Log.d(TAG, "handleNotifReaderCommand(\"$c\") index=$notifReaderIndex/${notifReaderList.size}")
         val item = notifReaderList.getOrNull(notifReaderIndex)
         when {
-            notifReaderHandler.isStopCommand(c) -> {
-                Log.d(TAG, "notifReader: STOP command")
-                notifReaderActive = false
-                speak("Done reading notifications.", bargeIn = false) { resumeWakeWord() }
-            }
-            notifReaderHandler.isSkipCommand(c) -> {
-                Log.d(TAG, "notifReader: SKIP → index=${notifReaderIndex + 1}")
-                notifReaderIndex++
-                readCurrentNotification()
-            }
             notifReaderHandler.isDismissCommand(c) -> {
-                Log.d(TAG, "notifReader: DISMISS key=${item?.key}")
+                Log.d(TAG, "notifReader: DELETE key=${item?.key}")
                 if (item != null) notifReaderHandler.dismiss(item.key)
                 notifReaderIndex++
-                speak("Dismissed.", bargeIn = false) { readCurrentNotification() }
+                speak("Deleted.", bargeIn = false) { readCurrentNotification() }
             }
             notifReaderHandler.isReplyCommand(c) -> {
                 Log.d(TAG, "notifReader: REPLY (hasReplyAction=${item?.hasReplyAction})")
                 if (item == null || !item.hasReplyAction) {
-                    speak("This notification doesn't support replies. Say skip or dismiss.", bargeIn = false) { startSttOneShot() }
+                    speak("This notification doesn't support replies. Say delete or repeat.", bargeIn = false) { startSttOneShot() }
                 } else {
                     notifReaderAwaitingReply = true
                     speak("What would you like to say?", bargeIn = false) { startSttOneShot() }
@@ -675,8 +665,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             else -> {
                 Log.d(TAG, "notifReader: UNRECOGNIZED command \"$c\"")
                 val hint = if (item?.hasReplyAction == true)
-                    "Say skip, reply, repeat, dismiss, or stop."
-                else "Say skip, repeat, dismiss, or stop."
+                    "Say reply, delete, or repeat."
+                else "Say delete or repeat."
                 speak(hint, bargeIn = false) { startSttOneShot() }
             }
         }

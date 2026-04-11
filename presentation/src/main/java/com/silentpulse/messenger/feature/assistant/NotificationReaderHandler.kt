@@ -16,11 +16,9 @@ import com.silentpulse.messenger.feature.drivemode.SilentPulseNotificationListen
  *   - "read alerts" / "check alerts"
  *
  * ## Per-notification commands (spoken after each one is read)
- *   - **skip / next** — move to the next notification
- *   - **dismiss** — cancel the notification, move to next
+ *   - **delete** — dismiss the notification and move to the next one
  *   - **reply** — ask for reply text, send via RemoteInput inline reply
- *   - **read again / repeat** — re-read the current notification
- *   - **stop / done / quit / cancel** — stop reading and return to wake-word mode
+ *   - **repeat** — re-read the current notification
  *
  * ## State machine (owned by VoiceAssistantService)
  * The service holds three fields:
@@ -113,33 +111,22 @@ class NotificationReaderHandler(private val context: Context) {
      */
     fun promptForCommands(item: NotifSnapshot): String {
         return if (item.hasReplyAction) {
-            "Say skip, reply, repeat, dismiss, or stop."
+            "Say reply, delete, or repeat."
         } else {
-            "Say skip, repeat, dismiss, or stop."
+            "Say delete or repeat."
         }
     }
 
     // ── Per-notification command matching ─────────────────────────────────────
 
-    fun isSkipCommand(c: String): Boolean =
-        c.contains("skip") || c.contains("next") ||
-        c == "pass" || c == "move on" || c.contains("move to next")
-
     fun isDismissCommand(c: String): Boolean =
-        c.contains("dismiss") || c.contains("clear") ||
-        c.contains("remove") || c.contains("delete")
+        c.contains("delete")
 
     fun isReplyCommand(c: String): Boolean =
-        c.contains("reply") || c.contains("respond") || c.contains("answer")
+        c.contains("reply")
 
     fun isRepeatCommand(c: String): Boolean =
-        c.contains("read again") || c.contains("repeat") || c.contains("again")
-
-    fun isStopCommand(c: String): Boolean =
-        c.contains("stop") || c.contains("done") ||
-        c.contains("quit") || c.contains("exit") || c.contains("cancel") ||
-        c.contains("that's all") || c.contains("thats all") ||
-        c == "enough"
+        c.contains("repeat")
 
     // ── Inline reply / dismiss delegation ─────────────────────────────────────
 
