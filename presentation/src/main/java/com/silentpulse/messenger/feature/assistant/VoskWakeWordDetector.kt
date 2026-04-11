@@ -192,12 +192,13 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
 
     /**
      * Parse the JSON hypothesis from the recognizer and check for "computer".
-     * Grammar constrains output to ONLY "computer" or "[unk]", so exact match
-     * is safe.  Two-phase confirmation reduces false positives:
-     *   1. Partial "computer" → arms the detector (primes it).
-     *   2. Final/result "computer" with conf ≥ MIN_CONFIDENCE → fires.
-     * If the final comes back as "[unk]", or the final "computer" is low-confidence,
-     * the prime is cleared and we wait for the next partial.
+     * Two-phase detection:
+     *   1. Partial matching wake word → arms the detector (primes it).
+     *   2a. Final matching wake word  → fires (high confidence path).
+     *   2b. Final "[unk]" while primed → also fires.
+     *       Some words (e.g. "bubblegum") only appear in partials; the
+     *       grammar decoder finalises them as "[unk]".  The partial IS the
+     *       acoustic confirmation, so we trust the prime and fire on "[unk]".
      * Cooldown prevents rapid re-triggering.
      */
     private fun checkForWakeWord(hypothesis: String, partial: Boolean) {
@@ -206,7 +207,6 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             val now  = System.currentTimeMillis()
 
             if (partial) {
-                // Partial: "computer" arms the detector — no actual trigger yet.
                 val text = json.optString("partial", "").trim()
                 if (text.equals(wakeWord, ignoreCase = true)) {
                     if (!wakeWordPrimed) {
@@ -215,7 +215,6 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                     wakeWordPrimed = true
                     primedAtMs    = now
                 } else {
-                    // Any other partial clears the prime.
                     wakeWordPrimed = false
                 }
                 return
@@ -224,14 +223,18 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             // ── Final / result ────────────────────────────────────────────────
             val text = json.optString("text", "").trim()
 
-            // Expire stale primes (e.g., Vosk gave a late final after a long pause)
+            // Expire stale primes
             if (wakeWordPrimed && now - primedAtMs > 3_000L) {
                 Log.d("SP_WAKE", "[STALE-PRIME] discarded after ${now - primedAtMs}ms")
                 wakeWordPrimed = false
             }
 
-            if (!text.equals(wakeWord, ignoreCase = true)) {
-                // "[unk]" or empty → clear prime
+            val isWakeWord = text.equals(wakeWord, ignoreCase = true)
+            val isUnk      = text.equals("[unk]", ignoreCase = true) || text.isEmpty()
+
+            // Fire if: word confirmed in final, OR primed and final is [unk]
+            // (some words only appear in partials; [unk] final + prime = trusted hit)
+            if (!isWakeWord && !(isUnk && wakeWordPrimed)) {
                 wakeWordPrimed = false
                 return
             }
