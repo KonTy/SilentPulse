@@ -90,9 +90,10 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
     // ── Action handlers ───────────────────────────────────────────────────────
 
     private fun handleToggleNotifReader(context: Context) {
-        val nowEnabled = !WidgetPrefs.isNotifReaderEnabled(context)
+        val isCurrentlyRunning = isServiceRunning(context, DriveModeMicService::class.java)
+        val nowEnabled = !isCurrentlyRunning
         WidgetPrefs.setNotifReader(context, nowEnabled)
-        Timber.d("DriveModeWidget: notif reader → $nowEnabled")
+        Timber.d("DriveModeWidget: notif reader → $nowEnabled (was running=$isCurrentlyRunning)")
         if (nowEnabled) {
             DriveModeMicService.start(context)
             speakOnce(context, "Notification reader on.")
@@ -112,9 +113,14 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
     }
 
     private fun handleToggleVoiceAst(context: Context) {
-        val nowEnabled = !WidgetPrefs.isVoiceAstEnabled(context)
+        // Use the live service state as the source of truth, not the pref.
+        // The pref can be stale when the service was killed by the system
+        // (e.g. low memory), meaning one tap would "toggle to off" an already-
+        // stopped service — appearing to do nothing — requiring a second tap.
+        val isCurrentlyRunning = isServiceRunning(context, VoiceAssistantService::class.java)
+        val nowEnabled = !isCurrentlyRunning
         WidgetPrefs.setVoiceAst(context, nowEnabled)
-        Timber.d("DriveModeWidget: voice ast → $nowEnabled")
+        Timber.d("DriveModeWidget: voice ast → $nowEnabled (was running=$isCurrentlyRunning)")
         val svc = Intent(context, VoiceAssistantService::class.java)
         if (nowEnabled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(svc)
