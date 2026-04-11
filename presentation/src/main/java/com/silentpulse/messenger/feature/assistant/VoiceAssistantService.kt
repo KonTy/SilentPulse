@@ -162,8 +162,16 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private val stopSpeakingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != WidgetPrefs.ACTION_STOP_SPEAKING) return
-            Log.d(TAG, "stopSpeakingReceiver: stopping TTS")
+            Log.d(TAG, "stopSpeakingReceiver: stopping TTS + resuming wake word")
             if (ttsReady) tts.stop()
+            // tts.stop() silently discards the pending onDone callback, so the
+            // wake word listener would never restart without this explicit call.
+            // Also reset any in-flight workflow state so we don't resume mid-flow.
+            confirmWorkflow?.reset()
+            confirmWorkflow = null
+            smsReadingList = emptyList()
+            smsReadingIndex = 0
+            mainHandler.post { resumeWakeWord() }
         }
     }
     // ── Lifecycle ─────────────────────────────────────────────────────────────

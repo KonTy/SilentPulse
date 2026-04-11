@@ -824,6 +824,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             ttsEngine?.stop()
             stopListeningNow()
             pendingNotification = null
+            confirmWorkflow = null
             listenState = ListenState.IDLE
             totalVoiceAttempts = 0
         }

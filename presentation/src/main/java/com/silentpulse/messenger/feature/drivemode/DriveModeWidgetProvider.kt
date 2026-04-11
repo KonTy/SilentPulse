@@ -129,6 +129,9 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
 
     private fun handleStopSpeaking(context: Context) {
         Timber.d("DriveModeWidget: stop speaking")
+        // Stop notification listener TTS/STT if it's active
+        SilentPulseNotificationListener.sInstance?.stopReading()
+        // Stop VoiceAssistantService TTS (receiver also calls resumeWakeWord)
         context.sendBroadcast(
             Intent(WidgetPrefs.ACTION_STOP_SPEAKING).apply { setPackage(context.packageName) }
         )
