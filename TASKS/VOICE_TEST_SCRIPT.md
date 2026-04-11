@@ -6,7 +6,7 @@ A ❌ means "wrong answer, silence, or crash — investigate before shipping."
 
 Log monitor to run in parallel:
 ```
-adb logcat -s WebAiScraper:V VoiceAssistantService:D GeneralQuery:D BraveSearch:D SP_ROUTE:V
+adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D ConfirmSend:D SmsHandler:D
 ```
 
 ---

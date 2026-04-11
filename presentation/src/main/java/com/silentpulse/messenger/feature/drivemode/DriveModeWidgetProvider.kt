@@ -165,9 +165,12 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         // stale after a force-kill (e.g. adb install doesn't call onDestroy).
         val notifOn = isServiceRunning(context, DriveModeMicService::class.java)
         val voiceOn = isServiceRunning(context, VoiceAssistantService::class.java)
-        // Keep prefs in sync so QS tiles and other surfaces see the correct value.
+        // Correct the notif-reader pref if stale (safe — not observed reactively by any component).
+        // Do NOT correct the voiceAst pref here: it is bound to a reactive SharedPreference
+        // observable in AssistantPresenter. Writing false would cascade through AssistantController's
+        // wakeWordSwitch observer and call stopService(VoiceAssistantService) — killing the assistant
+        // just because the widget happened to redraw while DriveModeMicService was stopping.
         if (notifOn != WidgetPrefs.isNotifReaderEnabled(context)) WidgetPrefs.setNotifReader(context, notifOn)
-        if (voiceOn != WidgetPrefs.isVoiceAstEnabled(context))   WidgetPrefs.setVoiceAst(context, voiceOn)
         val views   = RemoteViews(context.packageName, R.layout.widget_drive_mode)
 
         // Tint icons white on dark launcher backgrounds, black on light ones

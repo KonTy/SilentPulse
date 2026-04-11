@@ -61,6 +61,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private lateinit var stockQueryHandler: StockQueryHandler
     private lateinit var musicHandler: MusicCommandHandler
     private lateinit var notifReaderHandler: NotificationReaderHandler
+    private lateinit var smsCommandHandler: SmsCommandHandler
     private lateinit var timeHandler: TimeHandler
 
     // ── Notification reading state ─────────────────────────────────────────
@@ -68,6 +69,14 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private var notifReaderAwaitingReply    = false
     private var notifReaderList: List<NotifSnapshot> = emptyList()
     private var notifReaderIndex            = 0
+
+    // ── SMS reading state ──────────────────────────────────────────────────
+    private var smsReadingList: List<SmsCommandHandler.SmsMessage> = emptyList()
+    private var smsReadingIndex = 0
+
+    // ── Compose / confirm-send workflow (reused for SMS + notif replies) ────────
+    /** Non-null while we are in the dictate→confirm loop. Takes priority over all routing. */
+    private var confirmWorkflow: ConfirmSendWorkflow? = null
 
     /**
      * Counts how many consecutive STT attempts returned an empty command
@@ -175,6 +184,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         stockQueryHandler  = StockQueryHandler(applicationContext)
         musicHandler       = MusicCommandHandler(applicationContext)
         notifReaderHandler = NotificationReaderHandler(applicationContext)
+        smsCommandHandler  = SmsCommandHandler(applicationContext)
         timeHandler        = TimeHandler()
         val filter = IntentFilter().apply {
             addAction(CommandRouter.ACTION_TTS_REPLY)
@@ -312,6 +322,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         Log.d(TAG, "Resuming Vosk wake word detection")
         isListening = false
         sttRetryCount = 0
+        confirmWorkflow?.reset()
+        confirmWorkflow = null
         wakeWordDetector?.resume()
     }
     // ── Phase 2: One-shot SpeechRecognizer (single beep, then done) ─────────
@@ -395,6 +407,14 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             android.util.Log.v("SP_ROUTE", "[ROUTE] transcript=\"$command\" knownApps=${commandRouter.getAppNames()}")
         }
         val c = command.lowercase(Locale.getDefault())
+        // ── 0a. Confirm-send workflow intercept ────────────────────────────────────
+        // Handles: notification reply confirmation, SMS compose confirmation.
+        // Must come before the notifReader block because the workflow replaces
+        // notifReaderAwaitingReply once the user has dictated the reply text.
+        if (confirmWorkflow?.isActive == true) {
+            confirmWorkflow!!.handleInput(command)
+            return
+        }
         // ── 0. Notification reading mode intercept ────────────────
         if (notifReaderActive) {
             if (notifReaderAwaitingReply) handleNotifReplyText(command)
@@ -504,6 +524,16 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             startEmailReading()
             return
         }
+        // ── 4g. Read unread SMS ──────────────────────────────────────────────
+        if (smsCommandHandler.isReadSmsCommand(c)) {
+            startSmsReading()
+            return
+        }
+        // ── 4h. Send SMS / text someone ──────────────────────────────────────
+        if (smsCommandHandler.isSendSmsCommand(c)) {
+            handleSendSmsCommand(c)
+            return
+        }
         // ── 4. Built-in: "what apps can you talk to?" ───────────────────────
         if (c.contains("what apps") || c.contains("which apps") || c.contains("who can you talk to")) {
             commandRouter.refreshApps()
@@ -523,7 +553,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             val appList = if (names.isNotEmpty()) {
                 " I can also talk to ${names.joinToString(", ")}. Say the app name in your command."
             } else ""
-            speak("Here is what I can do. Navigation: say navigate to, or directions to, followed by a destination. Say stop navigation to end. Weather: say weather in a city, or what is the weather. Drive time: say how long to, followed by a destination. Music: say play music followed by a song or artist. Say resume to continue paused media. Audiobooks: say listen to book or open voice. Notifications and Email: say read my notifications, or read my email. Then say skip, reply, repeat, dismiss, or stop. Stock prices: say price of gold, bitcoin, or any ticker. General questions: ask any what, who, where, when, or how question. Apps: say open or close followed by an app name.$appList") {
+            speak("Here is what I can do. Navigation: say navigate to, or directions to, followed by a destination. Say stop navigation to end. Weather: say weather in a city, or what is the weather. Drive time: say how long to, followed by a destination. Music: say play music followed by a song or artist. Say resume to continue paused media. Audiobooks: say listen to book or open voice. Notifications and Email: say read my notifications, or read my email. Then say skip, reply, repeat, dismiss, or stop. Messaging: say read my SMS or read my texts to hear unread messages. Say send text to a contact name, or text a contact name, to compose and send a message. Say reply when reading a notification to reply with voice confirmation. Stock prices: say price of gold, bitcoin, or any ticker. General questions: ask any what, who, where, when, or how question. Apps: say open or close followed by an app name.$appList") {
                 resumeWakeWord()
             }
             return
@@ -754,15 +784,94 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         }
     }
     private fun handleNotifReplyText(replyText: String) {
-        Log.d(TAG, "handleNotifReplyText() len=${replyText.length}")
+        Log.d(TAG, "handleNotifReplyText() starting confirm workflow len=${replyText.length}")
         notifReaderAwaitingReply = false
-        val item = notifReaderList.getOrNull(notifReaderIndex)
-        if (item == null) { notifReaderActive = false; resumeWakeWord(); return }
-        val sent = notifReaderHandler.sendReply(item.key, replyText)
-        notifReaderIndex++
-        val replyMsg = if (sent) "Sent: $replyText." else "Couldn't send the reply. Moving on."
-        speak(replyMsg) { readCurrentNotification() }
+        val item = notifReaderList.getOrNull(notifReaderIndex) ?: run {
+            notifReaderActive = false; resumeWakeWord(); return
+        }
+        // Run confirm-send workflow instead of sending immediately.
+        // The user already dictated the text; jump straight to the confirm prompt.
+        confirmWorkflow = ConfirmSendWorkflow(
+            speak   = ::speak,
+            startStt = ::startSttOneShot,
+            onSend  = { text ->
+                confirmWorkflow = null
+                val sent = notifReaderHandler.sendReply(item.key, text)
+                notifReaderIndex++
+                speak(if (sent) "Sent." else "Couldn't send the reply.") { readCurrentNotification() }
+            },
+            onCancel = {
+                confirmWorkflow = null
+                val prompt = notifReaderHandler.promptForCommands(item)
+                speak("Reply cancelled. $prompt") { startSttOneShot() }
+            }
+        )
+        confirmWorkflow!!.startWithText(item.title ?: "contact", replyText)
     }
+
+    // ── SMS helpers ───────────────────────────────────────────────────────────
+
+    /**
+     * Reads all unread SMS messages aloud one by one, then resumes wake word.
+     * No per-message voice commands (reading only — use "send text to [name]" to reply).
+     */
+    private fun startSmsReading() {
+        val messages = smsCommandHandler.fetchUnreadSms()
+        if (messages.isEmpty()) {
+            speak("You have no unread text messages.") { resumeWakeWord() }
+            return
+        }
+        smsReadingList  = messages
+        smsReadingIndex = 0
+        val count = messages.size
+        val s = if (count > 1) "s" else ""
+        speak("You have $count unread text message$s.") { readNextSms() }
+    }
+
+    private fun readNextSms() {
+        if (smsReadingIndex >= smsReadingList.size) {
+            speak("No more messages.") { resumeWakeWord() }
+            return
+        }
+        val msg  = smsReadingList[smsReadingIndex++]
+        val text = smsCommandHandler.formatSmsForSpeech(msg, smsReadingIndex, smsReadingList.size)
+        speak(text) { readNextSms() }
+    }
+
+    /**
+     * Resolves the contact from [command], then starts a [ConfirmSendWorkflow]
+     * that asks the user to dictate and confirm the message before sending.
+     */
+    private fun handleSendSmsCommand(command: String) {
+        val recipientName = smsCommandHandler.extractRecipientName(command)
+        if (recipientName.isBlank()) {
+            speak("Who would you like to message?") { resumeWakeWord() }
+            return
+        }
+        val contact = smsCommandHandler.resolveContact(recipientName)
+        if (contact == null) {
+            speak("I couldn't find $recipientName in your contacts.") { resumeWakeWord() }
+            return
+        }
+        Log.d(TAG, "handleSendSmsCommand: resolved \"$recipientName\" → ${contact.name} (${contact.number})")
+        confirmWorkflow = ConfirmSendWorkflow(
+            speak    = ::speak,
+            startStt = ::startSttOneShot,
+            onSend   = { text ->
+                confirmWorkflow = null
+                val sent = smsCommandHandler.sendSms(contact.number, text)
+                speak(if (sent) "Message sent to ${contact.name}." else "Failed to send the message.") {
+                    resumeWakeWord()
+                }
+            },
+            onCancel = {
+                confirmWorkflow = null
+                speak("Message cancelled.") { resumeWakeWord() }
+            }
+        )
+        confirmWorkflow!!.start(contact.name, "What would you like to say to ${contact.name}?")
+    }
+
     // ── App launcher ─────────────────────────────────────────────────────────
     /**
      * Fuzzy-match an app name from the user's speech against installed apps
