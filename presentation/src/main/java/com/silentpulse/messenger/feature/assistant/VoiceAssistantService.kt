@@ -206,7 +206,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private fun maybeStartListening() {
         Log.d(TAG, "maybeStartListening() ttsReady=$ttsReady voskModelReady=$voskModelReady")
         if (ttsReady && voskModelReady) {
-            speak("Voice assistant ready.") { startWakeWordDetection() }
+            val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
+            speak("Voice assistant ready. Say $word to activate.") { startWakeWordDetection() }
         }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
