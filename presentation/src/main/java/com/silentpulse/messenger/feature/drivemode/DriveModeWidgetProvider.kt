@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
@@ -131,18 +133,25 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         val voiceOn = WidgetPrefs.isVoiceAstEnabled(context)
         val views   = RemoteViews(context.packageName, R.layout.widget_drive_mode)
 
+        // Tint icons white on dark launcher backgrounds, black on light ones
+        val isNight = (context.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val iconColor = if (isNight) Color.WHITE else Color.BLACK
+
         // Slot 1 — Notification Reader
         views.setImageViewResource(
             R.id.btn_notif_reader,
             if (notifOn) R.drawable.ic_notifications_black_24dp
             else         R.drawable.ic_notifications_off_black_24dp
         )
+        views.setInt(R.id.btn_notif_reader, "setColorFilter", iconColor)
         views.setFloat(R.id.btn_notif_reader, "setAlpha", if (notifOn) 1.0f else 0.4f)
         views.setOnClickPendingIntent(R.id.btn_notif_reader,
             pendingBroadcast(context, ACTION_TOGGLE_NOTIF_READER))
 
         // Slot 2 — Next notification (dims when reader is off)
         views.setImageViewResource(R.id.btn_next_notif, R.drawable.ic_skip_next_black_24dp)
+        views.setInt(R.id.btn_next_notif, "setColorFilter", iconColor)
         views.setFloat(R.id.btn_next_notif, "setAlpha", if (notifOn) 1.0f else 0.35f)
         views.setOnClickPendingIntent(R.id.btn_next_notif,
             pendingBroadcast(context, ACTION_NEXT_NOTIF))
@@ -153,6 +162,7 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
             if (voiceOn) R.drawable.ic_mic_black_24dp
             else         R.drawable.ic_mic_off_black_24dp
         )
+        views.setInt(R.id.btn_voice_ast, "setColorFilter", iconColor)
         views.setFloat(R.id.btn_voice_ast, "setAlpha", if (voiceOn) 1.0f else 0.4f)
         views.setOnClickPendingIntent(R.id.btn_voice_ast,
             pendingBroadcast(context, ACTION_TOGGLE_VOICE_AST))
