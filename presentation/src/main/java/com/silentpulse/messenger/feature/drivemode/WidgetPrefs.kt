@@ -62,12 +62,12 @@ object WidgetPrefs {
     }
 
     fun getWakeWord(ctx: Context): String =
-        getPrefs(ctx).getString(KEY_WAKE_WORD, "computer")?.trim()
-            ?.lowercase()?.ifBlank { "computer" } ?: "computer"
+        getPrefs(ctx).getString(KEY_WAKE_WORD, "bubblegum")?.trim()
+            ?.lowercase()?.ifBlank { "bubblegum" } ?: "bubblegum"
 
     fun setWakeWord(ctx: Context, word: String) {
         getPrefs(ctx).edit()
-            .putString(KEY_WAKE_WORD, word.trim().lowercase().ifBlank { "computer" })
+            .putString(KEY_WAKE_WORD, word.trim().lowercase().ifBlank { "bubblegum" })
             .apply()
     }
 

@@ -82,7 +82,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private var voskModelReady = false
 
     companion object {
-        const val WAKE_WORD_DEFAULT = "computer"
+        const val WAKE_WORD_DEFAULT = "bubblegum"
         /** Returns the currently configured wake word (read from prefs at call time). */
         fun getWakeWord(ctx: Context): String =
             com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(ctx)
