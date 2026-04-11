@@ -14,6 +14,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import timber.log.Timber
 import com.silentpulse.messenger.feature.drivemode.AndroidSttEngine
+import com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider
 import com.silentpulse.messenger.feature.drivemode.NotifSnapshot
 import com.silentpulse.messenger.feature.drivemode.SttEngine
 import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
@@ -151,6 +152,9 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate()")
+        // Mark as running immediately so the widget reflects reality
+        WidgetPrefs.setVoiceAst(this, true)
+        DriveModeWidgetProvider.refreshAll(this)
         tts = TextToSpeech(this, this)
         commandRouter = CommandRouter(applicationContext)
         commandRouter.refreshApps()
@@ -233,6 +237,10 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
         super.onDestroy()
+        // Mark as stopped so widget reflects reality even if killed by system
+        WidgetPrefs.setVoiceAst(this, false)
+        WidgetPrefs.broadcastStateChanged(this)
+        DriveModeWidgetProvider.refreshAll(this)
         isListening = false
         wakeWordDetector?.destroy()
         wakeWordDetector = null

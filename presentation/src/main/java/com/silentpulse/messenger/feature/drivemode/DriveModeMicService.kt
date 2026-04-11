@@ -74,6 +74,9 @@ class DriveModeMicService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate()")
+        // Mark as running so widget reflects reality
+        WidgetPrefs.setNotifReader(this, true)
+        DriveModeWidgetProvider.refreshAll(this)
         ensureNotificationChannel()
         goForeground()
     }
@@ -94,6 +97,10 @@ class DriveModeMicService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
         super.onDestroy()
+        // Mark as stopped so widget reflects reality even if killed by system
+        WidgetPrefs.setNotifReader(this, false)
+        WidgetPrefs.broadcastStateChanged(this)
+        DriveModeWidgetProvider.refreshAll(this)
     }
 
     private fun goForeground() {
