@@ -43,6 +43,9 @@ class DriveModeService : NotificationListenerService() {
     // ── Anti-repeat guards ────────────────────────────────────────────────────
     /** Tracks how many times each notification key+text combo was announced. */
     private val announcementCounts = ConcurrentHashMap<String, Int>()
+    /** How many times the user has said "repeat" for the current message. Capped at MAX_REPEATS. */
+    private var currentMessageRepeatCount = 0
+    private val MAX_REPEATS = 2
     /** True while TTS is speaking or STT is listening for a command. */
     @Volatile private var isProcessing = false
 
@@ -106,6 +109,7 @@ class DriveModeService : NotificationListenerService() {
         announcementCounts[dedupeKey] = count + 1
 
         isProcessing = true
+        currentMessageRepeatCount = 0  // reset per-message repeat counter
         
         val textToSpeak = buildString {
             append("Message from $sender. ")
@@ -178,12 +182,6 @@ class DriveModeService : NotificationListenerService() {
             "com.google.android.gm" -> "Gmail"
             "com.facebook.orca" -> "Messenger"
             "com.android.mms", "com.google.android.apps.messaging" -> "SMS"
-            "com.microsoft.teams" -> "Teams"
-            "com.microsoft.office.outlook" -> "Outlook"
-            "eu.faircode.email" -> "FairMail"
-            "com.fsck.k9" -> "K-9 Mail"
-            "ch.protonmail.android" -> "ProtonMail"
-            "com.tutao.tutanota" -> "Tutanota"
             else -> {
                 try {
                     val appInfo = packageManager.getApplicationInfo(packageName, 0)
@@ -235,12 +233,13 @@ class DriveModeService : NotificationListenerService() {
                         // No further action — notification stays for manual reading
                     }
 
-                    // ── Repeat: re-read current message, then listen again ───
+                    // ── Repeat: re-read current message, then listen again (capped at MAX_REPEATS) ───
                     lower.contains("repeat") || lower.contains("read again") ||
                     lower.contains("again") || lower.contains("say again") -> {
                         val ctx = voiceCommandProcessor.getCurrentContext()
-                        if (ctx != null) {
-                            Timber.d("Repeat command — re-reading message")
+                        if (ctx != null && currentMessageRepeatCount < MAX_REPEATS) {
+                            currentMessageRepeatCount++
+                            Timber.d("Repeat command — re-reading message ($currentMessageRepeatCount/$MAX_REPEATS)")
                             val replayText = buildString {
                                 append("Message from ${ctx.sender}. ")
                                 append(ctx.messageBody)
@@ -257,6 +256,7 @@ class DriveModeService : NotificationListenerService() {
                                 }
                             )
                         } else {
+                            Timber.d("Repeat limit reached or no context — stopping")
                             isProcessing = false
                             updateNotification("Drive Mode Active")
                         }
@@ -347,14 +347,7 @@ class DriveModeService : NotificationListenerService() {
             "com.facebook.orca",
             "com.telegram.messenger",
             "com.snapchat.android",
-            "com.instagram.android",
-            "com.microsoft.teams",
-            "com.microsoft.office.outlook",
-            "eu.faircode.email",
-            "com.fsck.k9",
-            "com.google.android.gm",
-            "ch.protonmail.android",
-            "com.tutao.tutanota"
+            "com.instagram.android"
         )
         return messagingApps.contains(packageName)
     }

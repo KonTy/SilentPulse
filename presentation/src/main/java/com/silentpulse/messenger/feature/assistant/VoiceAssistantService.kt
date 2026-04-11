@@ -66,12 +66,23 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private var notifReaderList: List<NotifSnapshot> = emptyList()
     private var notifReaderIndex            = 0
 
+    /**
+     * Counts how many consecutive STT attempts returned an empty command
+     * (user said "Computer" with no follow-up) or a no_match error.
+     * Reset to 0 on any real command or when returning to wake-word detection.
+     * Capped at MAX_STT_RETRIES — then we go back to wake word and stop prompting.
+     */
+    private var sttRetryCount = 0
+
     private val sessionManager = SessionManager()
     private var wakeWordDetector: VoskWakeWordDetector? = null
     private var voskModelReady = false
 
     companion object {
         const val WAKE_WORD = "computer"
+
+        /** Max consecutive empty-command / no-match retries before giving up. */
+        private const val MAX_STT_RETRIES = 2
 
         /** Delay before retrying after a fatal STT error. */
         private const val ERROR_RETRY_DELAY_MS = 2_000L
@@ -251,6 +262,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private fun resumeWakeWord() {
         Log.d(TAG, "Resuming Vosk wake word detection")
         isListening = false
+        sttRetryCount = 0
         wakeWordDetector?.resume()
     }
     // ── Phase 2: One-shot SpeechRecognizer (single beep, then done) ─────────
@@ -287,6 +299,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                     .removeSuffix(".")
                     .trim()
                 if (command.isNotEmpty()) {
+                    sttRetryCount = 0
                     val fullCommand = if (commandPrefix != null) {
                         "$commandPrefix $command"
                     } else {
@@ -294,16 +307,28 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                     }
                     routeCommand(fullCommand)
                 } else {
-                    // User only said "computer" again or something unintelligible
-                    speak("I'm listening.") { startSttOneShot() }
+                    // User only said "computer" again or something unintelligible.
+                    // Allow up to MAX_STT_RETRIES re-prompts then give up.
+                    sttRetryCount++
+                    if (sttRetryCount < MAX_STT_RETRIES) {
+                        speak("I'm listening.") { startSttOneShot() }
+                    } else {
+                        speak("Going back to wake word.") { resumeWakeWord() }
+                    }
                 }
             },
             onError = { errorCode ->
                 isListening = false
                 if (errorCode == "no_match" || errorCode == "speech_timeout") {
-                    Log.d(TAG, "STT $errorCode — telling user, resuming wake word")
-                    speak("I didn't catch that. Say Computer to try again.") {
-                        resumeWakeWord()
+                    sttRetryCount++
+                    if (sttRetryCount < MAX_STT_RETRIES) {
+                        Log.d(TAG, "STT $errorCode — retry $sttRetryCount/$MAX_STT_RETRIES")
+                        speak("I didn't catch that. Try again.") { startSttOneShot() }
+                    } else {
+                        Log.d(TAG, "STT $errorCode — max retries reached, resuming wake word")
+                        speak("I didn't catch that. Say Computer to try again.") {
+                            resumeWakeWord()
+                        }
                     }
                 } else {
                     Log.e(TAG, "STT error: $errorCode — telling user, retry after delay")
