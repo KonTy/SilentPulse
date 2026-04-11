@@ -19,11 +19,9 @@
 package com.silentpulse.messenger.feature.settings
 
 import android.animation.ObjectAnimator
-import android.app.TimePickerDialog
 import android.widget.LinearLayout
 import android.content.Context
 import android.os.Build
-import android.text.format.DateFormat
 import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
@@ -70,7 +68,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     private val autoColor: PreferenceView get() = rootView.findViewById(R.id.autoColor)
     private val autoDelete: PreferenceView get() = rootView.findViewById(R.id.autoDelete)
     private val autoEmoji: PreferenceView get() = rootView.findViewById(R.id.autoEmoji)
-    private val black: PreferenceView get() = rootView.findViewById(R.id.black)
     private val contentView: LinearLayout get() = rootView.findViewById(R.id.contentView)
     private val delayed: PreferenceView get() = rootView.findViewById(R.id.delayed)
     private val delivery: PreferenceView get() = rootView.findViewById(R.id.delivery)
@@ -78,8 +75,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     private val mmsSize: PreferenceView get() = rootView.findViewById(R.id.mmsSize)
     private val mobileOnly: PreferenceView get() = rootView.findViewById(R.id.mobileOnly)
     private val night: PreferenceView get() = rootView.findViewById(R.id.night)
-    private val nightEnd: PreferenceView get() = rootView.findViewById(R.id.nightEnd)
-    private val nightStart: PreferenceView get() = rootView.findViewById(R.id.nightStart)
     private val preferences: LinearLayout get() = rootView.findViewById(R.id.preferences)
     private val signature: PreferenceView get() = rootView.findViewById(R.id.signature)
     private val syncingProgress: ProgressBar get() = rootView.findViewById(R.id.syncingProgress)
@@ -106,8 +101,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
     }
 
     private val viewQksmsPlusSubject: Subject<Unit> = PublishSubject.create()
-    private val startTimeSelectedSubject: Subject<Pair<Int, Int>> = PublishSubject.create()
-    private val endTimeSelectedSubject: Subject<Pair<Int, Int>> = PublishSubject.create()
     private val signatureSubject: Subject<String> = PublishSubject.create()
     private val autoDeleteSubject: Subject<Int> = PublishSubject.create()
 
@@ -157,10 +150,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
 
     override fun nightModeSelected(): Observable<Int> = nightModeDialog.adapter.menuItemClicks
 
-    override fun nightStartSelected(): Observable<Pair<Int, Int>> = startTimeSelectedSubject
-
-    override fun nightEndSelected(): Observable<Pair<Int, Int>> = endTimeSelectedSubject
-
     override fun textSizeSelected(): Observable<Int> = textSizeDialog.adapter.menuItemClicks
 
     override fun sendDelaySelected(): Observable<Int> = sendDelayDialog.adapter.menuItemClicks
@@ -175,13 +164,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
         themePreview.setBackgroundTint(state.theme)
         night.summary = state.nightModeSummary
         nightModeDialog.adapter.selectedItem = state.nightModeId
-        nightStart.setVisible(state.nightModeId == Preferences.NIGHT_MODE_AUTO)
-        nightStart.summary = state.nightStart
-        nightEnd.setVisible(state.nightModeId == Preferences.NIGHT_MODE_AUTO)
-        nightEnd.summary = state.nightEnd
-
-        black.setVisible(state.nightModeId != Preferences.NIGHT_MODE_OFF)
-        black.checkbox.isChecked = state.black
 
         autoEmoji.checkbox.isChecked = state.autoEmojiEnabled
 
@@ -238,18 +220,6 @@ class SettingsController : QkController<SettingsView, SettingsState, SettingsPre
 
     // TODO change this to a PopupWindow
     override fun showNightModeDialog() = nightModeDialog.show(activity!!)
-
-    override fun showStartTimePicker(hour: Int, minute: Int) {
-        TimePickerDialog(activity, { _, newHour, newMinute ->
-            startTimeSelectedSubject.onNext(Pair(newHour, newMinute))
-        }, hour, minute, DateFormat.is24HourFormat(activity)).show()
-    }
-
-    override fun showEndTimePicker(hour: Int, minute: Int) {
-        TimePickerDialog(activity, { _, newHour, newMinute ->
-            endTimeSelectedSubject.onNext(Pair(newHour, newMinute))
-        }, hour, minute, DateFormat.is24HourFormat(activity)).show()
-    }
 
     override fun showTextSizePicker() = textSizeDialog.show(activity!!)
 

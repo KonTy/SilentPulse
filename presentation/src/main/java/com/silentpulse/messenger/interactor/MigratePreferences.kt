@@ -48,7 +48,7 @@ class MigratePreferences @Inject constructor(
                     val background = rxPrefs.getString("pref_key_background", "light").get()
                     val autoNight = rxPrefs.getBoolean("pref_key_night_auto", false).get()
                     when {
-                        autoNight -> nightModeManager.updateNightMode(Preferences.NIGHT_MODE_AUTO)
+                        autoNight -> nightModeManager.updateNightMode(Preferences.NIGHT_MODE_OLED)
                         background == "light" -> nightModeManager.updateNightMode(Preferences.NIGHT_MODE_OFF)
                         background == "grey" -> nightModeManager.updateNightMode(Preferences.NIGHT_MODE_ON)
                         background == "black" -> {

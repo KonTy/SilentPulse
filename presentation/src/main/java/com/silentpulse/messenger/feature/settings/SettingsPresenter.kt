@@ -72,21 +72,6 @@ class SettingsPresenter @Inject constructor(
                     newState { copy(nightModeSummary = nightModeLabels[nightMode], nightModeId = nightMode) }
                 }
 
-        disposables += prefs.nightStart.asObservable()
-                .map { time -> nightModeManager.parseTime(time) }
-                .map { calendar -> calendar.timeInMillis }
-                .map { millis -> dateFormatter.getTimestamp(millis) }
-                .subscribe { nightStart -> newState { copy(nightStart = nightStart) } }
-
-        disposables += prefs.nightEnd.asObservable()
-                .map { time -> nightModeManager.parseTime(time) }
-                .map { calendar -> calendar.timeInMillis }
-                .map { millis -> dateFormatter.getTimestamp(millis) }
-                .subscribe { nightEnd -> newState { copy(nightEnd = nightEnd) } }
-
-        disposables += prefs.black.asObservable()
-                .subscribe { black -> newState { copy(black = black) } }
-
         disposables += prefs.notifications().asObservable()
                 .subscribe { enabled -> newState { copy(notificationsEnabled = enabled) } }
 
@@ -156,18 +141,6 @@ class SettingsPresenter @Inject constructor(
 
                         R.id.night -> view.showNightModeDialog()
 
-                        R.id.nightStart -> {
-                            val date = nightModeManager.parseTime(prefs.nightStart.get())
-                            view.showStartTimePicker(date.get(Calendar.HOUR_OF_DAY), date.get(Calendar.MINUTE))
-                        }
-
-                        R.id.nightEnd -> {
-                            val date = nightModeManager.parseTime(prefs.nightEnd.get())
-                            view.showEndTimePicker(date.get(Calendar.HOUR_OF_DAY), date.get(Calendar.MINUTE))
-                        }
-
-                        R.id.black -> prefs.black.set(!prefs.black.get())
-
                         R.id.autoEmoji -> prefs.autoEmoji.set(!prefs.autoEmoji.get())
 
                         R.id.notifications -> navigator.showNotificationSettings()
@@ -217,27 +190,12 @@ class SettingsPresenter @Inject constructor(
                 }
 
         view.nightModeSelected()
-                .withLatestFrom(billingManager.upgradeStatus) { mode, upgraded ->
-                    if (!upgraded && mode == Preferences.NIGHT_MODE_AUTO) {
-                        view.showQksmsPlusSnackbar()
-                    } else {
-                        nightModeManager.updateNightMode(mode)
-                    }
-                }
                 .autoDispose(view.scope())
-                .subscribe()
+                .subscribe { mode -> nightModeManager.updateNightMode(mode) }
 
         view.viewQksmsPlusClicks()
                 .autoDispose(view.scope())
                 .subscribe { navigator.showQksmsPlusActivity("settings_night") }
-
-        view.nightStartSelected()
-                .autoDispose(view.scope())
-                .subscribe { nightModeManager.setNightStart(it.first, it.second) }
-
-        view.nightEndSelected()
-                .autoDispose(view.scope())
-                .subscribe { nightModeManager.setNightEnd(it.first, it.second) }
 
         view.textSizeSelected()
                 .autoDispose(view.scope())

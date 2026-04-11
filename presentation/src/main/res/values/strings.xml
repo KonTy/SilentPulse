@@ -231,8 +231,8 @@
     <string name="settings_category_qkreply">QK Reply</string>
     <string name="settings_category_drive_mode">Drive Mode</string>
 
-    <string name="settings_theme_title">Theme</string>
-    <string name="settings_night_title">Night mode</string>
+    <string name="settings_theme_title">Accent color</string>
+    <string name="settings_night_title">Theme</string>
     <string name="settings_black_title">Pure black night mode</string>
     <string name="settings_night_start_title">Start time</string>
     <string name="settings_night_end_title">End time</string>
@@ -510,9 +510,9 @@
 
     <string-array name="night_modes">
         <item>System</item>
-        <item>Disabled</item>
-        <item>Always on</item>
-        <item>Automatic</item>
+        <item>White theme</item>
+        <item>Dark theme</item>
+        <item>OLED black</item>
     </string-array>
 
     <string-array name="notification_preview_options">

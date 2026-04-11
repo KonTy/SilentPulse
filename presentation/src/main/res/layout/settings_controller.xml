@@ -54,30 +54,6 @@
             tools:summary="Automatic" />
 
         <com.silentpulse.messenger.common.widget.PreferenceView
-            android:id="@+id/black"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:title="@string/settings_black_title"
-            app:widget="@layout/settings_switch_widget" />
-
-        <com.silentpulse.messenger.common.widget.PreferenceView
-            android:id="@+id/nightStart"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:title="@string/settings_night_start_title"
-            tools:summary="6:00PM" />
-
-        <com.silentpulse.messenger.common.widget.PreferenceView
-            android:id="@+id/nightEnd"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:title="@string/settings_night_end_title"
-            tools:summary="9:00AM" />
-
-        <com.silentpulse.messenger.common.widget.PreferenceView
             android:id="@+id/textSize"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

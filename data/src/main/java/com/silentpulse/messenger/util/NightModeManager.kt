@@ -52,17 +52,10 @@ class NightModeManager @Inject constructor(
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
             }
 
-            Preferences.NIGHT_MODE_AUTO -> {
-                val nightStartTime = getPreviousInstanceOfTime(prefs.nightStart.get())
-                val nightEndTime = getPreviousInstanceOfTime(prefs.nightEnd.get())
-
-                // If the last nightStart was more recent than the last nightEnd, then it's night time
-                val night = nightStartTime > nightEndTime
-                prefs.night.set(night)
-                AppCompatDelegate.setDefaultNightMode(when (night) {
-                    true -> AppCompatDelegate.MODE_NIGHT_YES
-                    false -> AppCompatDelegate.MODE_NIGHT_NO
-                })
+            Preferences.NIGHT_MODE_OLED -> {
+                prefs.black.set(true)
+                prefs.night.set(true)
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
                 widgetManager.updateTheme()
             }
         }
@@ -71,19 +64,17 @@ class NightModeManager @Inject constructor(
     fun updateNightMode(mode: Int) {
         prefs.nightMode.set(mode)
 
-        // If it's not on auto mode, set the appropriate night mode
-        if (mode != Preferences.NIGHT_MODE_AUTO) {
-            prefs.night.set(mode == Preferences.NIGHT_MODE_ON)
-            AppCompatDelegate.setDefaultNightMode(when (mode) {
-                Preferences.NIGHT_MODE_OFF -> AppCompatDelegate.MODE_NIGHT_NO
-                Preferences.NIGHT_MODE_ON -> AppCompatDelegate.MODE_NIGHT_YES
-                Preferences.NIGHT_MODE_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                else -> AppCompatDelegate.MODE_NIGHT_NO
-            })
-            widgetManager.updateTheme()
-        }
-
-        updateAlarms()
+        // If it's not on OLED or ON mode, update night flag and clear black
+        prefs.night.set(mode == Preferences.NIGHT_MODE_ON || mode == Preferences.NIGHT_MODE_OLED)
+        prefs.black.set(mode == Preferences.NIGHT_MODE_OLED)
+        AppCompatDelegate.setDefaultNightMode(when (mode) {
+            Preferences.NIGHT_MODE_OFF    -> AppCompatDelegate.MODE_NIGHT_NO
+            Preferences.NIGHT_MODE_ON     -> AppCompatDelegate.MODE_NIGHT_YES
+            Preferences.NIGHT_MODE_OLED   -> AppCompatDelegate.MODE_NIGHT_YES
+            Preferences.NIGHT_MODE_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            else -> AppCompatDelegate.MODE_NIGHT_NO
+        })
+        widgetManager.updateTheme()
     }
 
     fun setNightStart(hour: Int, minute: Int) {
@@ -109,7 +100,7 @@ class NightModeManager @Inject constructor(
         context.sendBroadcast(night)
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        if (prefs.nightMode.get() == Preferences.NIGHT_MODE_AUTO) {
+        if (prefs.nightMode.get() == Preferences.NIGHT_MODE_OLED) {
             alarmManager.setInexactRepeating(
                     AlarmManager.RTC_WAKEUP,
                     dayCalendar.timeInMillis,

@@ -40,7 +40,7 @@ class Preferences @Inject constructor(
         const val NIGHT_MODE_SYSTEM = 0
         const val NIGHT_MODE_OFF = 1
         const val NIGHT_MODE_ON = 2
-        const val NIGHT_MODE_AUTO = 3
+        const val NIGHT_MODE_OLED = 3   // Dark mode + pure black background (best for OLED screens)
 
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_NORMAL = 1
@@ -89,10 +89,7 @@ class Preferences @Inject constructor(
 
     // User configurable
     val sendAsGroup = rxPrefs.getBoolean("sendAsGroup", true)
-    val nightMode = rxPrefs.getInteger("nightMode", when (Build.VERSION.SDK_INT >= 29) {
-        true -> NIGHT_MODE_SYSTEM
-        false -> NIGHT_MODE_OFF
-    })
+    val nightMode = rxPrefs.getInteger("nightMode", NIGHT_MODE_OLED)
     val nightStart = rxPrefs.getString("nightStart", "18:00")
     val nightEnd = rxPrefs.getString("nightEnd", "6:00")
     val black = rxPrefs.getBoolean("black", false)
@@ -154,7 +151,7 @@ class Preferences @Inject constructor(
             nightMode.set(when (nightModeSummary.get()) {
                 0 -> NIGHT_MODE_OFF
                 1 -> NIGHT_MODE_ON
-                2 -> NIGHT_MODE_AUTO
+                2 -> NIGHT_MODE_OLED
                 else -> NIGHT_MODE_OFF
             })
             nightModeSummary.delete()

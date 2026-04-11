@@ -24,10 +24,7 @@ import com.silentpulse.messenger.util.Preferences
 data class SettingsState(
     val theme: Int = 0,
     val nightModeSummary: String = "",
-    val nightModeId: Int = Preferences.NIGHT_MODE_OFF,
-    val nightStart: String = "",
-    val nightEnd: String = "",
-    val black: Boolean = false,
+    val nightModeId: Int = Preferences.NIGHT_MODE_OLED,
     val autoColor: Boolean = true,
     val autoEmojiEnabled: Boolean = true,
     val notificationsEnabled: Boolean = true,
