@@ -132,6 +132,22 @@ class SmsCommandHandler(private val context: Context) {
     }
 
     /**
+     * Marks a single SMS as read (read=1) in the inbox.
+     * Requires default SMS app on Android 4.4+.
+     */
+    fun markAsRead(msg: SmsMessage) {
+        try {
+            val values = android.content.ContentValues().apply { put("read", 1) }
+            val updated = context.contentResolver.update(
+                Uri.parse("content://sms/${msg.id}"), values, null, null
+            )
+            Log.d(TAG, "markAsRead id=${msg.id}: $updated row(s) updated")
+        } catch (e: Exception) {
+            Log.e(TAG, "markAsRead failed for id=${msg.id}", e)
+        }
+    }
+
+    /**
      * Deletes a single SMS from the inbox by its [_id][SmsMessage.id].
      * Requires WRITE_SMS / DELETE_SMS permission (or default SMS app on Android 4.4+).
      * Returns true if a row was deleted.
