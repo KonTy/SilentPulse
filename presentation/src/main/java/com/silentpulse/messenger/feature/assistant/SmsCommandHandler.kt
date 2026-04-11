@@ -128,7 +128,7 @@ class SmsCommandHandler(private val context: Context) {
     /** Formats a single [SmsMessage] for TTS output. */
     fun formatSmsForSpeech(msg: SmsMessage, index: Int, total: Int): String {
         val counter = if (total > 1) "Message $index of $total. " else ""
-        return "${counter}From ${msg.senderName}: ${msg.body}. Say next, delete, or stop."
+        return "${counter}From ${msg.senderName}: ${msg.body}. Say next, delete, repeat, or stop."
     }
 
     /**
