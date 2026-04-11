@@ -162,18 +162,19 @@ class BraveSearchHandler(private val context: Context) {
     /**
      * Build a spoken answer from the top web result snippets when no AI summary
      * is available.  Picks the most informative snippet and trims it to ~350 chars.
+     * Skips snippets that look like legal/affiliate boilerplate.
      */
     private fun buildSnippetAnswer(json: JSONObject, query: String): String? {
         val results = json.optJSONObject("web")?.optJSONArray("results") ?: return null
         if (results.length() == 0) return null
 
-        // Try the first result's description
-        for (i in 0 until minOf(results.length(), 3)) {
+        // Try the first few results, skipping boilerplate descriptions
+        for (i in 0 until minOf(results.length(), 5)) {
             val result = results.optJSONObject(i) ?: continue
             val desc = result.optString("description", "")
                 .replace(Regex("<[^>]+>"), "")  // strip any HTML tags
                 .trim()
-            if (desc.length > 50) {
+            if (desc.length > 50 && !isSnippetBoilerplate(desc)) {
                 val source = result.optString("title", "")
                 val truncated = truncateToSentence(desc, 350)
                 return if (source.isNotEmpty()) "According to ${source.substringBefore(" -").trim()}: $truncated"
@@ -181,6 +182,20 @@ class BraveSearchHandler(private val context: Context) {
             }
         }
         return null
+    }
+
+    /** Returns true if a snippet looks like legal/affiliate noise rather than useful content. */
+    private fun isSnippetBoilerplate(text: String): Boolean {
+        val t = text.lowercase()
+        return listOf(
+            "affiliate", "commission", "we may earn", "sponsored",
+            "all rights reserved", "privacy policy", "terms of service",
+            "cookie", "we use cookies", "accept cookies",
+            "prices are accurate", "availability subject to change",
+            "prices subject to change", "add to cart", "buy now",
+            "free shipping", "check price", "view deal", "compare prices",
+            "at the time of publication", "may have changed since"
+        ).any { t.contains(it) }
     }
 
     private fun truncateToSentence(text: String, maxChars: Int): String {

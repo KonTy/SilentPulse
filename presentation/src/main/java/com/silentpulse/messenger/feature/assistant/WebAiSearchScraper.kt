@@ -209,15 +209,19 @@ class WebAiSearchScraper(private val context: Context) {
         // result snippets. The AI answer is the last substantial natural-English
         // block that has sentence punctuation.
         val parts = text.split(Regex("https?://\\S+|\\[Image:[^\\]]*\\]"))
-        val candidate = parts.lastOrNull { block ->
+
+        // Iterate from the end backwards — pick the first candidate that looks
+        // like real prose (not legal/affiliate boilerplate or metadata noise).
+        val candidate = parts.reversed().firstOrNull { block ->
             val b = block.trim()
             b.length > 60 &&
                 !b.contains("AI-generated", ignoreCase = true) &&
-                (b.contains('.') || b.contains(','))
+                (b.contains('.') || b.contains(',')) &&
+                !isBoilerplate(b)
         }?.trim()
 
         if (candidate == null) {
-            Log.d(TAG, "Brave: could not isolate AI answer from window")
+            Log.d(TAG, "Brave: could not isolate AI answer from window (all candidates failed quality checks)")
             return null
         }
 
@@ -231,6 +235,52 @@ class WebAiSearchScraper(private val context: Context) {
         } else candidate
 
         return cleanForSpeech(trimmed)
+    }
+
+    /**
+     * Returns true if [text] looks like legal/affiliate boilerplate or site metadata
+     * rather than an actual answer. Used to discard junk candidates before speaking.
+     *
+     * Patterns caught:
+     *  - Affiliate disclosures ("affiliate link", "commission", "sponsored")
+     *  - Legal notices ("all rights reserved", "terms of service", "privacy policy")
+     *  - Cookie banners ("we use cookies", "accept all cookies")
+     *  - Shopping metadata ("add to cart", "buy now", "free shipping", "in stock")
+     *  - Copyright / disclaimer blocks
+     *  - Navigation/footer noise (very short fragments or pure capitalized labels)
+     */
+    private fun isBoilerplate(text: String): Boolean {
+        val t = text.lowercase()
+        val boilerplatePatterns = listOf(
+            // Legal & affiliate
+            "affiliate", "commission", "sponsored content", "we may earn",
+            "all rights reserved", "terms of service", "terms and conditions",
+            "privacy policy", "cookie policy", "disclaimer",
+            "copyright ©", "copyright 2",
+            // Cookie banners
+            "we use cookies", "accept all cookies", "consent to cookies",
+            "by continuing to browse",
+            // Shopping metadata noise
+            "add to cart", "buy now", "free shipping", "in stock", "out of stock",
+            "compare prices", "view deal", "check price",
+            // Generic navigation / footer fragments
+            "skip to content", "skip to main", "back to top",
+            // Review-site boilerplate
+            "prices are accurate", "availability subject to change",
+            "prices subject to change", "at the time of publication",
+            "may have changed since"
+        )
+        if (boilerplatePatterns.any { t.contains(it) }) {
+            Log.d(TAG, "Brave: discarding boilerplate candidate: ${text.take(80)}")
+            return true
+        }
+        // Reject blocks with very low sentence density (metadata key-value noise)
+        val sentences = text.split(Regex("[.!?]+")).filter { it.trim().length > 5 }
+        if (text.length > 200 && sentences.size < 2) {
+            Log.d(TAG, "Brave: discarding low-sentence-density candidate: ${text.take(80)}")
+            return true
+        }
+        return false
     }
 
     /**
