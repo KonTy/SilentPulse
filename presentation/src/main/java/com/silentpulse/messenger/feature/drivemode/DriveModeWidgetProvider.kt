@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.feature.assistant.VoiceAssistantService
@@ -89,9 +91,11 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         Timber.d("DriveModeWidget: notif reader → $nowEnabled")
         if (nowEnabled) {
             DriveModeMicService.start(context)
+            speakOnce(context, "Notification reader on.")
         } else {
             SilentPulseNotificationListener.sInstance?.stopReading()
             DriveModeMicService.stop(context)
+            speakOnce(context, "Notification reader off.")
         }
         notifyAndRefresh(context)
     }
@@ -111,8 +115,10 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         if (nowEnabled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(svc)
             else context.startService(svc)
+            speakOnce(context, "Voice assistant on.")
         } else {
             context.stopService(svc)
+            speakOnce(context, "Voice assistant off.")
         }
         notifyAndRefresh(context)
     }
@@ -176,4 +182,24 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
             Intent(context, DriveModeWidgetProvider::class.java).apply { this.action = action },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+    /**
+     * Speak [text] once via on-device TTS then immediately release the engine.
+     * Fire-and-forget: no callbacks need to be tracked by the caller.
+     */
+    private fun speakOnce(context: Context, text: String) {
+        var engine: TextToSpeech? = null
+        engine = TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val id = "widget_feedback"
+                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(id: String?) {}
+                    override fun onDone(id: String?) { engine?.shutdown() }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(id: String?) { engine?.shutdown() }
+                })
+                engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+            }
+        }
+    }
 }
