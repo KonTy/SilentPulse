@@ -832,6 +832,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private fun speak(text: String, bargeIn: Boolean = true, onDone: (() -> Unit)? = null) {
         if (!ttsReady) {
             onDone?.invoke()
+            return
         }
         // Detect language via Unicode script ranges — zero external deps
         val detectedLocale = detectLocaleByScript(text)

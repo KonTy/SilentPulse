@@ -211,11 +211,30 @@ class WebAiSearchScraper(private val context: Context) {
         Log.d(TAG, "Brave answer candidate (${candidate.length} chars): ${candidate.take(120)}...")
 
         // Trim to 500 chars, ending on a sentence boundary when possible
-        return if (candidate.length > 500) {
+        val trimmed = if (candidate.length > 500) {
             val cut = candidate.take(500)
             val lastDot = cut.lastIndexOf('.')
             if (lastDot > 200) cut.take(lastDot + 1) else "$cut..."
         } else candidate
+
+        return cleanForSpeech(trimmed)
+    }
+
+    /**
+     * Strip characters that cause TTS to stutter or mispronounce:
+     *   - Unicode bullet/list markers (•, ◦, ‣, ⁃, ·)
+     *   - Isolates a colon‐then‐bullet pattern like "approximately: •" → "approximately: "
+     *   - Collapses any resulting double spaces/punctuation
+     */
+    private fun cleanForSpeech(text: String): String {
+        return text
+            // Remove bullet / list markers
+            .replace(Regex("[\u2022\u25E6\u2023\u2043\u00B7\u2219]"), "") // •◦‣⁃·∙
+            // Replace "word: •" or "word: –" patterns with just "word. "
+            .replace(Regex(":\\s*[\u2022\u25E6\u2023\u2043-]"), ": ")
+            // Collapse multiple spaces
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
     }
 
     // ── Bing Search — WebView ─────────────────────────────────────────────────
