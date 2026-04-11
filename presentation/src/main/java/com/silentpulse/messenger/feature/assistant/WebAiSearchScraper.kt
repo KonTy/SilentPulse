@@ -89,37 +89,50 @@ class WebAiSearchScraper(private val context: Context) {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    /** Which AI source to query. */
+    enum class Source { BRAVE, BING }
+
     /**
      * Search for an AI-generated answer for [query].
      *
-     * Calls [onResult] on the main thread with the answer text, or null when
-     * both sources fail (caller should fall back to DuckDuckGo/Wikipedia).
+     * [source] controls which backend is used:
+     *   - BRAVE  → Brave Search HTTP only. Fast (~1-2 s). No Bing fallback.
+     *              Used for all general questions by default.
+     *   - BING   → Bing WebView directly. Use when the user prefixes the
+     *              query with "bing" — e.g. "bing who won the election".
      *
-     * This method starts on the calling thread; Brave HTTP work is run on a
-     * background thread; Bing WebView work returns to the main thread.
+     * Calls [onResult] on the main thread with the answer text, or null when
+     * the source fails (caller should fall back to DuckDuckGo/Wikipedia).
      */
-    fun search(query: String, onResult: (String?) -> Unit) {
+    fun search(query: String, source: Source = Source.BRAVE, onResult: (String?) -> Unit) {
         if (!enabled) {
             Log.d(TAG, "Disabled — skipping")
             onResult(null)
             return
         }
 
-        // Try Brave first (lightweight HTTP, ~1-2 s)
-        executor.execute {
-            try {
-                val brave = fetchBrave(query)
-                if (brave != null) {
-                    Log.d(TAG, "Brave answered in time")
-                    mainHandler.post { onResult(brave) }
-                    return@execute
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Brave fetch threw: ${e.message}")
+        when (source) {
+            Source.BING -> {
+                Log.d(TAG, "Explicit Bing query: \"$query\"")
+                mainHandler.post { fetchBingWebView(query, onResult) }
             }
-
-            // Brave had no AI answer — try Bing WebView (must run on main thread)
-            mainHandler.post { fetchBingWebView(query, onResult) }
+            Source.BRAVE -> {
+                executor.execute {
+                    try {
+                        val brave = fetchBrave(query)
+                        if (brave != null) {
+                            Log.d(TAG, "Brave answered")
+                            mainHandler.post { onResult(brave) }
+                            return@execute
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Brave fetch threw: ${e.message}")
+                    }
+                    // Brave had no AI summary — return null, let caller fall back
+                    Log.d(TAG, "Brave: no AI answer — caller will use DDG/Wikipedia")
+                    mainHandler.post { onResult(null) }
+                }
+            }
         }
     }
 

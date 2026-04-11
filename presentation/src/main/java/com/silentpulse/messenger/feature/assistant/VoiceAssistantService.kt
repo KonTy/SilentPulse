@@ -587,20 +587,40 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-        // ── 7. General knowledge query — AI scraper first, DDG/Wikipedia fallback
-        // Anything that didn't match above — try AI web scraper, then DuckDuckGo
+        // ── 7. General knowledge queries ──────────────────────────────────────
+        // "bing <query>" → route explicitly to Bing WebView
+        if (c.startsWith("bing ")) {
+            val bingQuery = command.drop(5).trim()
+            if (bingQuery.isNotEmpty()) {
+                Log.d(TAG, "Bing explicit query: \"$bingQuery\"")
+                speak("Asking Bing.") {
+                    webAiSearchScraper.search(bingQuery, WebAiSearchScraper.Source.BING) { answer ->
+                        if (answer != null) {
+                            speak(answer) { resumeWakeWord() }
+                        } else {
+                            generalQueryHandler.fetchAndSpeak(bingQuery) { a ->
+                                speak(a) { resumeWakeWord() }
+                            }
+                        }
+                    }
+                }
+                return
+            }
+        }
+        // Default general questions → Brave Search only (fast, no Bing fallback)
+        // Anything that didn't match above — try Brave AI, fall back to DDG/Wikipedia
         if (c.contains("?") || c.startsWith("what") || c.startsWith("who") ||
             c.startsWith("where") || c.startsWith("when") || c.startsWith("why") ||
             c.startsWith("how") || c.startsWith("is ") || c.startsWith("are ") ||
             c.startsWith("does ") || c.startsWith("can ") || c.startsWith("tell me")
         ) {
-            Log.d(TAG, "General query — trying WebAI scraper first")
+            Log.d(TAG, "General query — trying Brave AI")
             speak("Let me look that up.") {
-                webAiSearchScraper.search(command) { aiAnswer ->
+                webAiSearchScraper.search(command, WebAiSearchScraper.Source.BRAVE) { aiAnswer ->
                     if (aiAnswer != null) {
                         speak(aiAnswer) { resumeWakeWord() }
                     } else {
-                        Log.d(TAG, "WebAI returned nothing — falling back to DuckDuckGo")
+                        Log.d(TAG, "Brave returned nothing — falling back to DuckDuckGo")
                         generalQueryHandler.fetchAndSpeak(command) { answer ->
                             speak(answer) { resumeWakeWord() }
                         }
