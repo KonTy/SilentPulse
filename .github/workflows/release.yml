@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Opt into Node.js 24 for all actions before the June 2026 forced cutover.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build & Release APK
@@ -48,9 +52,23 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :presentation:assembleNoAnalyticsDebug
 
-      # If KEYSTORE_BASE64 secret is set, sign with the production keystore.
-      # Otherwise fall back to the Android debug keystore so the build
-      # never fails due to a missing production key.
+      # Ensure the Android debug keystore exists at ~/.android/debug.keystore
+      # before the release build. The debug APK step creates it automatically,
+      # but an explicit keytool call makes the path predictable and avoids
+      # the failure mode where ANDROID_HOME/debug.keystore (wrong path) is used.
+      - name: Ensure debug keystore exists
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.android/debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
       - name: Build release APK
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
@@ -61,8 +79,10 @@ jobs:
               -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
               -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
           else
+            # No production keystore configured — sign with the debug key.
+            # The keystore was guaranteed to exist by the step above.
             ./gradlew :presentation:assembleNoAnalyticsRelease \
-              -Pandroid.injected.signing.store.file="${ANDROID_HOME}/debug.keystore" \
+              -Pandroid.injected.signing.store.file="${HOME}/.android/debug.keystore" \
               -Pandroid.injected.signing.store.password=android \
               -Pandroid.injected.signing.key.alias=androiddebugkey \
               -Pandroid.injected.signing.key.password=android

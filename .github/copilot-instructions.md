@@ -128,3 +128,35 @@ Before adding ANY new dependency:
 - `BuildConfig.DEBUG` guards must wrap all verbose drive mode logging.
 - The `com.android.shell` entry in `isMessagingApp()` is gated on `BuildConfig.DEBUG` — keep it that way.
 - `DebugTestReceiver` is gated on `BuildConfig.DEBUG` — keep it that way.
+
+---
+
+## Deployment & CI Checklist
+
+**After every push to master, check the CI pipeline immediately:**
+
+1. Open [Actions → Build and Release](https://github.com/KonTy/SilentPulse/actions/workflows/release.yml)
+2. Wait for the run to complete (~7–8 minutes).
+3. If it fails, click the failed job → expand each step to find the first non-zero exit.
+4. Fix the root cause, push, and re-verify the next run passes before deploying to a device.
+
+### Common failure modes to know
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| `packageNoAnalyticsRelease FAILED` with no keystore secret | Wrong keystore path | Workflow now uses `${HOME}/.android/debug.keystore`; a `keytool` pre-step guarantees it exists |
+| APK glob `*.apk` matches nothing in release step | Release build failed silently | Check the `assembleNoAnalyticsRelease` step above it |
+| Node.js 20 action warning becomes error (after Jun 2026) | Outdated action runtime | `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` is set in the workflow env |
+
+### Signing secrets (for production releases)
+
+Set these in **Settings → Secrets and variables → Actions** on the repo:
+
+| Secret | Value |
+|---|---|
+| `KEYSTORE_BASE64` | `base64 -w0 release.jks` output |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias inside the keystore |
+| `KEY_PASSWORD` | Key password |
+
+If secrets are absent the workflow falls back to a debug keystore so builds always succeed.
