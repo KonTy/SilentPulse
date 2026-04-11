@@ -65,6 +65,8 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
     private val behaviorCard: MaterialCardView    get() = rootView!!.findViewById(R.id.behaviorCard)
     private val wakeWordSwitch: SwitchCompat      get() = rootView!!.findViewById(R.id.wakeWordSwitch)
     private val wakeWordLabel: TextView           get() = rootView!!.findViewById(R.id.wakeWordLabel)
+    private val changeKeywordRow: LinearLayout    get() = rootView!!.findViewById(R.id.changeKeywordRow)
+    private val currentKeywordSummary: TextView   get() = rootView!!.findViewById(R.id.currentKeywordSummary)
     private val voiceReplySwitch: SwitchCompat    get() = rootView!!.findViewById(R.id.voiceReplySwitch)
     private val timeoutRow: LinearLayout          get() = rootView!!.findViewById(R.id.timeoutRow)
     private val timeoutSummary: TextView          get() = rootView!!.findViewById(R.id.timeoutSummary)
@@ -229,6 +231,10 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
         announcementsRow.clicks()
             .autoDispose(scope())
             .subscribe { showAnnouncementsLimitPicker(prefs.driveModeMaxAnnouncements.get()) }
+
+        changeKeywordRow.clicks()
+            .autoDispose(scope())
+            .subscribe { showChangeKeywordDialog() }
     }
 
     override fun render(state: AssistantState) {
@@ -275,7 +281,9 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
             }
 
             // Behavior
-            wakeWordLabel.text = "Wait for keyword '${VoiceAssistantService.WAKE_WORD}'"
+            val currentWord = WidgetPrefs.getWakeWord(context)
+            wakeWordLabel.text = "Wait for keyword ‘$currentWord’"
+            currentKeywordSummary.text = "Current word: $currentWord"
             wakeWordSwitch.isChecked = state.driveModeWakeWordEnabled
 
             voiceReplySwitch.isChecked = state.driveModeVoiceReplyEnabled
@@ -483,7 +491,41 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
     }
 
     // ── Notification access ──────────────────────────────────────────────────
-
+    private fun showChangeKeywordDialog() {
+        val ctx = activity ?: return
+        val input = android.widget.EditText(ctx).apply {
+            val current = WidgetPrefs.getWakeWord(context)
+            setText(current)
+            hint = "e.g. computer, jarvis, hey"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setPadding(48, 32, 48, 8)
+            selectAll()
+        }
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("Change trigger word")
+            .setMessage("Type a single word. Vosk will only recognise words in its vocabulary — common English words work best.")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val word = input.text.toString().trim().lowercase()
+                if (word.isNotEmpty()) {
+                    WidgetPrefs.setWakeWord(context, word)
+                    currentKeywordSummary.text = "Current word: $word"
+                    wakeWordLabel.text = "Wait for keyword ‘$word’"
+                    // Restart the service if it’s running so it picks up the new word
+                    val svc = Intent(context, VoiceAssistantService::class.java)
+                    context.stopService(svc)
+                    if (prefs.driveModeWakeWordEnabled.get()) {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                            context.startForegroundService(svc)
+                        else
+                            context.startService(svc)
+                    }
+                    Toast.makeText(context, "Trigger word set to ‘$word’", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
     private fun checkNotificationAccess() {
         val ctx = activity ?: return
         val granted = androidx.core.app.NotificationManagerCompat

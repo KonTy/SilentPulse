@@ -26,6 +26,9 @@ object WidgetPrefs {
     /** Pref key — Voice Assistant wake-word listener ON|OFF. */
     const val KEY_VOICE_AST = "drive_mode_wake_word"
 
+    /** Pref key — Voice Assistant custom wake word (default: "computer"). */
+    const val KEY_WAKE_WORD = "voice_ast_wake_word"
+
     /**
      * Broadcast action sent whenever either flag changes from *any* surface
      * (widget tap, QS tile tap, or in-app toggle).  Both the AppWidget and
@@ -56,6 +59,16 @@ object WidgetPrefs {
 
     fun setVoiceAst(ctx: Context, enabled: Boolean) {
         getPrefs(ctx).edit().putBoolean(KEY_VOICE_AST, enabled).apply()
+    }
+
+    fun getWakeWord(ctx: Context): String =
+        getPrefs(ctx).getString(KEY_WAKE_WORD, "computer")?.trim()
+            ?.lowercase()?.ifBlank { "computer" } ?: "computer"
+
+    fun setWakeWord(ctx: Context, word: String) {
+        getPrefs(ctx).edit()
+            .putString(KEY_WAKE_WORD, word.trim().lowercase().ifBlank { "computer" })
+            .apply()
     }
 
     /** Broadcast to all surfaces that state has changed. */

@@ -81,7 +81,10 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private var voskModelReady = false
 
     companion object {
-        const val WAKE_WORD = "computer"
+        const val WAKE_WORD_DEFAULT = "computer"
+        /** Returns the currently configured wake word (read from prefs at call time). */
+        fun getWakeWord(ctx: Context): String =
+            com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(ctx)
 
         /** Max consecutive empty-command / no-match retries before giving up. */
         private const val MAX_STT_RETRIES = 2
@@ -245,7 +248,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     }
     // ── Vosk model init ───────────────────────────────────────────────────────
     private fun initVoskModel() {
-        wakeWordDetector = VoskWakeWordDetector(this)
+        wakeWordDetector = VoskWakeWordDetector(this,
+            com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(this))
         wakeWordDetector!!.init(
             onModelReady = {
                 Log.d(TAG, "Vosk model ready")
@@ -263,13 +267,13 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         Log.d(TAG, "Starting Vosk wake word detection")
         wakeWordDetector?.start(
             onWakeWordDetected = {
-                Log.d(TAG, "WAKE WORD \"$WAKE_WORD\" detected — switching to STT")
+                Log.d(TAG, "WAKE WORD \"${getWakeWord(this@VoiceAssistantService)}\" detected — switching to STT")
                 // Vosk already paused itself and released the mic.
                 // Start SpeechRecognizer — its beep = "I'm ready" signal.
                 startSttOneShot()
             },
             onListening = {
-                Log.d(TAG, "Vosk listening for \"$WAKE_WORD\"")
+                Log.d(TAG, "Vosk listening for \"${getWakeWord(this@VoiceAssistantService)}\"")
             },
             onErr = { error ->
                 Log.e(TAG, "Vosk error: $error")
@@ -315,7 +319,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 // or it bled over from the wake word.
                 val command = transcript
                     .lowercase(Locale.getDefault())
-                    .removePrefix(WAKE_WORD)
+                    .removePrefix(getWakeWord(this@VoiceAssistantService))
                     .trim()
                     .removeSuffix(".")
                     .trim()

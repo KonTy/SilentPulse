@@ -11,27 +11,19 @@ import org.vosk.android.StorageService
 import java.io.IOException
 
 /**
- * Vosk-based keyword spotter for the "Computer" wake word.
+ * Vosk-based keyword spotter for a configurable wake word (default: "computer").
  *
- * Uses Vosk's grammar-constrained recognizer with `["computer", "[unk]"]`
- * so the decoder has a tiny search space — very low CPU, no beeps, fully offline.
+ * Uses Vosk's grammar-constrained recognizer so the decoder has a tiny search
+ * space — very low CPU, no beeps, fully offline.
  *
- * Flow:
- *   [init] → loads model from bundled assets (one-time)
- *   [start] → begins listening for "computer"
- *   [pause] → stops Vosk SpeechService, releases mic for SpeechRecognizer
- *   [resume] → creates fresh SpeechService, resumes keyword spotting
- *   [destroy] → releases all resources
- *
- * All callbacks fire on the main thread (Vosk SpeechService posts via Handler).
+ * @param wakeWord The word to listen for (lowercase). Read once at construction;
+ *                 restart the detector to apply a changed word.
  */
-class VoskWakeWordDetector(private val context: Context) {
+class VoskWakeWordDetector(private val context: Context, private val wakeWord: String = "computer") {
 
     companion object {
         private const val TAG = "VoskWakeWord"
         private const val SAMPLE_RATE = 16000.0f
-        /** Grammar for wake-word phase. */
-        private const val GRAMMAR = "[\"computer\", \"[unk]\"]"
         /** Minimum ms between two wake-word fires — prevents double/rapid triggers. */
         private const val COOLDOWN_MS = 3_000L
         /**
@@ -42,6 +34,9 @@ class VoskWakeWordDetector(private val context: Context) {
          */
         private const val MIN_CONFIDENCE_COLD = 0.80
     }
+
+    /** Grammar string built from the configured wake word. */
+    private val grammar get() = "[\"${wakeWord.lowercase()}\", \"[unk]\"]"
 
     private var model: Model? = null
     private var speechService: SpeechService? = null
@@ -151,7 +146,7 @@ class VoskWakeWordDetector(private val context: Context) {
         }
 
         try {
-            val recognizer = Recognizer(m, SAMPLE_RATE, GRAMMAR)
+            val recognizer = Recognizer(m, SAMPLE_RATE, grammar)
             val service = SpeechService(recognizer, SAMPLE_RATE)
             speechService = service
 
@@ -186,7 +181,7 @@ class VoskWakeWordDetector(private val context: Context) {
                 }
             })
 
-            Log.d(TAG, "Vosk listening for wake word \"computer\"")
+            Log.d(TAG, "Vosk listening for wake word \"$wakeWord\"")
             onReady?.invoke()
         } catch (e: IOException) {
             val msg = "Failed to start Vosk SpeechService: ${e.message}"
@@ -213,7 +208,7 @@ class VoskWakeWordDetector(private val context: Context) {
             if (partial) {
                 // Partial: "computer" arms the detector — no actual trigger yet.
                 val text = json.optString("partial", "").trim()
-                if (text.equals("computer", ignoreCase = true)) {
+                if (text.equals(wakeWord, ignoreCase = true)) {
                     if (!wakeWordPrimed) {
                         Log.d("SP_WAKE", "[PRIME] partial text=\"$text\"")
                     }
@@ -235,7 +230,7 @@ class VoskWakeWordDetector(private val context: Context) {
                 wakeWordPrimed = false
             }
 
-            if (!text.equals("computer", ignoreCase = true)) {
+            if (!text.equals(wakeWord, ignoreCase = true)) {
                 // "[unk]" or empty → clear prime
                 wakeWordPrimed = false
                 return
