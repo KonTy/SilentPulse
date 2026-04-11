@@ -1,5 +1,6 @@
 package com.silentpulse.messenger.feature.drivemode
 
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -128,6 +129,21 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         refreshAll(context)
     }
 
+    /**
+     * Returns true if [serviceClass] has a running foreground service in this
+     * package's process.  Using ActivityManager is the most reliable check —
+     * prefs can be stale after a SIGKILL (e.g. adb install).
+     *
+     * ActivityManager.getRunningServices() is deprecated at API 26 but still
+     * works for checking the caller's own services on all Android versions.
+     */
+    @Suppress("DEPRECATION")
+    private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return am.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == serviceClass.name }
+    }
+
     // ── Rendering ─────────────────────────────────────────────────────────────
 
     private fun updateWidget(
@@ -135,8 +151,13 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         widgetId: Int
     ) {
-        val notifOn = WidgetPrefs.isNotifReaderEnabled(context)
-        val voiceOn = WidgetPrefs.isVoiceAstEnabled(context)
+        // Always derive state from process reality, not from prefs that may be
+        // stale after a force-kill (e.g. adb install doesn't call onDestroy).
+        val notifOn = isServiceRunning(context, DriveModeMicService::class.java)
+        val voiceOn = isServiceRunning(context, VoiceAssistantService::class.java)
+        // Keep prefs in sync so QS tiles and other surfaces see the correct value.
+        if (notifOn != WidgetPrefs.isNotifReaderEnabled(context)) WidgetPrefs.setNotifReader(context, notifOn)
+        if (voiceOn != WidgetPrefs.isVoiceAstEnabled(context))   WidgetPrefs.setVoiceAst(context, voiceOn)
         val views   = RemoteViews(context.packageName, R.layout.widget_drive_mode)
 
         // Tint icons white on dark launcher backgrounds, black on light ones
