@@ -15,6 +15,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.silentpulse.messenger.BuildConfig
+import com.silentpulse.messenger.feature.assistant.ConfirmSendWorkflow
 import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.model.Message
 import com.silentpulse.messenger.repository.MessageRepository
@@ -47,6 +48,8 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     private enum class ListenState { IDLE, READING, AWAITING_COMMAND, AWAITING_REPLY_TEXT }
     private var listenState = ListenState.IDLE
     private var pendingNotification: StatusBarNotification? = null
+    /** Non-null while the confirm-before-send workflow is active. */
+    private var confirmWorkflow: ConfirmSendWorkflow? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     // Deduplication: track last-spoken notification key + timestamp
     private val recentlySpoken = HashMap<String, Long>()
@@ -405,6 +408,16 @@ class SilentPulseNotificationListener : NotificationListenerService() {
 
     private fun handleCommandResult(text: String) {
         Timber.d("Drive Mode command recognized: \"$text\"")
+
+        // ── Confirm-send workflow intercept ──────────────────────────────────
+        // While a confirm workflow is active (user just dictated a reply and we
+        // are waiting for yes / no / read back / dictate again) every STT result
+        // must be routed here instead of the normal command handler.
+        if (confirmWorkflow?.isActive == true) {
+            confirmWorkflow!!.handleInput(text)
+            return
+        }
+
         val lower = text.lowercase().trim()
 
         // Filter Whisper hallucinations — treat as silence
@@ -539,19 +552,36 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             }
             return
         }
-        listenState = ListenState.IDLE
         val sbn = pendingNotification
         if (sbn == null) {
+            listenState = ListenState.IDLE
             speak("No pending message to reply to.")
             return
         }
-        val sent = tryInlineReply(sbn.key, replyText)
-        pendingNotification = null
-        if (sent) {
-            speak("Sending: $replyText. Message sent.")
-        } else {
-            speak("Failed to send reply. Please try again or reply manually.")
-        }
+        val sender = sbn.notification?.extras
+            ?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "contact"
+        // Keep listenState at AWAITING_COMMAND so new notifications are blocked
+        // while the user is confirming the reply.
+        listenState = ListenState.AWAITING_COMMAND
+        confirmWorkflow = ConfirmSendWorkflow(
+            speak    = { text, onDone -> speak(text, onDone ?: {}) },
+            startStt = { mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS) },
+            onSend   = { text ->
+                confirmWorkflow = null
+                val sent = tryInlineReply(sbn.key, text)
+                pendingNotification = null
+                listenState = ListenState.IDLE
+                speak(if (sent) "Reply sent." else "Failed to send reply. Please try again or reply manually.")
+            },
+            onCancel = {
+                confirmWorkflow = null
+                // Notification still pending — let user pick another action.
+                speak("Reply cancelled. Say dismiss, delete, reply, repeat, or stop.") {
+                    mainHandler.postDelayed({ startCommandListening() }, STT_START_DELAY_MS)
+                }
+            }
+        )
+        confirmWorkflow!!.startWithText(sender, replyText)
     }
 
     /**
