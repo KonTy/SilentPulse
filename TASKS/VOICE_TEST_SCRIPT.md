@@ -93,15 +93,42 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 
 ## 9. Notifications & email
 
+Post a replyable test notification before running this section:
+```
+adb shell 'am broadcast -n com.silentpulse.messenger/.feature.debug.DebugTestReceiver \
+  -a com.silentpulse.messenger.POST_TEST_MESSAGE \
+  --es sender Alice --es message "Are you coming to the meeting?"'
+```
+
+### 9a. Basic notification controls
+
 | # | Say | Expected |
 |---|-----|----------|
-| 9.1 | "Read my notifications" | Reads each notification aloud |
-| 9.2 | *(during reading)* "Skip" | Skips to next |
-| 9.3 | *(during reading)* "Repeat" | Re-reads current |
-| 9.4 | *(during reading)* "Dismiss" | Dismisses current notification |
-| 9.5 | *(during reading)* "Reply: I'll call you back" | Sends inline reply |
-| 9.6 | *(during reading)* "Stop" | Stops notification reading |
-| 9.7 | "Read my email" | Reads unread emails only |
+| 9.1 | "Read my notifications" | Reads each notification aloud — "Alice: Are you coming to the meeting? Say dismiss, delete, reply, repeat, or stop." |
+| 9.2 | *(during reading)* "Skip" / "Dismiss" | Skips to next / dismisses current |
+| 9.3 | *(during reading)* "Repeat" | Re-reads current notification |
+| 9.4 | *(during reading)* "Delete" | Deletes notification (and marks SMS read if ours) |
+| 9.5 | *(during reading)* "Stop" | Goes idle; notification stays in tray |
+
+### 9b. Reply confirm workflow — notification listener path
+
+Post a fresh test notification, then say "Read my notifications" and wait for the readout. Then:
+
+| # | Say | Expected |
+|---|-----|----------|
+| 9.6 | "Reply" | "What would you like to say?" |
+| 9.7 | *(dictate)* "I'll be there at five" | "I'll send to Alice: I'll be there at five. Say yes, no to cancel, or read back." |
+| 9.8 | "Read back" | Re-reads the composed text. "Say yes, no to cancel, or dictate again." |
+| 9.9 | "Dictate again" | Returns to dictation — "What would you like to say?" |
+| 9.10 | *(re-dictate)* "On my way" | "I'll send to Alice: On my way. Say yes, no to cancel, or read back." |
+| 9.11 | "Yes" | "Reply sent." *(check logcat `ConfirmSend:D` for SEND log)* |
+| 9.12 | *(same flow)* → say "No" at confirm step | "Reply cancelled. Say dismiss, delete, reply, repeat, or stop." |
+
+### 9c. Email
+
+| # | Say | Expected |
+|---|-----|----------|
+| 9.13 | "Read my email" | Reads unread emails only |
 
 ---
 
@@ -175,7 +202,45 @@ adb shell am broadcast -a com.silentpulse.SET_SCRAPER_ENABLED \
 
 ---
 
-## 15. Bing Chat verification (one-time, skip if already done)
+## 15. SMS commands (wake-word path via VoiceAssistantService)
+
+### 15a. Read SMS
+
+| # | Say | Expected |
+|---|-----|----------|
+| 15.1 | "Read my SMS" | Reads unread SMS aloud: "You have N unread messages. Message 1 from [name]: [text]. Say next, repeat, or stop." |
+| 15.2 | *(during reading)* "Next" | Reads next SMS |
+| 15.3 | *(during reading)* "Repeat" | Re-reads current SMS |
+| 15.4 | *(during reading)* "Stop" | Goes idle |
+
+### 15b. Send SMS — confirm workflow
+
+| # | Say | Expected |
+|---|-----|----------|
+| 15.5 | "Send a text to [contact name]" | Resolves contact, "What would you like to say to [name]?" |
+| 15.6 | *(dictate)* "I'm running late" | "I'll send to [name]: I'm running late. Say yes, no to cancel, or read back." |
+| 15.7 | "Read back" | Re-reads. "Say yes, no to cancel, or dictate again." |
+| 15.8 | "Dictate again" | Re-prompts for dictation |
+| 15.9 | "Yes" | "Message sent." *(check logcat `SmsHandler:D`)* |
+| 15.10 | *(same flow)* → say "No" at confirm | "Cancelled." |
+| 15.11 | "Send text to [unknown name]" | "I couldn't find a contact named [name]." |
+
+---
+
+## 16. Widget controls
+
+Remove and re-add the drive mode widget if it still shows 3 buttons (the 4-button layout requires a widget re-add).
+
+| # | Action | Expected |
+|---|--------|----------|
+| 16.1 | Tap **mic** button | Starts wake word / voice assistant |
+| 16.2 | Tap **notif reader** toggle | Toggles notification reader on/off — **voice assistant must stay running** (check bubblegum still works after toggling) |
+| 16.3 | Tap **stop speaking** (✕ button) | TTS stops immediately mid-sentence |
+| 16.4 | Toggle notif reader OFF then back ON | Wake word still responds to "bubblegum" both times |
+
+---
+
+## 17. Bing Chat verification (one-time, skip if already done)
 
 ```
 adb shell am start -n com.silentpulse.messenger.debug/com.silentpulse.messenger.feature.assistant.BingChatVerificationActivity
