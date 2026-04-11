@@ -103,4 +103,25 @@
         </trust-anchors>
     </domain-config>
 
+    <!-- WHITELIST: Brave Search web UI (WebAiSearchScraper — no API key) -->
+    <!-- includeSubdomains covers cdn.search.brave.com and other page assets -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">brave.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Bing Search + Bing Chat (WebAiSearchScraper + BingChatVerificationActivity) -->
+    <!-- includeSubdomains covers r.bing.com, th.bing.com, etc. needed for page render -->
+    <!-- microsoft.com covers static asset CDNs used by the Copilot/Bing interface -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">bing.com</domain>
+        <domain includeSubdomains="true">microsoft.com</domain>
+        <domain includeSubdomains="true">msn.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
 </network-security-config>

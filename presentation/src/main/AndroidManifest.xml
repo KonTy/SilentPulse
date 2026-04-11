@@ -322,6 +322,13 @@
             android:exported="false" />
 
         <!-- Debug only: ADB-triggered test notifications with RemoteInput reply support -->
+        <!-- BingChatVerificationActivity: one-time human verification for Bing Chat.
+             Open manually from Settings to solve the CAPTCHA and save cookies. -->
+        <activity
+            android:name=".feature.assistant.BingChatVerificationActivity"
+            android:label="Bing Chat Verification"
+            android:exported="false" />
+
         <!-- ApiKeyReceiver: accepts Brave Search API key via adb broadcast (debug only).
              android:exported="false" — not reachable by other apps. -->
         <receiver

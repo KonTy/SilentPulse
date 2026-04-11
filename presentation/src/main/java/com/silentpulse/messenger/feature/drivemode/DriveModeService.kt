@@ -229,7 +229,7 @@ class DriveModeService : NotificationListenerService() {
                         val ctx = voiceCommandProcessor.getCurrentContext()
                         if (ctx != null) {
                             SilentPulseNotificationListener.sInstance
-                                ?.dismissNotification(ctx.notificationKey)
+                                ?.dismissNotification(ctx.notificationKey.orEmpty())
                             Timber.d("Delete command — notification dismissed")
                         }
                         isProcessing = false

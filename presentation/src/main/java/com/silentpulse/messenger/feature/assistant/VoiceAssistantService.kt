@@ -56,6 +56,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
     private lateinit var navigationHandler: NavigationCommandHandler
     private lateinit var driveTimeHandler: DriveTimeHandler
     private lateinit var generalQueryHandler: GeneralQueryHandler
+    private lateinit var webAiSearchScraper: WebAiSearchScraper
     private lateinit var stockQueryHandler: StockQueryHandler
     private lateinit var musicHandler: MusicCommandHandler
     private lateinit var notifReaderHandler: NotificationReaderHandler
@@ -154,6 +155,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         navigationHandler = NavigationCommandHandler(applicationContext)
         driveTimeHandler = DriveTimeHandler(applicationContext)
         generalQueryHandler = GeneralQueryHandler(applicationContext)
+        webAiSearchScraper  = WebAiSearchScraper(applicationContext)
         stockQueryHandler  = StockQueryHandler(applicationContext)
         musicHandler       = MusicCommandHandler(applicationContext)
         notifReaderHandler = NotificationReaderHandler(applicationContext)
@@ -239,6 +241,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(nextNotifReceiver) } catch (_: Exception) {}
+        webAiSearchScraper.destroy()
     }
     // ── Vosk model init ───────────────────────────────────────────────────────
     private fun initVoskModel() {
@@ -584,17 +587,24 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
             return
         }
-        // ── 7. DuckDuckGo fallback ──────────────────────────────────────────────
-        // Anything that didn’t match above — try DuckDuckGo Instant Answers
+        // ── 7. General knowledge query — AI scraper first, DDG/Wikipedia fallback
+        // Anything that didn't match above — try AI web scraper, then DuckDuckGo
         if (c.contains("?") || c.startsWith("what") || c.startsWith("who") ||
             c.startsWith("where") || c.startsWith("when") || c.startsWith("why") ||
             c.startsWith("how") || c.startsWith("is ") || c.startsWith("are ") ||
             c.startsWith("does ") || c.startsWith("can ") || c.startsWith("tell me")
         ) {
-            Log.d(TAG, "General query — trying DuckDuckGo")
+            Log.d(TAG, "General query — trying WebAI scraper first")
             speak("Let me look that up.") {
-                generalQueryHandler.fetchAndSpeak(command) { answer ->
-                    speak(answer) { resumeWakeWord() }
+                webAiSearchScraper.search(command) { aiAnswer ->
+                    if (aiAnswer != null) {
+                        speak(aiAnswer) { resumeWakeWord() }
+                    } else {
+                        Log.d(TAG, "WebAI returned nothing — falling back to DuckDuckGo")
+                        generalQueryHandler.fetchAndSpeak(command) { answer ->
+                            speak(answer) { resumeWakeWord() }
+                        }
+                    }
                 }
             }
             return
