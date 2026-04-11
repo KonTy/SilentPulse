@@ -39,6 +39,8 @@ class SilentPulseNotificationListener : NotificationListenerService() {
 
     // TTS with onDone callback support
     private var ttsEngine: AndroidTtsEngine? = null
+    /** TTS + language-detection, shared pattern with [VoiceAssistantService]. */
+    private lateinit var voiceInteractor: VoiceInteractor
     private var listenerConnected = false
 
     @Inject lateinit var messageRepo: MessageRepository
@@ -165,6 +167,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         sInstance = this
         Timber.d("Drive Mode listener: onCreate")
         ttsEngine = AndroidTtsEngine(applicationContext)
+        voiceInteractor = VoiceInteractor(applicationContext)
     }
 
     override fun onListenerConnected() {
@@ -272,74 +275,18 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         cachedSttEngine = null
         ttsEngine?.shutdown()
         ttsEngine = null
+        voiceInteractor.destroy()
         clearAllStoredNotifications()
     }
 
     // ── TTS helpers ────────────────────────────────────────────────────────
 
-    /** Speak text; onDone is called on a TTS binder thread when TTS finishes. */
+    /** Speak text; delegates to [VoiceInteractor] which handles locale detection and switching. */
     private fun speak(text: String, onDone: (() -> Unit) = {}) {
-        val engine = ttsEngine
-        if (engine == null) {
-            Timber.w("Drive Mode TTS engine null, skipping")
-            onDone()
-            return
-        }
-        // Detect script and switch TTS locale for non-Latin text
-        val detected = detectLocaleByScript(text)
-        if (detected != null) {
-            engine.setLocale(detected)
-            Timber.d("Drive Mode TTS [${detected.language}]: $text")
-        } else {
-            engine.setLocale(Locale.getDefault())
-            Timber.d("Drive Mode TTS: $text")
-        }
-        engine.speak(text) {
-            // Reset to default locale after speaking foreign text
-            if (detected != null) engine.setLocale(Locale.getDefault())
-            onDone()
-        }
+        voiceInteractor.speak(text, onDone)
     }
 
-    /**
-     * Zero-dependency language detection via Unicode script ranges.
-     * Returns a Locale when >= 30% of letters belong to a non-Latin script,
-     * or null if the text is predominantly Latin / English.
-     */
-    private fun detectLocaleByScript(text: String): Locale? {
-        var total = 0
-        var cyrillic = 0; var arabic = 0; var cjk = 0; var kana = 0
-        var hangul = 0; var devanagari = 0; var thai = 0; var hebrew = 0; var greek = 0
-        for (c in text) {
-            if (!c.isLetter()) continue
-            total++
-            when {
-                c in '\u0400'..'\u04FF' || c in '\u0500'..'\u052F' -> cyrillic++
-                c in '\u0600'..'\u06FF' || c in '\u0750'..'\u077F' || c in '\uFB50'..'\uFDFF' || c in '\uFE70'..'\uFEFF' -> arabic++
-                c in '\u4E00'..'\u9FFF' || c in '\u3400'..'\u4DBF' || c in '\uF900'..'\uFAFF' -> cjk++
-                c in '\u3040'..'\u309F' || c in '\u30A0'..'\u30FF' -> kana++
-                c in '\uAC00'..'\uD7AF' || c in '\u1100'..'\u11FF' -> hangul++
-                c in '\u0900'..'\u097F' -> devanagari++
-                c in '\u0E00'..'\u0E7F' -> thai++
-                c in '\u0590'..'\u05FF' || c in '\uFB1D'..'\uFB4F' -> hebrew++
-                c in '\u0370'..'\u03FF' || c in '\u1F00'..'\u1FFF' -> greek++
-            }
-        }
-        if (total == 0) return null
-        val threshold = (total * 0.30).toInt()
-        return when {
-            cyrillic  > threshold -> Locale("ru")
-            arabic    > threshold -> Locale("ar")
-            kana      > threshold || (cjk > threshold && kana > 0) -> Locale("ja")
-            cjk       > threshold -> Locale("zh")
-            hangul    > threshold -> Locale("ko")
-            devanagari > threshold -> Locale("hi")
-            thai      > threshold -> Locale("th")
-            hebrew    > threshold -> Locale("he")
-            greek     > threshold -> Locale("el")
-            else -> null  // Latin / English - keep default
-        }
-    }
+    // detectLocaleByScript() moved to VoiceInteractor — single authoritative copy.
 
             // ── Voice command state machine ────────────────────────────────────────
 
@@ -820,8 +767,9 @@ class SilentPulseNotificationListener : NotificationListenerService() {
      */
     fun stopReading() {
         Timber.d("Drive Mode: stopReading() called (widget or external)")
-        mainHandler.post {
-            ttsEngine?.stop()
+        // interrupt() stops TTS (clears pending onDone callbacks), then posts
+        // the resume lambda to the main thread — single canonical stop+resume.
+        voiceInteractor.interrupt {
             stopListeningNow()
             pendingNotification = null
             confirmWorkflow = null

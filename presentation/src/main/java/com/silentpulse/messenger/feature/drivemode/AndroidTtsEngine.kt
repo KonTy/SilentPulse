@@ -6,7 +6,11 @@ import android.speech.tts.UtteranceProgressListener
 import timber.log.Timber
 import java.util.Locale
 
-class AndroidTtsEngine(context: Context) : TtsEngine {
+class AndroidTtsEngine(
+    context: Context,
+    /** Optional callback fired on the TTS init thread when the engine is ready. */
+    private val onInitialized: ((Boolean) -> Unit)? = null
+) : TtsEngine {
     
     private var tts: TextToSpeech? = null
     private val completionCallbacks = mutableMapOf<String, () -> Unit>()
@@ -32,6 +36,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
                         isReady = true
                         Timber.d("AndroidTtsEngine initialized successfully")
                     }
+                    onInitialized?.invoke(true)
                     
                     // Set up utterance progress listener for callbacks
                     engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -56,6 +61,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
             } else {
                 Timber.e("AndroidTtsEngine initialization failed")
                 isReady = false
+                onInitialized?.invoke(false)
             }
         }
     }
