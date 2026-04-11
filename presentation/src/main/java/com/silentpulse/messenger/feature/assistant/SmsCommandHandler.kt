@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
+import android.provider.Telephony
 import android.telephony.SmsManager
 import android.util.Log
 
@@ -130,6 +131,13 @@ class SmsCommandHandler(private val context: Context) {
         val counter = if (total > 1) "Message $index of $total. " else ""
         return "${counter}From ${msg.senderName}: ${msg.body}. Say next, delete, repeat, or stop."
     }
+
+    /**
+     * Returns true if this app is currently set as the default SMS handler.
+     * Marking messages as read and deleting them both require this.
+     */
+    fun isDefaultSmsApp(): Boolean =
+        context.packageName == Telephony.Sms.getDefaultSmsPackage(context)
 
     /**
      * Marks a single SMS as read (read=1) in the inbox.

@@ -835,7 +835,10 @@ class VoiceAssistantService : Service() {
         smsReadingIndex = 0
         val count = messages.size
         val s = if (count > 1) "s" else ""
-        speak("You have $count unread text message$s.") { readNextSms() }
+        val notDefaultWarning = if (!smsCommandHandler.isDefaultSmsApp())
+            " Note: set SilentPulse as your default SMS app to mark messages as read and delete them."
+        else ""
+        speak("You have $count unread text message$s.$notDefaultWarning") { readNextSms() }
     }
 
     private fun readNextSms() {
