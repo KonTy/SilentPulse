@@ -16,6 +16,8 @@ import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.checkedChanges
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.feature.drivemode.DriveModeMicService
+import com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider
+import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
 import com.silentpulse.messenger.common.base.QkController
 import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.util.Preferences
@@ -99,6 +101,9 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
                 } else {
                     DriveModeMicService.stop(context)
                 }
+                // Keep AppWidget and QS tiles in sync
+                WidgetPrefs.broadcastStateChanged(context)
+                DriveModeWidgetProvider.refreshAll(context)
             }
 
         readSmsSwitch.checkedChanges()
@@ -203,6 +208,9 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
                     prefs.driveModeWakeWordEnabled.set(false)
                     context.stopService(Intent(context, VoiceAssistantService::class.java))
                 }
+                // Keep AppWidget and QS tiles in sync
+                WidgetPrefs.broadcastStateChanged(context)
+                DriveModeWidgetProvider.refreshAll(context)
             }
 
         voiceReplySwitch.checkedChanges()

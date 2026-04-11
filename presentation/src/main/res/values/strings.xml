@@ -573,6 +573,10 @@
     </string-array>
 
     <!-- Drive Mode control widget -->
-    <string name="drive_mode_widget_desc">Toggle Drive Mode on/off and stop TTS reading</string>
+    <string name="drive_mode_widget_desc">SilentPulse: Notification Reader, Next notification, Voice Assistant</string>
+
+    <!-- Quick Settings tile labels -->
+    <string name="tile_notif_reader">Notif Reader</string>
+    <string name="tile_voice_ast">Voice Asst</string>
 
 </resources>

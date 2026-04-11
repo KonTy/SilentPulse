@@ -6,133 +6,164 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
+import com.silentpulse.messenger.feature.assistant.VoiceAssistantService
 import timber.log.Timber
 
 /**
- * Home-screen widget for Drive Mode: ON / OFF / STOP buttons.
+ * 3×1 home-screen AppWidget — icons only, no text labels.
  *
- * - **ON**  — enables Drive Mode (writes shared pref, updates UI).
- * - **OFF** — disables Drive Mode, stops TTS + STT.
- * - **STOP** — immediately silences TTS and cancels voice command flow.
+ *  Slot 1  [btn_notif_reader]  Toggle Notification Reader on/off.
+ *                              Icon: ic_notifications_black_24dp (on)
+ *                                  / ic_notifications_off_black_24dp (off)
  *
- * Communicates with [SilentPulseNotificationListener] via its static
- * [sInstance] reference — no network, no IPC, just in-process calls.
+ *  Slot 2  [btn_next_notif]    Jump to next notification in the reader queue.
+ *                              Icon: ic_skip_next_black_24dp
+ *                              Alpha: 1.0 when reader is on, 0.35 when off.
+ *
+ *  Slot 3  [btn_voice_ast]     Toggle Voice Assistant on/off.
+ *                              Icon: ic_mic_black_24dp (on)
+ *                                  / ic_mic_off_black_24dp (off)
+ *
+ * State is stored via [WidgetPrefs].  After every tap the widget broadcasts
+ * [WidgetPrefs.ACTION_STATE_CHANGED] so Quick Settings tiles refresh too.
  */
 class DriveModeWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        const val ACTION_DRIVE_ON  = "com.silentpulse.messenger.DRIVE_MODE_ON"
-        const val ACTION_DRIVE_OFF = "com.silentpulse.messenger.DRIVE_MODE_OFF"
-        const val ACTION_DRIVE_STOP = "com.silentpulse.messenger.DRIVE_MODE_STOP"
+        private const val ACTION_TOGGLE_NOTIF_READER =
+            "com.silentpulse.messenger.TOGGLE_NOTIF_READER"
+        private const val ACTION_NEXT_NOTIF =
+            "com.silentpulse.messenger.NEXT_NOTIFICATION"
+        private const val ACTION_TOGGLE_VOICE_AST =
+            "com.silentpulse.messenger.TOGGLE_VOICE_AST"
 
-        /** Poke all widget instances so they refresh their ON/OFF label. */
+        /** Push all live widget instances to re-draw from current prefs. */
         fun refreshAll(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(
                 ComponentName(context, DriveModeWidgetProvider::class.java)
             )
             if (ids.isNotEmpty()) {
-                val intent = Intent(context, DriveModeWidgetProvider::class.java).apply {
-                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
-                }
-                context.sendBroadcast(intent)
+                context.sendBroadcast(
+                    Intent(context, DriveModeWidgetProvider::class.java).apply {
+                        action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                    }
+                )
             }
         }
     }
+
+    // ── AppWidgetProvider callbacks ───────────────────────────────────────────
 
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        for (id in appWidgetIds) {
-            updateWidget(context, appWidgetManager, id)
-        }
+        for (id in appWidgetIds) updateWidget(context, appWidgetManager, id)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        Timber.d("DriveModeWidget onReceive: ${intent.action}")
         when (intent.action) {
-            ACTION_DRIVE_ON -> {
-                Timber.d("DriveModeWidget: ON pressed")
-                setDriveModeEnabled(context, true)
-                refreshAll(context)
-            }
-            ACTION_DRIVE_OFF -> {
-                Timber.d("DriveModeWidget: OFF pressed")
-                setDriveModeEnabled(context, false)
-                // Stop any ongoing TTS/STT
-                SilentPulseNotificationListener.sInstance?.stopReading()
-                refreshAll(context)
-            }
-            ACTION_DRIVE_STOP -> {
-                Timber.d("DriveModeWidget: STOP pressed")
-                SilentPulseNotificationListener.sInstance?.stopReading()
-                // Don't change Drive Mode enabled state — just silence current speech
-            }
+            ACTION_TOGGLE_NOTIF_READER       -> handleToggleNotifReader(context)
+            ACTION_NEXT_NOTIF                -> handleNextNotif(context)
+            ACTION_TOGGLE_VOICE_AST          -> handleToggleVoiceAst(context)
+            // QS tile or in-app toggle changed state — redraw the widget too
+            WidgetPrefs.ACTION_STATE_CHANGED -> refreshAll(context)
         }
     }
+
+    // ── Action handlers ───────────────────────────────────────────────────────
+
+    private fun handleToggleNotifReader(context: Context) {
+        val nowEnabled = !WidgetPrefs.isNotifReaderEnabled(context)
+        WidgetPrefs.setNotifReader(context, nowEnabled)
+        Timber.d("DriveModeWidget: notif reader → $nowEnabled")
+        if (nowEnabled) {
+            DriveModeMicService.start(context)
+        } else {
+            SilentPulseNotificationListener.sInstance?.stopReading()
+            DriveModeMicService.stop(context)
+        }
+        notifyAndRefresh(context)
+    }
+
+    private fun handleNextNotif(context: Context) {
+        Timber.d("DriveModeWidget: next notification")
+        context.sendBroadcast(
+            Intent(WidgetPrefs.ACTION_NEXT_NOTIFICATION).apply { setPackage(context.packageName) }
+        )
+    }
+
+    private fun handleToggleVoiceAst(context: Context) {
+        val nowEnabled = !WidgetPrefs.isVoiceAstEnabled(context)
+        WidgetPrefs.setVoiceAst(context, nowEnabled)
+        Timber.d("DriveModeWidget: voice ast → $nowEnabled")
+        val svc = Intent(context, VoiceAssistantService::class.java)
+        if (nowEnabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(svc)
+            else context.startService(svc)
+        } else {
+            context.stopService(svc)
+        }
+        notifyAndRefresh(context)
+    }
+
+    private fun notifyAndRefresh(context: Context) {
+        WidgetPrefs.broadcastStateChanged(context)
+        refreshAll(context)
+    }
+
+    // ── Rendering ─────────────────────────────────────────────────────────────
 
     private fun updateWidget(
         context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetId: Int
+        manager: AppWidgetManager,
+        widgetId: Int
     ) {
-        val views = RemoteViews(context.packageName, R.layout.widget_drive_mode)
-        val enabled = isDriveModeEnabled(context)
+        val notifOn = WidgetPrefs.isNotifReaderEnabled(context)
+        val voiceOn = WidgetPrefs.isVoiceAstEnabled(context)
+        val views   = RemoteViews(context.packageName, R.layout.widget_drive_mode)
 
-        // Status text
-        views.setTextViewText(
-            R.id.widget_status,
-            if (enabled) "ON" else "OFF"
+        // Slot 1 — Notification Reader
+        views.setImageViewResource(
+            R.id.btn_notif_reader,
+            if (notifOn) R.drawable.ic_notifications_black_24dp
+            else         R.drawable.ic_notifications_off_black_24dp
         )
-        views.setTextColor(
-            R.id.widget_status,
-            if (enabled) 0xFF4CAF50.toInt() else 0xFF888888.toInt()
-        )
+        views.setFloat(R.id.btn_notif_reader, "setAlpha", if (notifOn) 1.0f else 0.4f)
+        views.setOnClickPendingIntent(R.id.btn_notif_reader,
+            pendingBroadcast(context, ACTION_TOGGLE_NOTIF_READER))
 
-        // ON button
-        views.setOnClickPendingIntent(
-            R.id.btn_on,
-            makePendingIntent(context, ACTION_DRIVE_ON)
-        )
-        // OFF button
-        views.setOnClickPendingIntent(
-            R.id.btn_off,
-            makePendingIntent(context, ACTION_DRIVE_OFF)
-        )
-        // STOP button
-        views.setOnClickPendingIntent(
-            R.id.btn_stop,
-            makePendingIntent(context, ACTION_DRIVE_STOP)
-        )
+        // Slot 2 — Next notification (dims when reader is off)
+        views.setImageViewResource(R.id.btn_next_notif, R.drawable.ic_skip_next_black_24dp)
+        views.setFloat(R.id.btn_next_notif, "setAlpha", if (notifOn) 1.0f else 0.35f)
+        views.setOnClickPendingIntent(R.id.btn_next_notif,
+            pendingBroadcast(context, ACTION_NEXT_NOTIF))
 
-        appWidgetManager.updateAppWidget(appWidgetId, views)
+        // Slot 3 — Voice Assistant
+        views.setImageViewResource(
+            R.id.btn_voice_ast,
+            if (voiceOn) R.drawable.ic_mic_black_24dp
+            else         R.drawable.ic_mic_off_black_24dp
+        )
+        views.setFloat(R.id.btn_voice_ast, "setAlpha", if (voiceOn) 1.0f else 0.4f)
+        views.setOnClickPendingIntent(R.id.btn_voice_ast,
+            pendingBroadcast(context, ACTION_TOGGLE_VOICE_AST))
+
+        manager.updateAppWidget(widgetId, views)
     }
 
-    private fun makePendingIntent(context: Context, action: String): PendingIntent {
-        val intent = Intent(context, DriveModeWidgetProvider::class.java).apply {
-            this.action = action
-        }
-        return PendingIntent.getBroadcast(
-            context, action.hashCode(), intent,
+    private fun pendingBroadcast(context: Context, action: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, action.hashCode(),
+            Intent(context, DriveModeWidgetProvider::class.java).apply { this.action = action },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-    }
-
-    private fun isDriveModeEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(
-            "${context.packageName}_preferences", Context.MODE_PRIVATE
-        ).getBoolean("drive_mode_enabled", false)
-    }
-
-    private fun setDriveModeEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(
-            "${context.packageName}_preferences", Context.MODE_PRIVATE
-        ).edit().putBoolean("drive_mode_enabled", enabled).apply()
-        Timber.d("DriveModeWidget: drive_mode_enabled = $enabled")
-    }
 }

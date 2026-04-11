@@ -466,6 +466,9 @@ class MainActivity : QkThemedActivity(), MainView {
             }
         }
         updateAssistantMenuIcon()
+        // Keep AppWidget and QS tiles in sync with in-app voice-assistant toggle
+        com.silentpulse.messenger.feature.drivemode.WidgetPrefs.broadcastStateChanged(this)
+        com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider.refreshAll(this)
     }
 
     override fun requestPermissions() {

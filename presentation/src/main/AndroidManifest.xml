@@ -277,21 +277,46 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
-        <!-- Drive Mode control widget: ON / OFF / STOP -->
+        <!-- SilentPulse control widget: 3×1 icon-only (Notif Reader / Next / Voice Ast) -->
         <receiver
             android:name=".feature.drivemode.DriveModeWidgetProvider"
             android:exported="true"
-            android:label="Drive Mode Control">
+            android:label="SilentPulse Controls">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.silentpulse.messenger.DRIVE_MODE_ON" />
-                <action android:name="com.silentpulse.messenger.DRIVE_MODE_OFF" />
-                <action android:name="com.silentpulse.messenger.DRIVE_MODE_STOP" />
+                <action android:name="com.silentpulse.messenger.TOGGLE_NOTIF_READER" />
+                <action android:name="com.silentpulse.messenger.NEXT_NOTIFICATION" />
+                <action android:name="com.silentpulse.messenger.TOGGLE_VOICE_AST" />
+                <action android:name="com.silentpulse.messenger.WIDGET_STATE_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_drive_mode_info" />
         </receiver>
+
+        <!-- Quick Settings tile: Notification Reader toggle -->
+        <service
+            android:name=".feature.drivemode.NotifReaderTileService"
+            android:exported="true"
+            android:label="@string/tile_notif_reader"
+            android:icon="@drawable/ic_notifications_black_24dp"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Quick Settings tile: Voice Assistant toggle -->
+        <service
+            android:name=".feature.drivemode.VoiceAssistantTileService"
+            android:exported="true"
+            android:label="@string/tile_voice_ast"
+            android:icon="@drawable/ic_mic_black_24dp"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <receiver
             android:name=".receiver.SendSmsReceiver"
             android:exported="false" />

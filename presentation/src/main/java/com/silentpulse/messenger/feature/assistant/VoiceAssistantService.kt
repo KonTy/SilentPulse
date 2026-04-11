@@ -16,6 +16,7 @@ import timber.log.Timber
 import com.silentpulse.messenger.feature.drivemode.AndroidSttEngine
 import com.silentpulse.messenger.feature.drivemode.NotifSnapshot
 import com.silentpulse.messenger.feature.drivemode.SttEngine
+import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
 import java.util.Locale
 import java.util.UUID
 
@@ -131,6 +132,17 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             }
         }
     }
+    // ── Broadcast receiver for widget "Next notification" button ──────────────
+    private val nextNotifReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != WidgetPrefs.ACTION_NEXT_NOTIFICATION) return
+            Log.d(TAG, "nextNotifReceiver: advance notif reader")
+            if (notifReaderActive && notifReaderList.isNotEmpty()) {
+                notifReaderIndex++
+                readCurrentNotification()
+            }
+        }
+    }
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onCreate() {
         super.onCreate()
@@ -157,6 +169,11 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         androidx.core.content.ContextCompat.registerReceiver(
             this, schemaReplyReceiver, IntentFilter(CommandRouter.ACTION_REPORT_SCHEMA),
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, nextNotifReceiver,
+            IntentFilter(WidgetPrefs.ACTION_NEXT_NOTIFICATION),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         initSttEngine()
         initVoskModel()
@@ -221,6 +238,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         sessionManager.close()
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(nextNotifReceiver) } catch (_: Exception) {}
     }
     // ── Vosk model init ───────────────────────────────────────────────────────
     private fun initVoskModel() {
