@@ -102,7 +102,7 @@ class GeneralQueryHandler(private val context: Context) {
         // Step 1: search for the most relevant article
         val encoded = URLEncoder.encode(query, "UTF-8")
         val searchUrl = "$WIKI_SEARCH_URL?action=query&list=search" +
-                "&srsearch=$encoded&format=json&srprop=snippet&srlimit=1"
+                "&srsearch=$encoded&format=json&srprop=snippet&srlimit=3"
         Log.d(TAG, "Wikipedia search: $searchUrl")
 
         val searchBody = httpGet(searchUrl)
@@ -113,15 +113,40 @@ class GeneralQueryHandler(private val context: Context) {
             return null
         }
 
-        val topResult = results.getJSONObject(0)
-        val title = topResult.optString("title", "")
-        if (title.isEmpty()) return null
+        // Require some keyword overlap between the query and the article title.
+        // Without this check, a query like "best Insta360 cameras" can return a
+        // Leica article (Insta360/Leica co-branding causes both to rank for each
+        // other's search terms), making the assistant read unrelated content.
+        val queryWords = query.lowercase()
+            .replace(Regex("[^a-z0-9\\s]"), " ")
+            .split("\\s+".toRegex())
+            .filter { it.length > 3 }  // skip stop words / short words
+            .toSet()
+
+        var chosenTitle: String? = null
+        for (i in 0 until results.length()) {
+            val candidate = results.getJSONObject(i)
+            val title = candidate.optString("title", "")
+            if (title.isEmpty()) continue
+            val titleWords = title.lowercase().split("\\s+".toRegex()).toSet()
+            val overlap = queryWords.intersect(titleWords)
+            if (overlap.isNotEmpty()) {
+                Log.d(TAG, "Wikipedia: title \"$title\" overlaps query on: $overlap")
+                chosenTitle = title
+                break
+            }
+        }
+
+        if (chosenTitle == null) {
+            Log.d(TAG, "Wikipedia: no search result title shares keywords with query — skipping")
+            return null
+        }
 
         // Step 2: fetch the intro extract of that article
-        val encodedTitle = URLEncoder.encode(title, "UTF-8")
+        val encodedTitle = URLEncoder.encode(chosenTitle, "UTF-8")
         val extractUrl = "$WIKI_SEARCH_URL?action=query&titles=$encodedTitle" +
                 "&prop=extracts&exsentences=3&format=json&explaintext=1"
-        Log.d(TAG, "Wikipedia extract: $extractUrl (article: $title)")
+        Log.d(TAG, "Wikipedia extract: $extractUrl (article: $chosenTitle)")
 
         val extractBody = httpGet(extractUrl)
         val extractJson = JSONObject(extractBody)
@@ -136,8 +161,8 @@ class GeneralQueryHandler(private val context: Context) {
         if (extract.isEmpty()) return null
 
         val spoken = truncateToSentence(extract, MAX_CHARS)
-        Log.d(TAG, "Wikipedia answer from \"$title\": $spoken")
-        return "According to Wikipedia, on $title: $spoken"
+        Log.d(TAG, "Wikipedia answer from \"$chosenTitle\": $spoken")
+        return "According to Wikipedia, on $chosenTitle: $spoken"
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

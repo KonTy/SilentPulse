@@ -54,6 +54,7 @@ class VoiceAssistantService : Service() {
     private lateinit var driveTimeHandler: DriveTimeHandler
     private lateinit var generalQueryHandler: GeneralQueryHandler
     private lateinit var webAiSearchScraper: WebAiSearchScraper
+    private lateinit var braveSearchHandler: BraveSearchHandler
     private lateinit var stockQueryHandler: StockQueryHandler
     private lateinit var musicHandler: MusicCommandHandler
     private lateinit var notifReaderHandler: NotificationReaderHandler
@@ -181,6 +182,7 @@ class VoiceAssistantService : Service() {
         driveTimeHandler = DriveTimeHandler(applicationContext)
         generalQueryHandler = GeneralQueryHandler(applicationContext)
         webAiSearchScraper  = WebAiSearchScraper(applicationContext)
+        braveSearchHandler  = BraveSearchHandler(applicationContext)
         stockQueryHandler  = StockQueryHandler(applicationContext)
         musicHandler       = MusicCommandHandler(applicationContext)
         notifReaderHandler = NotificationReaderHandler(applicationContext)
@@ -650,8 +652,21 @@ class VoiceAssistantService : Service() {
                         if (answer != null) {
                             speak(answer) { resumeWakeWord() }
                         } else {
-                            generalQueryHandler.fetchAndSpeak(bingQuery) { a ->
-                                speak(a) { resumeWakeWord() }
+                            // Bing WebView failed or timed out.
+                            // DO NOT fall back to DDG/Wikipedia for explicit Bing queries:
+                            // "best X cameras right now" style queries are recommendation/
+                            // shopping queries that Wikipedia fundamentally cannot answer.
+                            // Doing so caused unrelated Wikipedia articles to be spoken
+                            // (e.g. asking about Insta360 cameras returned Leica content).
+                            // Instead: try Brave API if available, otherwise tell the user.
+                            if (braveSearchHandler.hasApiKey()) {
+                                braveSearchHandler.search(bingQuery) { braveAnswer ->
+                                    speak(braveAnswer) { resumeWakeWord() }
+                                }
+                            } else {
+                                speak("Bing didn't have an answer for that. Try rephrasing or asking without the bing prefix.") {
+                                    resumeWakeWord()
+                                }
                             }
                         }
                     }
@@ -971,11 +986,11 @@ class VoiceAssistantService : Service() {
         }
         return dp[a.length][b.length]
     }
-    // ── TTS helpers ───────────────────────────────────────────
+    // ── TTS helpers ─────────────────────────────────────────────────────────────
+
     /**
      * Speak [text] and optionally run [onDone] when the utterance finishes.
-     * Delegates to [VoiceInteractor] which handles locale detection, TTS engine
-     * lifecycle, and the stop/resume contract.
+     * Delegates to [VoiceInteractor] which handles locale detection and TTS lifecycle.
      */
     private fun speak(text: String, onDone: (() -> Unit)? = null) {
         voiceInteractor.speak(text) { onDone?.invoke() }
@@ -983,8 +998,7 @@ class VoiceAssistantService : Service() {
 
     /**
      * Enqueue a TTS utterance after whatever is already playing.
-     * Use this for corridor weather so each city is spoken in sequence.
-     * AndroidTtsEngine always uses QUEUE_ADD — same semantics as before.
+     * Use for corridor weather so each city is spoken in sequence.
      */
     private fun speakQueued(text: String) {
         voiceInteractor.speak(text)
