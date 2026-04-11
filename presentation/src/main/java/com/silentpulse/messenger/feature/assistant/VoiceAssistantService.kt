@@ -589,8 +589,14 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         }
         // ── 7. General knowledge queries ──────────────────────────────────────
         // "bing <query>" → route explicitly to Bing WebView
-        if (c.startsWith("bing ")) {
-            val bingQuery = command.drop(5).trim()
+        // Also accept "being" — STT frequently mishears "bing" as "being"
+        val bingPrefix = when {
+            c.startsWith("bing ")  -> 5
+            c.startsWith("being ") -> 6
+            else                  -> -1
+        }
+        if (bingPrefix > 0) {
+            val bingQuery = command.drop(bingPrefix).trim()
             if (bingQuery.isNotEmpty()) {
                 Log.d(TAG, "Bing explicit query: \"$bingQuery\"")
                 speak("Asking Bing.") {

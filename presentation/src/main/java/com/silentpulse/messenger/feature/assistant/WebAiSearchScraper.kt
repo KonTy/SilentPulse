@@ -260,7 +260,18 @@ class WebAiSearchScraper(private val context: Context) {
      */
     private val BING_SELECTORS_JS = """
     (function() {
+        // Skip generic definitional text like "The Super Bowl is the annual..."
+        // These are "what is X" answers, not "who won" or factual answers.
+        function isDefinition(t) {
+            return /^The\s+\S+(\s+\S+){0,3}\s+(is|are)\s+(a|an|the)\s/i.test(t);
+        }
         var sel = [
+            // High-confidence direct answer widgets (try first)
+            '.b_focusTextLarge',
+            '.b_focusTextHigh',
+            '.b_hPanel .b_focusLabel',
+            '#b_pole .b_focusTextSmall',
+            // General answer card selectors
             '#b_context .b_answer',
             '.copilot-answer',
             '.b_ans .besc',
@@ -272,12 +283,26 @@ class WebAiSearchScraper(private val context: Context) {
             '.b_focusTextSmall',
             '#b_results li.b_ans .besc'
         ];
+        // First pass: skip definitional results
         for (var i = 0; i < sel.length; i++) {
             try {
                 var el = document.querySelector(sel[i]);
-                if (el && el.innerText && el.innerText.trim().length > 50) {
-                    console.log('[BingAI] matched: ' + sel[i]);
-                    return el.innerText.trim().substring(0, 500);
+                if (el && el.innerText) {
+                    var t = el.innerText.trim();
+                    if (t.length > 50 && !isDefinition(t)) {
+                        console.log('[BingAI] matched (non-def): ' + sel[i]);
+                        return t.substring(0, 500);
+                    }
+                }
+            } catch(e) {}
+        }
+        // Second pass: accept definitions as last resort
+        for (var j = 0; j < sel.length; j++) {
+            try {
+                var el2 = document.querySelector(sel[j]);
+                if (el2 && el2.innerText && el2.innerText.trim().length > 50) {
+                    console.log('[BingAI] matched (def fallback): ' + sel[j]);
+                    return el2.innerText.trim().substring(0, 500);
                 }
             } catch(e) {}
         }
