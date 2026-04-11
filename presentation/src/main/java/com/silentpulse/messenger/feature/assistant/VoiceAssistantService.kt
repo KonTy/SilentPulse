@@ -663,7 +663,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         notifReaderActive = true
         val count = notifReaderList.size
         val countSuffix = if (count > 1) "s" else ""
-        speak("You have $count notification$countSuffix.", bargeIn = false) { readCurrentNotification() }
+        speak("You have $count notification$countSuffix.") { readCurrentNotification() }
     }
 
     private fun startEmailReading() {
@@ -677,7 +677,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         notifReaderActive = true
         val count = notifReaderList.size
         val countSuffix = if (count > 1) "s" else ""
-        speak("You have $count unread email$countSuffix.", bargeIn = false) { readCurrentNotification() }
+        speak("You have $count unread email$countSuffix.") { readCurrentNotification() }
     }
 
     private fun readCurrentNotification() {
@@ -685,13 +685,13 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         if (notifReaderIndex >= notifReaderList.size) {
             Log.d(TAG, "notifReader: all done, no more notifications")
             notifReaderActive = false
-            speak("No more notifications.", bargeIn = false) { resumeWakeWord() }
+            speak("No more notifications.") { resumeWakeWord() }
             return
         }
         val item   = notifReaderList[notifReaderIndex]
         val text   = notifReaderHandler.formatForSpeech(item, notifReaderIndex + 1, notifReaderList.size)
         val prompt = notifReaderHandler.promptForCommands(item)
-        speak("$text. $prompt", bargeIn = false) { startSttOneShot() }
+        speak("$text. $prompt") { startSttOneShot() }
     }
     private fun handleNotifReaderCommand(c: String) {
         Log.d(TAG, "handleNotifReaderCommand(\"$c\") index=$notifReaderIndex/${notifReaderList.size}")
@@ -701,15 +701,15 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 Log.d(TAG, "notifReader: DELETE key=${item?.key}")
                 if (item != null) notifReaderHandler.dismiss(item.key)
                 notifReaderIndex++
-                speak("Deleted.", bargeIn = false) { readCurrentNotification() }
+                speak("Deleted.") { readCurrentNotification() }
             }
             notifReaderHandler.isReplyCommand(c) -> {
                 Log.d(TAG, "notifReader: REPLY (hasReplyAction=${item?.hasReplyAction})")
                 if (item == null || !item.hasReplyAction) {
-                    speak("This notification doesn't support replies. Say delete or repeat.", bargeIn = false) { startSttOneShot() }
+                    speak("This notification doesn't support replies. Say delete or repeat.") { startSttOneShot() }
                 } else {
                     notifReaderAwaitingReply = true
-                    speak("What would you like to say?", bargeIn = false) { startSttOneShot() }
+                    speak("What would you like to say?") { startSttOneShot() }
                 }
             }
             notifReaderHandler.isRepeatCommand(c) -> {
@@ -721,7 +721,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
                 val hint = if (item?.hasReplyAction == true)
                     "Say reply, delete, or repeat."
                 else "Say delete or repeat."
-                speak(hint, bargeIn = false) { startSttOneShot() }
+                speak(hint) { startSttOneShot() }
             }
         }
     }
@@ -733,7 +733,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         val sent = notifReaderHandler.sendReply(item.key, replyText)
         notifReaderIndex++
         val replyMsg = if (sent) "Sent: $replyText." else "Couldn't send the reply. Moving on."
-        speak(replyMsg, bargeIn = false) { readCurrentNotification() }
+        speak(replyMsg) { readCurrentNotification() }
     }
     // ── App launcher ─────────────────────────────────────────────────────────
     /**
@@ -855,7 +855,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
      * killed immediately, the notification reader (if active) is cancelled, and
      * the assistant returns to wake-word mode without calling [onDone].
      */
-    private fun speak(text: String, bargeIn: Boolean = true, onDone: (() -> Unit)? = null) {
+    private fun speak(text: String, onDone: (() -> Unit)? = null) {
         if (!ttsReady) {
             onDone?.invoke()
             return
@@ -874,7 +874,26 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
         } else {
             tts.language = Locale.US
         }
-        speakInternal(text, bargeIn, onDone)
+        val preview = if (text.length > 80) text.take(80) + "\u2026" else text
+        Log.d(TAG, "TTS speak: \"$preview\"")
+        val utteranceId = UUID.randomUUID().toString()
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) {
+                if (id == utteranceId) {
+                    Log.d(TAG, "TTS utterance done")
+                    onDone?.invoke()
+                }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) {
+                if (id == utteranceId) {
+                    Log.w(TAG, "TTS utterance ERROR")
+                    onDone?.invoke()
+                }
+            }
+        })
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
     /**
      * Detect the primary language from Unicode script ranges.
@@ -916,46 +935,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             else                    -> null // Latin or mixed — keep English
         }
     }
-    /** Speak after language has been detected and set. */
-    private fun speakInternal(text: String, bargeIn: Boolean, onDone: (() -> Unit)?) {
-        val preview = if (text.length > 80) text.take(80) + "…" else text
-        Log.d(TAG, "TTS speak (bargeIn=$bargeIn): \"$preview\"")
-        val utteranceId = UUID.randomUUID().toString()
-        // Barge-in: run Vosk stop-listener while TTS is speaking
-        if (bargeIn) {
-            wakeWordDetector?.startStopListening {
-                Log.d(TAG, "Barge-in: user said STOP — killing TTS")
-                mainHandler.post {
-                    tts.stop()
-                    wakeWordDetector?.stopStopListening()
-                    if (notifReaderActive) {
-                        notifReaderActive = false
-                        notifReaderAwaitingReply = false
-                    }
-                    speak("Stopped.", bargeIn = false) { resumeWakeWord() }
-                }
-            }
-        }
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) {}
-            override fun onDone(id: String?) {
-                if (id == utteranceId) {
-                    Log.d(TAG, "TTS utterance done")
-                    wakeWordDetector?.stopStopListening()
-                    onDone?.invoke()
-                }
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) {
-                if (id == utteranceId) {
-                    Log.w(TAG, "TTS utterance ERROR")
-                    wakeWordDetector?.stopStopListening()
-                    onDone?.invoke()
-                }
-            }
-        })
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-    }
+
     /**
      * Enqueue a TTS utterance after whatever is already playing (QUEUE_ADD).
      * Use this for corridor weather so each city is spoken in sequence

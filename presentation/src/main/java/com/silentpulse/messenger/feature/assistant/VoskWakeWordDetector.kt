@@ -32,8 +32,6 @@ class VoskWakeWordDetector(private val context: Context) {
         private const val SAMPLE_RATE = 16000.0f
         /** Grammar for wake-word phase. */
         private const val GRAMMAR = "[\"computer\", \"[unk]\"]"
-        /** Grammar for stop-word phase (active while TTS is speaking). */
-        private const val STOP_GRAMMAR = "[\"stop\", \"computer stop\", \"[unk]\"]"
         /** Minimum ms between two wake-word fires — prevents double/rapid triggers. */
         private const val COOLDOWN_MS = 3_000L
         /**
@@ -47,7 +45,6 @@ class VoskWakeWordDetector(private val context: Context) {
 
     private var model: Model? = null
     private var speechService: SpeechService? = null
-    private var stopService: SpeechService? = null
     private var onWakeWord: (() -> Unit)? = null
     private var onReady: (() -> Unit)? = null
     private var onError: ((String) -> Unit)? = null
@@ -125,70 +122,10 @@ class VoskWakeWordDetector(private val context: Context) {
         startInternal()
     }
 
-    /**
-     * Start a lightweight Vosk listener using the stop grammar
-     * `["stop", "computer stop", "[unk]"]`. Intended to run while TTS is
-     * speaking so the user can interrupt long reads.
-     *
-     * @param onStop Called when "stop" or "computer stop" is heard.
-     */
-    fun startStopListening(onStop: () -> Unit) {
-        val m = model ?: return
-        stopStopListening() // ensure clean state
-        try {
-            val recognizer = Recognizer(m, SAMPLE_RATE, STOP_GRAMMAR)
-            val service = SpeechService(recognizer, SAMPLE_RATE)
-            stopService = service
-            service.startListening(object : RecognitionListener {
-                override fun onPartialResult(hypothesis: String?) {
-                    // Ignored — only committed results are used to avoid false positives.
-                }
-                override fun onResult(hypothesis: String?) {
-                    hypothesis ?: return
-                    if (checkForStopWord(hypothesis)) {
-                        stopStopListening()
-                        onStop()
-                    }
-                }
-                override fun onFinalResult(hypothesis: String?) {
-                    hypothesis ?: return
-                    if (checkForStopWord(hypothesis)) {
-                        stopStopListening()
-                        onStop()
-                    }
-                }
-                override fun onError(e: Exception?) {
-                    Log.w(TAG, "Stop-listener error: ${e?.message}")
-                }
-                override fun onTimeout() {
-                    // Restart stop-listener — TTS may still be playing
-                    val currentStop = stopService
-                    if (currentStop != null) {
-                        stopStopListening()
-                        startStopListening(onStop)
-                    }
-                }
-            })
-            Log.d(TAG, "Stop-listener active (grammar: stop / computer stop)")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to start stop-listener", e)
-        }
-    }
-
-    /** Stop the stop-word listener without affecting wake-word detection. */
-    fun stopStopListening() {
-        try {
-            stopService?.stop()
-            stopService?.shutdown()
-        } catch (_: Exception) {}
-        stopService = null
-    }
-
     /** Permanently release all resources. */
     fun destroy() {
         Log.d(TAG, "Destroying VoskWakeWordDetector")
         isPaused = true
-        stopStopListening()
         stopInternalService()
         try { model?.close() } catch (_: Exception) {}
         model = null
@@ -256,16 +193,6 @@ class VoskWakeWordDetector(private val context: Context) {
             Log.e(TAG, msg, e)
             onError?.invoke(msg)
         }
-    }
-
-    /** Returns true if the final Vosk result contains a stop word. */
-    private fun checkForStopWord(hypothesis: String): Boolean {
-        return try {
-            val json = JSONObject(hypothesis)
-            val text = json.optString("text", "").trim()
-            text.equals("stop", ignoreCase = true) ||
-                text.equals("computer stop", ignoreCase = true)
-        } catch (_: Exception) { false }
     }
 
     /**
