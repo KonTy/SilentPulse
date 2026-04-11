@@ -32,6 +32,7 @@ class SmsCommandHandler(private val context: Context) {
     }
 
     data class SmsMessage(
+        val id: Long,             // _id in content://sms — needed for deletion
         val address: String,      // raw phone number
         val senderName: String,   // display name from Contacts, or raw number
         val body: String,
@@ -97,7 +98,7 @@ class SmsCommandHandler(private val context: Context) {
         try {
             cursor = context.contentResolver.query(
                 Uri.parse("content://sms/inbox"),
-                arrayOf("address", "body", "date", "read"),
+                arrayOf("_id", "address", "body", "date", "read"),
                 "read = 0",
                 null,
                 "date DESC"
@@ -106,13 +107,14 @@ class SmsCommandHandler(private val context: Context) {
                 return emptyList()
             }
             while (cursor.moveToNext()) {
+                val id      = cursor.getLong(cursor.getColumnIndexOrThrow("_id"))
                 val address = cursor.getString(cursor.getColumnIndexOrThrow("address"))
                     ?: continue
                 val body = cursor.getString(cursor.getColumnIndexOrThrow("body"))
                     ?: continue
                 val date = cursor.getLong(cursor.getColumnIndexOrThrow("date"))
                 val name = resolveNameForNumber(address) ?: address
-                results += SmsMessage(address, name, body, date)
+                results += SmsMessage(id, address, name, body, date)
             }
         } catch (e: Exception) {
             Log.e(TAG, "fetchUnreadSms failed", e)
@@ -126,7 +128,26 @@ class SmsCommandHandler(private val context: Context) {
     /** Formats a single [SmsMessage] for TTS output. */
     fun formatSmsForSpeech(msg: SmsMessage, index: Int, total: Int): String {
         val counter = if (total > 1) "Message $index of $total. " else ""
-        return "${counter}From ${msg.senderName}: ${msg.body}"
+        return "${counter}From ${msg.senderName}: ${msg.body}. Say next, delete, or stop."
+    }
+
+    /**
+     * Deletes a single SMS from the inbox by its [_id][SmsMessage.id].
+     * Requires WRITE_SMS / DELETE_SMS permission (or default SMS app on Android 4.4+).
+     * Returns true if a row was deleted.
+     */
+    fun deleteSms(msg: SmsMessage): Boolean {
+        return try {
+            val deleted = context.contentResolver.delete(
+                Uri.parse("content://sms/${msg.id}"),
+                null, null
+            )
+            Log.d(TAG, "deleteSms id=${msg.id}: $deleted row(s) deleted")
+            deleted > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteSms failed for id=${msg.id}", e)
+            false
+        }
     }
 
     // ── Contact resolution ────────────────────────────────────────────────────
