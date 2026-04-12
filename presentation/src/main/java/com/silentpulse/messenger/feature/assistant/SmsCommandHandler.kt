@@ -141,13 +141,19 @@ class SmsCommandHandler(private val context: Context) {
 
     /**
      * Marks a single SMS as read (read=1) in the inbox.
-     * Requires default SMS app on Android 4.4+.
+     * Uses [Telephony.Sms.CONTENT_URI] with a WHERE clause — more reliable on
+     * Android 10+ Samsung devices than the direct-id URI (content://sms/{id}).
+     * Requires this app to be the default SMS handler.
      */
     fun markAsRead(msg: SmsMessage) {
         try {
-            val values = android.content.ContentValues().apply { put("read", 1) }
+            val values = android.content.ContentValues().apply {
+                put(Telephony.Sms.READ, 1)
+                put(Telephony.Sms.SEEN, 1)
+            }
             val updated = context.contentResolver.update(
-                Uri.parse("content://sms/${msg.id}"), values, null, null
+                Telephony.Sms.CONTENT_URI, values,
+                "${Telephony.Sms._ID} = ?", arrayOf(msg.id.toString())
             )
             Log.d(TAG, "markAsRead id=${msg.id}: $updated row(s) updated")
         } catch (e: Exception) {
@@ -157,14 +163,15 @@ class SmsCommandHandler(private val context: Context) {
 
     /**
      * Deletes a single SMS from the inbox by its [_id][SmsMessage.id].
-     * Requires WRITE_SMS / DELETE_SMS permission (or default SMS app on Android 4.4+).
+     * Uses [Telephony.Sms.CONTENT_URI] with a WHERE clause for Android 10+ compatibility.
+     * Requires this app to be the default SMS handler.
      * Returns true if a row was deleted.
      */
     fun deleteSms(msg: SmsMessage): Boolean {
         return try {
             val deleted = context.contentResolver.delete(
-                Uri.parse("content://sms/${msg.id}"),
-                null, null
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms._ID} = ?", arrayOf(msg.id.toString())
             )
             Log.d(TAG, "deleteSms id=${msg.id}: $deleted row(s) deleted")
             deleted > 0
