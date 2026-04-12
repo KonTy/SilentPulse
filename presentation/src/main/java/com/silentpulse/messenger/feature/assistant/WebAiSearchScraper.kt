@@ -261,11 +261,11 @@ class WebAiSearchScraper(private val context: Context) {
 
         Log.d(TAG, "Brave answer candidate (${candidate.length} chars): ${candidate.take(120)}...")
 
-        // Trim to 500 chars, ending on a sentence boundary when possible
-        val trimmed = if (candidate.length > 500) {
-            val cut = candidate.take(500)
+        // Trim to 1200 chars, ending on a sentence boundary when possible
+        val trimmed = if (candidate.length > 1200) {
+            val cut = candidate.take(1200)
             val lastDot = cut.lastIndexOf('.')
-            if (lastDot > 200) cut.take(lastDot + 1) else "$cut..."
+            if (lastDot > 400) cut.take(lastDot + 1) else "$cut..."
         } else candidate
 
         return cleanForSpeech(trimmed)
@@ -441,53 +441,43 @@ class WebAiSearchScraper(private val context: Context) {
      */
     private val BING_SELECTORS_JS = """
     (function() {
-        // Skip generic definitional text like "The Super Bowl is the annual..."
-        // These are "what is X" answers, not "who won" or factual answers.
         function isDefinition(t) {
             return /^The\s+\S+(\s+\S+){0,3}\s+(is|are)\s+(a|an|the)\s/i.test(t);
         }
         var sel = [
-            // High-confidence direct answer widgets (try first)
-            '.b_focusTextLarge',
-            '.b_focusTextHigh',
-            '.b_hPanel .b_focusLabel',
-            '#b_pole .b_focusTextSmall',
-            // General answer card selectors
-            '#b_context .b_answer',
-            '.copilot-answer',
-            '.b_ans .besc',
-            '#b_results .b_ans p',
-            '.b_expansion_text',
-            '[class*="answerCard"] p',
-            '.b_rich p',
-            '#b_pole .b_algo p',
-            '.b_focusTextSmall',
-            '#b_results li.b_ans .besc'
+            '.b_focusTextLarge', '.b_focusTextHigh',
+            '.b_hPanel .b_focusLabel', '#b_pole .b_focusTextSmall',
+            '#b_context .b_answer', '.copilot-answer',
+            '.b_ans .besc', '#b_results .b_ans p',
+            '.b_expansion_text', '[class*="answerCard"] p',
+            '.b_rich p', '#b_pole .b_algo p',
+            '.b_focusTextSmall', '#b_results li.b_ans .besc'
         ];
-        // First pass: skip definitional results
+        // Collect ALL candidates, then pick the longest non-definitional one.
+        // This prevents a short "preview" card winning over the full answer text.
+        var candidates = [];
         for (var i = 0; i < sel.length; i++) {
             try {
-                var el = document.querySelector(sel[i]);
-                if (el && el.innerText) {
-                    var t = el.innerText.trim();
-                    if (t.length > 50 && !isDefinition(t)) {
-                        console.log('[BingAI] matched (non-def): ' + sel[i]);
-                        return t.substring(0, 500);
-                    }
+                var els = document.querySelectorAll(sel[i]);
+                for (var k = 0; k < els.length; k++) {
+                    var t = (els[k].innerText || '').trim();
+                    if (t.length > 50) candidates.push(t);
                 }
             } catch(e) {}
         }
-        // Second pass: accept definitions as last resort
-        for (var j = 0; j < sel.length; j++) {
-            try {
-                var el2 = document.querySelector(sel[j]);
-                if (el2 && el2.innerText && el2.innerText.trim().length > 50) {
-                    console.log('[BingAI] matched (def fallback): ' + sel[j]);
-                    return el2.innerText.trim().substring(0, 500);
-                }
-            } catch(e) {}
+        if (!candidates.length) return null;
+        // Sort by length descending so the richest answer wins
+        candidates.sort(function(a, b) { return b.length - a.length; });
+        // First pass: prefer non-definitional
+        for (var j = 0; j < candidates.length; j++) {
+            if (!isDefinition(candidates[j])) {
+                console.log('[BingAI] best non-def (' + candidates[j].length + ' chars)');
+                return candidates[j].substring(0, 1500);
+            }
         }
-        return null;
+        // Fallback: accept anything
+        console.log('[BingAI] fallback def (' + candidates[0].length + ' chars)');
+        return candidates[0].substring(0, 1500);
     })()
     """.trimIndent()
 
