@@ -140,6 +140,21 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/notificationReader"
+            style="@style/DrawerRow">
+
+            <ImageView
+                style="@style/DrawerIcon"
+                android:src="@drawable/ic_notifications_black_24dp"
+                android:tint="?android:attr/textColorSecondary" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                style="@style/DrawerText"
+                android:text="@string/drawer_notification_reader" />
+
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/settings"
             style="@style/DrawerRow">
 

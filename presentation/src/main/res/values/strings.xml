@@ -95,6 +95,7 @@
     <string name="drawer_more">More</string>
     <string name="drawer_settings">Settings</string>
     <string name="drawer_assistant">Offline Assistant</string>
+    <string name="drawer_notification_reader">Notification Reader</string>
     <string name="drawer_plus" translatable="false">SilentPulse+</string>
     <string name="drawer_help">Help &amp; feedback</string>
     <string name="drawer_invite">Invite friends</string>
@@ -577,6 +578,7 @@
 
     <!-- Quick Settings tile labels -->
     <string name="tile_notif_reader">Notif Reader</string>
+    <string name="title_notification_reader">Notification Reader</string>
     <string name="tile_voice_ast">Voice Asst</string>
 
 </resources>

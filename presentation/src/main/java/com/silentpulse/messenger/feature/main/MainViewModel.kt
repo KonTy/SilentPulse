@@ -265,6 +265,7 @@ class MainViewModel @Inject constructor(
                         NavItem.BLOCKING -> navigator.showBlockedConversations()
                         NavItem.SETTINGS -> navigator.showSettings()
                         NavItem.ASSISTANT -> navigator.showAssistant()
+                        NavItem.NOTIFICATION_READER -> navigator.showNotificationReader()
                         NavItem.INVITE -> navigator.showInvite()
                         else -> Unit
                     }

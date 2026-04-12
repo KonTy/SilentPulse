@@ -89,6 +89,7 @@ class MainActivity : QkThemedActivity(), MainView {
     private val drawer: View get() = findViewById(R.id.drawer)
     private val drawerLayout: DrawerLayout get() = findViewById(R.id.drawerLayout)
     private val assistant: LinearLayout get() = findViewById(R.id.assistant)
+    private val notificationReader: LinearLayout get() = findViewById(R.id.notificationReader)
     private val empty: QkTextView get() = findViewById(R.id.empty)
     private val inbox: LinearLayout get() = findViewById(R.id.inbox)
     private val inboxIcon: ImageView get() = findViewById(R.id.inboxIcon)
@@ -132,6 +133,7 @@ class MainActivity : QkThemedActivity(), MainView {
                 blocking.clicks().map { NavItem.BLOCKING },
                 settings.clicks().map { NavItem.SETTINGS },
                 assistant.clicks().map { NavItem.ASSISTANT },
+                notificationReader.clicks().map { NavItem.NOTIFICATION_READER },
                 invite.clicks().map { NavItem.INVITE }))
     }
     override val optionsItemIntent: Subject<Int> = PublishSubject.create()
@@ -350,7 +352,6 @@ class MainActivity : QkThemedActivity(), MainView {
         checkDriveModeNotificationAccess()
         ensureDriveModeMicService()
         autoStartVoiceAssistant()
-        updateAssistantMenuIcon()
         if (!defaultSmsDialogShown &&
             android.provider.Telephony.Sms.getDefaultSmsPackage(this) != packageName) {
             defaultSmsDialogShown = true
@@ -446,43 +447,7 @@ class MainActivity : QkThemedActivity(), MainView {
         }
     }
 
-    private fun updateAssistantMenuIcon() {
-        val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
-        val isOn = prefs.getBoolean("drive_mode_wake_word", false)
-        toolbar?.menu?.findItem(R.id.assistant_toggle)?.let { item ->
-            item.setIcon(if (isOn) R.drawable.ic_mic_black_24dp else R.drawable.ic_mic_off_black_24dp)
-            item.title = if (isOn) "Stop offline assistant" else "Start offline assistant"
-        }
-    }
 
-    private fun toggleVoiceAssistant() {
-        val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
-        val isOn = prefs.getBoolean("drive_mode_wake_word", false)
-        if (isOn) {
-            // Turn off
-            prefs.edit().putBoolean("drive_mode_wake_word", false).apply()
-            stopService(Intent(this, VoiceAssistantService::class.java))
-        } else {
-            // Check RECORD_AUDIO first
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(Manifest.permission.RECORD_AUDIO), 445)
-                return
-            }
-            prefs.edit().putBoolean("drive_mode_wake_word", true).apply()
-            val intent = Intent(this, VoiceAssistantService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-        }
-        updateAssistantMenuIcon()
-        // Keep AppWidget and QS tiles in sync with in-app voice-assistant toggle
-        com.silentpulse.messenger.feature.drivemode.WidgetPrefs.broadcastStateChanged(this)
-        com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider.refreshAll(this)
-    }
 
     override fun requestPermissions() {
         ActivityCompat.requestPermissions(this, arrayOf(
@@ -536,20 +501,12 @@ class MainActivity : QkThemedActivity(), MainView {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.assistant_toggle) {
-            toggleVoiceAssistant()
-            return true
-        }
         optionsItemIntent.onNext(item.itemId)
         return true
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 445 && grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            toggleVoiceAssistant()
-        }
     }
 
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")

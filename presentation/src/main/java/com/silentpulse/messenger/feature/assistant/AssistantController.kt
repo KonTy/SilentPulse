@@ -15,7 +15,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.checkedChanges
 import com.silentpulse.messenger.R
-import com.silentpulse.messenger.feature.drivemode.DriveModeMicService
 import com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider
 import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
 import com.silentpulse.messenger.common.base.QkController
@@ -30,12 +29,8 @@ import javax.inject.Inject
 
 class AssistantController : QkController<AssistantView, AssistantState, AssistantPresenter>(), AssistantView {
 
-    // ── Card 1 – Enable ──────────────────────────────────────────────────────
-    private val driveModeSwitch: SwitchCompat    get() = rootView!!.findViewById(R.id.driveModeSwitch)
-    private val btAutoRow: LinearLayout          get() = rootView!!.findViewById(R.id.btAutoRow)
-    private val readSmsSwitch: SwitchCompat      get() = rootView!!.findViewById(R.id.readSmsSwitch)
-    private val readAllRow: LinearLayout         get() = rootView!!.findViewById(R.id.readAllRow)
-    private val readAllSwitch: SwitchCompat      get() = rootView!!.findViewById(R.id.readAllSwitch)
+    // ── Top toggle – Enable Offline Assistant ────────────────────────────────
+    private val assistantEnableSwitch: SwitchCompat  get() = rootView!!.findViewById(R.id.assistantEnableSwitch)
 
     // ── Card 2 – STT ─────────────────────────────────────────────────────────
     private val sttCard: MaterialCardView         get() = rootView!!.findViewById(R.id.sttCard)
@@ -63,8 +58,6 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
 
     // ── Card 4 – Behavior ────────────────────────────────────────────────────
     private val behaviorCard: MaterialCardView    get() = rootView!!.findViewById(R.id.behaviorCard)
-    private val wakeWordSwitch: SwitchCompat      get() = rootView!!.findViewById(R.id.wakeWordSwitch)
-    private val wakeWordLabel: TextView           get() = rootView!!.findViewById(R.id.wakeWordLabel)
     private val changeKeywordRow: LinearLayout    get() = rootView!!.findViewById(R.id.changeKeywordRow)
     private val currentKeywordSummary: TextView   get() = rootView!!.findViewById(R.id.currentKeywordSummary)
     private val voiceReplySwitch: SwitchCompat    get() = rootView!!.findViewById(R.id.voiceReplySwitch)
@@ -90,33 +83,37 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
         setTitle(R.string.title_offline_assistant)
         showBackButton(true)
 
-        // ── Card 1: Enable ───────────────────────────────────────────────────
+        // ── Top toggle: Enable Offline Assistant ─────────────────────────────
 
-        driveModeSwitch.checkedChanges()
+        assistantEnableSwitch.checkedChanges()
             .skipInitialValue()
             .autoDispose(scope())
-            .subscribe { checked ->
-                prefs.driveModeEnabled.set(checked)
-                if (checked) {
-                    checkNotificationAccess()
-                    DriveModeMicService.start(context)
+            .subscribe { enabled ->
+                if (enabled) {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.RECORD_AUDIO
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        activity?.let {
+                            androidx.core.app.ActivityCompat.requestPermissions(
+                                it, arrayOf(android.Manifest.permission.RECORD_AUDIO), 444
+                            )
+                        }
+                        assistantEnableSwitch.isChecked = false
+                        return@subscribe
+                    }
+                    prefs.driveModeWakeWordEnabled.set(true)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(Intent(context, VoiceAssistantService::class.java))
+                    } else {
+                        context.startService(Intent(context, VoiceAssistantService::class.java))
+                    }
                 } else {
-                    DriveModeMicService.stop(context)
+                    prefs.driveModeWakeWordEnabled.set(false)
+                    context.stopService(Intent(context, VoiceAssistantService::class.java))
                 }
-                // Keep AppWidget and QS tiles in sync
                 WidgetPrefs.broadcastStateChanged(context)
                 DriveModeWidgetProvider.refreshAll(context)
             }
-
-        readSmsSwitch.checkedChanges()
-            .skipInitialValue()
-            .autoDispose(scope())
-            .subscribe { prefs.driveModeReadSms.set(it) }
-
-        readAllSwitch.checkedChanges()
-            .skipInitialValue()
-            .autoDispose(scope())
-            .subscribe { prefs.driveModeReadAllNotifications.set(it) }
 
         // ── Card 2: STT engine toggle ─────────────────────────────────────────
 
@@ -184,37 +181,6 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
 
         // ── Card 4: Behavior ─────────────────────────────────────────────────
 
-        wakeWordSwitch.checkedChanges()
-            .skipInitialValue()
-            .autoDispose(scope())
-            .subscribe { enabled ->
-                if (enabled) {
-                    if (androidx.core.content.ContextCompat.checkSelfPermission(
-                            context, android.Manifest.permission.RECORD_AUDIO
-                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                        activity?.let {
-                            androidx.core.app.ActivityCompat.requestPermissions(
-                                it, arrayOf(android.Manifest.permission.RECORD_AUDIO), 444
-                            )
-                        }
-                        wakeWordSwitch.isChecked = false
-                        return@subscribe
-                    }
-                    prefs.driveModeWakeWordEnabled.set(true)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        context.startForegroundService(Intent(context, VoiceAssistantService::class.java))
-                    } else {
-                        context.startService(Intent(context, VoiceAssistantService::class.java))
-                    }
-                } else {
-                    prefs.driveModeWakeWordEnabled.set(false)
-                    context.stopService(Intent(context, VoiceAssistantService::class.java))
-                }
-                // Keep AppWidget and QS tiles in sync
-                WidgetPrefs.broadcastStateChanged(context)
-                DriveModeWidgetProvider.refreshAll(context)
-            }
-
         voiceReplySwitch.checkedChanges()
             .skipInitialValue()
             .autoDispose(scope())
@@ -238,14 +204,10 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
     }
 
     override fun render(state: AssistantState) {
-        val enabled = state.driveModeEnabled
+        val enabled = state.driveModeWakeWordEnabled
 
-        // Card 1
-        driveModeSwitch.isChecked = enabled
-        btAutoRow.isVisible       = enabled
-        readSmsSwitch.isChecked   = state.driveModeReadSms
-        readAllRow.isVisible      = enabled
-        readAllSwitch.isChecked   = state.driveModeReadAll
+        // Top toggle
+        assistantEnableSwitch.isChecked = enabled
 
         // Cards 2–4 visible iff assistant enabled
         sttCard.isVisible      = enabled
@@ -282,9 +244,7 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
 
             // Behavior
             val currentWord = WidgetPrefs.getWakeWord(context)
-            wakeWordLabel.text = "Wait for keyword ‘$currentWord’"
             currentKeywordSummary.text = "Current word: $currentWord"
-            wakeWordSwitch.isChecked = state.driveModeWakeWordEnabled
 
             voiceReplySwitch.isChecked = state.driveModeVoiceReplyEnabled
             timeoutRow.isVisible       = state.driveModeVoiceReplyEnabled
@@ -510,7 +470,7 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
                 if (word.isNotEmpty()) {
                     WidgetPrefs.setWakeWord(context, word)
                     currentKeywordSummary.text = "Current word: $word"
-                    wakeWordLabel.text = "Wait for keyword ‘$word’"
+
                     // Restart the service if it’s running so it picks up the new word
                     val svc = Intent(context, VoiceAssistantService::class.java)
                     context.stopService(svc)
@@ -526,30 +486,6 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
             .setNegativeButton("Cancel", null)
             .show()
     }
-    private fun checkNotificationAccess() {
-        val ctx = activity ?: return
-        val granted = androidx.core.app.NotificationManagerCompat
-            .getEnabledListenerPackages(ctx)
-            .contains(ctx.packageName)
-        if (!granted) showNotificationAccessDialog()
-    }
-
-    private fun showNotificationAccessDialog() {
-        MaterialAlertDialogBuilder(activity!!)
-            .setTitle("Notification Access Required")
-            .setMessage(
-                "The Offline Assistant reads incoming notifications aloud.\n\n" +
-                "It needs \"Notification Access\" — a system permission that lets " +
-                "SilentPulse see notifications.\n\n" +
-                "Tap \"Grant Access\" and enable SilentPulse in the list."
-            )
-            .setPositiveButton("Grant Access") { _, _ ->
-                startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            }
-            .setNegativeButton("Not Now", null)
-            .show()
-    }
-
     companion object {
         private const val RC_VOSK_ZIP   = 1003
         private const val RC_KOKORO_ZIP = 1004

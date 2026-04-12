@@ -161,6 +161,8 @@
         <activity android:name=".feature.settings.SettingsActivity" />
         <activity android:name=".feature.assistant.AssistantActivity"
             android:theme="@style/AssistantActivity.Theme" />
+        <activity android:name=".feature.assistant.NotificationReaderActivity"
+            android:theme="@style/AssistantActivity.Theme" />
         <activity android:name=".feature.plus.PlusActivity" />
         <activity
             android:name=".feature.gallery.GalleryActivity"

@@ -20,7 +20,7 @@
             android:paddingBottom="24dp">
 
             <!-- ══════════════════════════════════════════════════════
-                 CARD 1 · Enable Offline Assistant
+                 TOP · Enable / Disable Offline Assistant
                  ══════════════════════════════════════════════════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -31,152 +31,51 @@
                 app:strokeWidth="1dp">
 
                 <LinearLayout
+                    android:id="@+id/assistantEnableRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingBottom="4dp">
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:minHeight="64dp"
+                    android:paddingStart="16dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="12dp"
+                    android:orientation="horizontal">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingStart="16dp"
-                        android:paddingTop="16dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="4dp"
-                        android:text="@string/assistant_section_enable"
-                        android:textAllCaps="true"
-                        android:textColor="?android:attr/textColorSecondary"
-                        android:letterSpacing="0.1"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_marginEnd="16dp"
+                        android:src="@drawable/ic_assistant_black_24dp"
+                        android:tint="?android:attr/textColorSecondary" />
 
-                    <!-- Enable Offline Assistant -->
                     <LinearLayout
-                        android:id="@+id/driveModeRow"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="64dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="8dp"
-                        android:orientation="horizontal">
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:layout_marginEnd="16dp"
-                            android:src="@drawable/ic_assistant_black_24dp"
-                            android:tint="?android:attr/textColorSecondary" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/assistant_enable_title"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/assistant_enable_summary"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorSecondary" />
-
-                        </LinearLayout>
-
-                        <com.silentpulse.messenger.common.widget.QkSwitch
-                            android:id="@+id/driveModeSwitch"
+                        <TextView
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:text="Enable Offline Assistant"
+                            android:textSize="16sp"
+                            android:textColor="?android:attr/textColorPrimary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Listen for wake word and answer voice commands"
+                            android:textSize="14sp"
+                            android:textColor="?android:attr/textColorSecondary" />
 
                     </LinearLayout>
 
-                    <!-- Read Notifications -->
-                    <LinearLayout
-                        android:id="@+id/readAllRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="56dp"
-                        android:paddingEnd="16dp"
-                        android:orientation="horizontal"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_drive_mode_read_all_title"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_drive_mode_read_all_summary"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorSecondary" />
-
-                        </LinearLayout>
-
-                        <com.silentpulse.messenger.common.widget.QkSwitch
-                            android:id="@+id/readAllSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-
-                    </LinearLayout>
-
-                    <!-- Read SMS (hidden sub-row) -->
-                    <LinearLayout
-                        android:id="@+id/btAutoRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="56dp"
-                        android:paddingEnd="16dp"
-                        android:orientation="horizontal"
-                        android:visibility="gone">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_drive_mode_read_sms_title"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                        </LinearLayout>
-
-                        <com.silentpulse.messenger.common.widget.QkSwitch
-                            android:id="@+id/readSmsSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-
-                    </LinearLayout>
+                    <com.silentpulse.messenger.common.widget.QkSwitch
+                        android:id="@+id/assistantEnableSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -761,50 +660,6 @@
                         android:letterSpacing="0.1"
                         android:textSize="11sp"
                         android:textStyle="bold" />
-
-                    <!-- Wake word row -->
-                    <LinearLayout
-                        android:id="@+id/wakeWordRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="8dp"
-                        android:orientation="horizontal">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:id="@+id/wakeWordLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Wait for keyword"
-                                android:textSize="16sp"
-                                android:textColor="?android:attr/textColorPrimary" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Constantly listens offline for the wake word to start"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorSecondary" />
-
-                        </LinearLayout>
-
-                        <com.silentpulse.messenger.common.widget.QkSwitch
-                            android:id="@+id/wakeWordSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-
-                    </LinearLayout>
 
                     <!-- Change keyword row -->
                     <LinearLayout

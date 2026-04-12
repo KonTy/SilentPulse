@@ -19,6 +19,7 @@
 package com.silentpulse.messenger.injection.android
 
 import com.silentpulse.messenger.feature.assistant.AssistantActivity
+import com.silentpulse.messenger.feature.assistant.NotificationReaderActivity
 import com.silentpulse.messenger.feature.backup.BackupActivity
 import com.silentpulse.messenger.feature.blocking.BlockingActivity
 import com.silentpulse.messenger.feature.compose.ComposeActivity
@@ -89,6 +90,10 @@ abstract class ActivityBuilderModule {
     @ActivityScope
     @ContributesAndroidInjector(modules = [])
     abstract fun bindAssistantActivity(): AssistantActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindNotificationReaderActivity(): NotificationReaderActivity
 
     @ActivityScope
     @ContributesAndroidInjector(modules = [])

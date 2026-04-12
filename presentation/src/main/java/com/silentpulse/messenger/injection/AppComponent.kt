@@ -29,6 +29,7 @@ import com.silentpulse.messenger.common.widget.QkSwitch
 import com.silentpulse.messenger.common.widget.QkTextView
 import com.silentpulse.messenger.common.widget.RadioPreferenceView
 import com.silentpulse.messenger.feature.assistant.AssistantController
+import com.silentpulse.messenger.feature.assistant.NotificationReaderController
 import com.silentpulse.messenger.feature.backup.BackupController
 import com.silentpulse.messenger.feature.blocking.BlockingController
 import com.silentpulse.messenger.feature.blocking.manager.BlockingManagerController
@@ -65,6 +66,7 @@ interface AppComponent {
 
     fun inject(controller: AboutController)
     fun inject(controller: AssistantController)
+    fun inject(controller: NotificationReaderController)
     fun inject(controller: BackupController)
     fun inject(controller: BlockedMessagesController)
     fun inject(controller: BlockedNumbersController)

@@ -40,6 +40,7 @@ import com.silentpulse.messenger.feature.notificationprefs.NotificationPrefsActi
 import com.silentpulse.messenger.feature.plus.PlusActivity
 import com.silentpulse.messenger.feature.scheduled.ScheduledActivity
 import com.silentpulse.messenger.feature.assistant.AssistantActivity
+import com.silentpulse.messenger.feature.assistant.NotificationReaderActivity
 import com.silentpulse.messenger.feature.settings.SettingsActivity
 import com.silentpulse.messenger.manager.AnalyticsManager
 import com.silentpulse.messenger.manager.BillingManager
@@ -144,6 +145,11 @@ class Navigator @Inject constructor(
 
     fun showAssistant() {
         val intent = Intent(context, AssistantActivity::class.java)
+        startActivity(intent)
+    }
+
+    fun showNotificationReader() {
+        val intent = Intent(context, NotificationReaderActivity::class.java)
         startActivity(intent)
     }
 
