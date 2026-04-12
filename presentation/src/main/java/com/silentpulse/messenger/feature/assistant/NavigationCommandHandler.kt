@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.util.Log
 import com.silentpulse.messenger.feature.drivemode.NavEtaInfo
 import com.silentpulse.messenger.feature.drivemode.SilentPulseNotificationListener
@@ -291,46 +290,33 @@ class NavigationCommandHandler(private val context: Context) {
             setPackage(GOOGLE_MAPS_PKG)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+        val pending = PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
+        )
         onSpeak("Starting navigation to $destination with Google Maps.") {
-            // On Android 14+ (API 34+) direct startActivity from a service is silently
-            // killed by ActivityTaskManager even with FLAG_ACTIVITY_NEW_TASK — it throws
-            // no exception but the activity never appears. Always go through PendingIntent
-            // with BOTH setPendingIntentBackgroundActivityStartMode AND
-            // setPendingIntentCreatorBackgroundActivityStartMode set to ALLOWED.
-            fun makeBalOpts(): android.os.Bundle {
-                val opts = android.app.ActivityOptions.makeBasic()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    opts.setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }
-                return opts.toBundle()
-            }
-            // To set creator opts, we must pass the bundle during PendingIntent creation,
-            // not during send().
-            val pending = PendingIntent.getActivity(
-                context, 0, intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
-                makeBalOpts()
-            )
             try {
-                pending.send(context, 0, null, null, null, null, makeBalOpts())
-                Log.d(TAG, "Google Maps PendingIntent sent (BAL creator+sender allowed)")
+                // Try direct startActivity first — works from foreground services
+                context.startActivity(intent)
+                Log.d(TAG, "Google Maps launched via startActivity")
             } catch (e: Exception) {
-                Log.e(TAG, "Google Maps PendingIntent failed", e)
-                // Fallback: bare geo: URI without package restriction (system chooser)
+                Log.w(TAG, "startActivity failed ($e), trying PendingIntent")
                 try {
-                    val fallbackPi = PendingIntent.getActivity(
-                        context, 1,
-                        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
-                            .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
-                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
-                        makeBalOpts()
-                    )
-                    fallbackPi.send(context, 0, null, null, null, null, makeBalOpts())
-                    Log.d(TAG, "Google Maps geo: fallback PI sent")
+                    val opts = android.app.ActivityOptions.makeBasic().apply {
+                        setPendingIntentBackgroundActivityStartMode(
+                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        )
+                    }
+                    pending.send(context, 0, null, null, null, null, opts.toBundle())
+                    Log.d(TAG, "Google Maps PendingIntent sent (BAL-allowed)")
                 } catch (e2: Exception) {
-                    Log.e(TAG, "All Google Maps launch attempts failed", e2)
+                    Log.e(TAG, "PendingIntent also failed", e2)
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
+                                .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        )
+                    } catch (e3: Exception) { Log.e(TAG, "All launch methods failed", e3) }
                 }
             }
         }
@@ -352,20 +338,15 @@ class NavigationCommandHandler(private val context: Context) {
             // Wrap in a PendingIntent and use MODE_BACKGROUND_ACTIVITY_START_ALLOWED
             // to bypass Android 14+ BAL restrictions from a foreground service.
             fun sendViaPI(i: Intent, requestCode: Int) {
-                val opts = android.app.ActivityOptions.makeBasic()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    opts.setPendingIntentBackgroundActivityStartMode(
+                val pi = PendingIntent.getActivity(
+                    context, requestCode, i,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
+                )
+                val opts = android.app.ActivityOptions.makeBasic().apply {
+                    setPendingIntentBackgroundActivityStartMode(
                         android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                     )
                 }
-                
-                // Pass bundle during creation to act as creator opt-in
-                val pi = PendingIntent.getActivity(
-                    context, requestCode, i,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
-                    opts.toBundle()
-                )
-                // Pass bundle during send to act as sender opt-in
                 pi.send(context, 0, null, null, null, null, opts.toBundle())
             }
             try {
