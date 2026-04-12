@@ -24,7 +24,7 @@
         android:id="@+id/assistant_toggle"
         android:icon="@drawable/ic_mic_off_black_24dp"
         android:title="Toggle offline assistant"
-        app:showAsAction="always" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/archive"

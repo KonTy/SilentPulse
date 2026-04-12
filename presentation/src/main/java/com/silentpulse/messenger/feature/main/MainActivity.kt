@@ -428,9 +428,16 @@ class MainActivity : QkThemedActivity(), MainView {
         val prefs = getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
         val wakeWordOn = prefs.getBoolean("drive_mode_wake_word", false)
         if (!wakeWordOn) return
-        // Check RECORD_AUDIO — can't start without it
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) return
+        // Only start if not already running — avoids re-posting the notification
+        // every time MainActivity resumes
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        @Suppress("DEPRECATION")
+        val alreadyRunning = am.getRunningServices(Int.MAX_VALUE).any {
+            it.service.className == VoiceAssistantService::class.java.name
+        }
+        if (alreadyRunning) return
         val intent = Intent(this, VoiceAssistantService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
