@@ -1,11 +1,15 @@
 package com.silentpulse.messenger.feature.assistant
 
 import android.app.PendingIntent
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.silentpulse.messenger.feature.drivemode.NavEtaInfo
 import com.silentpulse.messenger.feature.drivemode.SilentPulseNotificationListener
 
@@ -59,6 +63,71 @@ class NavigationCommandHandler(private val context: Context) {
 
     /** Package of the most recently launched navigation app. */
     private var lastNavPackage: String? = null
+
+    private inline fun debugLog(message: () -> String) {
+        if (com.silentpulse.messenger.BuildConfig.DEBUG) {
+            Log.d(TAG, message())
+        }
+    }
+
+    private fun logLaunchContext(stage: String) {
+        debugLog {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            val myProcess = activityManager?.runningAppProcesses?.firstOrNull {
+                it.pid == android.os.Process.myPid()
+            }
+            val importance = myProcess?.importance ?: -1
+            val isMainThread = android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
+            "$stage: sdk=${Build.VERSION.SDK_INT}, thread=${Thread.currentThread().name}, mainThread=$isMainThread, processImportance=$importance, canDrawOverlays=${Settings.canDrawOverlays(context)}"
+        }
+    }
+
+    private fun logIntentDiagnostics(stage: String, intent: Intent) {
+        debugLog {
+            val resolved = intent.resolveActivity(context.packageManager)
+            val handlers = context.packageManager
+                .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                .mapNotNull { it.activityInfo?.packageName }
+                .distinct()
+            "$stage intent=$intent, package=${intent.`package`}, data=${intent.data}, resolved=${resolved?.flattenToShortString()}, handlers=${handlers.size} $handlers"
+        }
+    }
+
+    private fun hasOverlayPermission(): Boolean = Settings.canDrawOverlays(context)
+
+    private fun refreshAssistantNotification() {
+        val intent = Intent(context, VoiceAssistantService::class.java).apply {
+            action = VoiceAssistantService.ACTION_REFRESH_ASSISTANT_NOTIFICATION
+        }
+        ContextCompat.startForegroundService(context, intent)
+        debugLog { "Requested assistant notification refresh for overlay permission flow" }
+    }
+
+    private fun createCreatorBalBundle(stage: String): android.os.Bundle {
+        val opts = android.app.ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            opts.setPendingIntentCreatorBackgroundActivityStartMode(
+                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            )
+            debugLog { "$stage: BAL creator mode set to MODE_BACKGROUND_ACTIVITY_START_ALLOWED" }
+        } else {
+            debugLog { "$stage: BAL creator mode skipped on sdk=${Build.VERSION.SDK_INT}" }
+        }
+        return opts.toBundle()
+    }
+
+    private fun createSenderBalBundle(stage: String): android.os.Bundle {
+        val opts = android.app.ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            opts.setPendingIntentBackgroundActivityStartMode(
+                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            )
+            debugLog { "$stage: BAL sender mode set to MODE_BACKGROUND_ACTIVITY_START_ALLOWED" }
+        } else {
+            debugLog { "$stage: BAL sender mode skipped on sdk=${Build.VERSION.SDK_INT}" }
+        }
+        return opts.toBundle()
+    }
 
     /** @return true if the command looks like a navigation request. */
     fun isNavigationCommand(command: String): Boolean {
@@ -245,6 +314,8 @@ class NavigationCommandHandler(private val context: Context) {
      * @param onSpeak Callback to speak feedback to the user.
      */
     fun handleNavigation(command: String, onSpeak: (String, (() -> Unit)?) -> Unit) {
+        debugLog { "handleNavigation rawCommand=\"$command\"" }
+        logLaunchContext("handleNavigation")
         val wantsGoogle = command.lowercase().let {
             it.contains("google maps") || it.contains("using google") ||
             it.contains("with google") || it.contains("on google") ||
@@ -258,6 +329,7 @@ class NavigationCommandHandler(private val context: Context) {
         }
 
         Log.d(TAG, "Navigation destination: \"$destination\" (google=$wantsGoogle)")
+        debugLog { "handleNavigation destination=\"$destination\", lastNavPackage(before)=$lastNavPackage" }
 
         if (wantsGoogle) {
             lastNavPackage = GOOGLE_MAPS_PKG
@@ -273,10 +345,20 @@ class NavigationCommandHandler(private val context: Context) {
         val googleInstalled = try { pm.getPackageInfo(GOOGLE_MAPS_PKG, 0); true }
             catch (_: PackageManager.NameNotFoundException) { false }
 
+        debugLog { "launchGoogleMaps destination=\"$destination\", installed=$googleInstalled" }
+        logLaunchContext("launchGoogleMaps:start")
+
         if (!googleInstalled) {
             Log.d(TAG, "Google Maps not installed, falling back to open-source")
             onSpeak("Google Maps is not installed. Using your open-source map app instead.") {}
             launchOpenSourceMaps(destination, onSpeak)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !hasOverlayPermission()) {
+            Log.w(TAG, "launchGoogleMaps blocked: SYSTEM_ALERT_WINDOW not granted; background launch will be BAL-blocked")
+            refreshAssistantNotification()
+            onSpeak("Navigation is blocked. Tap Enable overlay in the SilentPulse notification.", null)
             return
         }
 
@@ -290,41 +372,43 @@ class NavigationCommandHandler(private val context: Context) {
             setPackage(GOOGLE_MAPS_PKG)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        val pending = PendingIntent.getActivity(
-            context, 0, intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
-        )
-        onSpeak("Starting navigation to $destination with Google Maps.") {
+
+        logIntentDiagnostics("launchGoogleMaps:primary", intent)
+
+        try {
+            val pending = PendingIntent.getActivity(
+                context, 0, intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
+                createCreatorBalBundle("launchGoogleMaps:createPI")
+            )
+            debugLog { "launchGoogleMaps created PendingIntent creator=${pending.creatorPackage}, target=$GOOGLE_MAPS_PKG" }
+            logLaunchContext("launchGoogleMaps:beforeSend")
+            debugLog { "launchGoogleMaps sending PendingIntent" }
+            pending.send(context, 0, null, null, null, null, createSenderBalBundle("launchGoogleMaps:sendPI"))
+            debugLog { "launchGoogleMaps PendingIntent sent (BAL creator+sender allowed)" }
+        } catch (e: Exception) {
+            Log.e(TAG, "Google Maps PendingIntent failed", e)
+            // Fallback: bare geo: URI without package restriction (system chooser)
             try {
-                val opts = android.app.ActivityOptions.makeBasic().apply {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        setPendingIntentBackgroundActivityStartMode(
-                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                        )
-                    }
-                }
-                pending.send(context, 0, null, null, null, null, opts.toBundle())
-                Log.d(TAG, "Google Maps PendingIntent sent (BAL-allowed)")
-            } catch (e: Exception) {
-                Log.w(TAG, "PendingIntent failed ($e), trying fallback geo URI")
-                try {
-                    val fallbackOpts = android.app.ActivityOptions.makeBasic().apply {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setPendingIntentBackgroundActivityStartMode(
-                                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                            )
-                        }
-                    }
-                    val i = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}")).apply { 
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) 
-                    }
-                    PendingIntent.getActivity(
-                        context, 1, i,
-                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
-                    ).send(context, 0, null, null, null, null, fallbackOpts.toBundle())
-                } catch (e3: Exception) { Log.e(TAG, "All launch methods failed", e3) }
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
+                    .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                logIntentDiagnostics("launchGoogleMaps:fallback", fallbackIntent)
+                debugLog { "launchGoogleMaps trying fallback geo PendingIntent" }
+                val fallbackPi = PendingIntent.getActivity(
+                    context, 1,
+                    fallbackIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
+                    createCreatorBalBundle("launchGoogleMaps:createFallbackPI")
+                )
+                fallbackPi.send(context, 0, null, null, null, null, createSenderBalBundle("launchGoogleMaps:sendFallbackPI"))
+                debugLog { "launchGoogleMaps fallback geo PendingIntent sent" }
+            } catch (e2: Exception) {
+                Log.e(TAG, "All Google Maps launch attempts failed", e2)
             }
         }
+
+        debugLog { "launchGoogleMaps speaking confirmation for destination=\"$destination\"" }
+        onSpeak("Starting navigation to $destination with Google Maps.", null)
     }
 
     private fun launchOpenSourceMaps(destination: String, onSpeak: (String, (() -> Unit)?) -> Unit) {
@@ -333,45 +417,63 @@ class NavigationCommandHandler(private val context: Context) {
         val appName = mapApp?.let { getAppLabel(it) } ?: "Maps"
         val geoUri = Uri.parse("geo:0,0?q=${Uri.encode(destination)}")
 
+        debugLog { "launchOpenSourceMaps destination=\"$destination\", mapApp=$mapApp, appName=\"$appName\"" }
+        logLaunchContext("launchOpenSourceMaps:start")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !hasOverlayPermission()) {
+            Log.w(TAG, "launchOpenSourceMaps blocked: SYSTEM_ALERT_WINDOW not granted; background launch will be BAL-blocked")
+            refreshAssistantNotification()
+            onSpeak("Navigation is blocked. Tap Enable overlay in the SilentPulse notification.", null)
+            return
+        }
+
         // Build intent: target specific app if found, otherwise let system choose
         val intent = Intent(Intent.ACTION_VIEW, geoUri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (mapApp != null) setPackage(mapApp)
         }
 
-        onSpeak("Navigating to $destination with $appName.") {
-            // Wrap in a PendingIntent and use MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-            // to bypass Android 14+ BAL restrictions from a foreground service.
-            fun sendViaPI(i: Intent, requestCode: Int) {
-                val pi = PendingIntent.getActivity(
-                    context, requestCode, i,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
-                )
-                val opts = android.app.ActivityOptions.makeBasic().apply {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        setPendingIntentBackgroundActivityStartMode(
-                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                        )
-                    }
-                }
-                pi.send(context, 0, null, null, null, null, opts.toBundle())
+        logIntentDiagnostics("launchOpenSourceMaps:primary", intent)
+
+        // Wrap in a PendingIntent and use MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+        // to bypass Android 14+ BAL restrictions from a foreground service.
+        fun sendViaPI(i: Intent, requestCode: Int) {
+            // Pass bundle during creation to act as creator opt-in
+            val pi = PendingIntent.getActivity(
+                context, requestCode, i,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT,
+                createCreatorBalBundle("launchOpenSourceMaps:createPI#$requestCode")
+            )
+            // Pass bundle during send to act as sender opt-in
+            debugLog {
+                "launchOpenSourceMaps sending PI requestCode=$requestCode, creator=${pi.creatorPackage}, package=${i.`package`}, data=${i.data}"
             }
+            pi.send(context, 0, null, null, null, null, createSenderBalBundle("launchOpenSourceMaps:sendPI#$requestCode"))
+        }
+        
+        try {
+            logLaunchContext("launchOpenSourceMaps:beforePrimarySend")
+            sendViaPI(intent, 1)
+            debugLog { "launchOpenSourceMaps primary PendingIntent sent for $mapApp" }
+        } catch (e: Exception) {
+            Log.w(TAG, "Targeted launch failed ($mapApp), trying bare geo: URI", e)
+            // Retry without a specific package — system chooser will appear
             try {
-                sendViaPI(intent, 1)
-                Log.d(TAG, "Open-source maps PendingIntent sent for $mapApp")
-            } catch (e: Exception) {
-                Log.w(TAG, "Targeted launch failed ($mapApp), trying bare geo: URI", e)
-                // Retry without a specific package — system chooser will appear
-                try {
-                    sendViaPI(Intent(Intent.ACTION_VIEW, geoUri).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }, 2)
-                } catch (e2: Exception) {
-                    Log.e(TAG, "All navigation launch attempts failed", e2)
-                    onSpeak("No map app found. Please install OsmAnd or Organic Maps.", null)
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                logIntentDiagnostics("launchOpenSourceMaps:fallback", fallbackIntent)
+                debugLog { "launchOpenSourceMaps trying fallback bare geo URI" }
+                sendViaPI(fallbackIntent, 2)
+            } catch (e2: Exception) {
+                Log.e(TAG, "All navigation launch attempts failed", e2)
+                onSpeak("No map app found. Please install OsmAnd or Organic Maps.", null)
+                return
             }
         }
+
+        debugLog { "launchOpenSourceMaps speaking confirmation for destination=\"$destination\" with appName=\"$appName\"" }
+        onSpeak("Navigating to $destination with $appName.", null)
     }
 
     // ── Parsing ───────────────────────────────────────────────────────────────
@@ -430,13 +532,13 @@ class NavigationCommandHandler(private val context: Context) {
         for (pkg in PREFERRED_MAP_APPS) {
             try {
                 pm.getPackageInfo(pkg, 0)
-                Log.d(TAG, "Found map app: $pkg")
+                debugLog { "findInstalledMapApp found $pkg" }
                 return pkg
             } catch (_: PackageManager.NameNotFoundException) {
-                // Not installed, try next
+                debugLog { "findInstalledMapApp missing $pkg" }
             }
         }
-        Log.d(TAG, "No preferred map app found")
+        debugLog { "findInstalledMapApp no preferred map app found" }
         return null
     }
 

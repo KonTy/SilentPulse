@@ -1,13 +1,19 @@
 package com.silentpulse.messenger.feature.assistant
 
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import java.util.UUID
 import android.util.Log
 import timber.log.Timber
 import com.silentpulse.messenger.feature.drivemode.AndroidSttEngine
@@ -41,7 +47,10 @@ private const val TAG = "VoiceAssistantSvc"
  * All processing is fully on-device.  INTERNET permission is removed — kernel
  * blocks all outbound sockets.
  */
-class VoiceAssistantService : Service() {
+class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
+
+    private lateinit var tts: TextToSpeech
+    @Volatile private var ttsReady = false
 
     private var sttEngine: SttEngine? = null
     private lateinit var voiceInteractor: VoiceInteractor
@@ -88,6 +97,7 @@ class VoiceAssistantService : Service() {
     private var voskModelReady = false
 
     companion object {
+        const val ACTION_REFRESH_ASSISTANT_NOTIFICATION = "com.silentpulse.messenger.action.REFRESH_ASSISTANT_NOTIFICATION"
         const val WAKE_WORD_DEFAULT = "bubblegum"
         /** Returns the currently configured wake word (read from prefs at call time). */
         fun getWakeWord(ctx: Context): String =
@@ -174,6 +184,7 @@ class VoiceAssistantService : Service() {
         // Mark as running immediately so the widget reflects reality
         WidgetPrefs.setVoiceAst(this, true)
         DriveModeWidgetProvider.refreshAll(this)
+        tts = TextToSpeech(this, this)
         voiceInteractor = VoiceInteractor(applicationContext) { maybeStartListening() }
         commandRouter = CommandRouter(applicationContext)
         commandRouter.refreshApps()
@@ -213,6 +224,60 @@ class VoiceAssistantService : Service() {
         initSttEngine()
         initVoskModel()
     }
+
+    private fun buildAssistantNotification(): android.app.Notification {
+        val channelId = com.silentpulse.messenger.common.util.NotificationManagerImpl.DEFAULT_CHANNEL_ID
+        val overlayMissing = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            !Settings.canDrawOverlays(this)
+        if (overlayMissing) {
+            Log.w(TAG, "Overlay permission missing; Android 14+ background navigation launch will be blocked")
+        }
+        val overlayIntent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val overlayPendingIntent = PendingIntent.getActivity(
+            this,
+            700,
+            overlayIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = androidx.core.app.NotificationCompat.Builder(this, channelId)
+            .setContentTitle("SilentPulse Assistant")
+            .setContentText(
+                if (overlayMissing) {
+                    "Tap Enable overlay to allow background navigation launch"
+                } else {
+                    "Listening for wake word\u2026"
+                }
+            )
+            .setSmallIcon(com.silentpulse.messenger.R.drawable.ic_assistant_black_24dp)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setForegroundServiceBehavior(androidx.core.app.NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setContentIntent(if (overlayMissing) overlayPendingIntent else null)
+
+        if (overlayMissing) {
+            builder.addAction(0, "Enable overlay", overlayPendingIntent)
+        }
+
+        return builder.build()
+    }
+
+    private fun refreshAssistantNotification() {
+        val notification = buildAssistantNotification()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            startForeground(777, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } else {
+            startForeground(777, notification)
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand()")
         val sp = applicationContext.getSharedPreferences(
@@ -223,18 +288,10 @@ class VoiceAssistantService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        val channelId = com.silentpulse.messenger.common.util.NotificationManagerImpl.DEFAULT_CHANNEL_ID
-        val notification = androidx.core.app.NotificationCompat.Builder(this, channelId)
-            .setContentTitle("SilentPulse Assistant")
-            .setContentText("Listening for wake word\u2026")
-            .setSmallIcon(com.silentpulse.messenger.R.drawable.ic_assistant_black_24dp)
-            .setOngoing(true)
-            .build()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            startForeground(777, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(777, notification)
+        if (intent?.action == ACTION_REFRESH_ASSISTANT_NOTIFICATION) {
+            Log.d(TAG, "Refreshing assistant notification")
         }
+        refreshAssistantNotification()
         return START_NOT_STICKY
     }
     /**
@@ -243,15 +300,31 @@ class VoiceAssistantService : Service() {
      * finishes last triggers the actual start.
      */
     private fun maybeStartListening() {
-        Log.d(TAG, "maybeStartListening() ttsReady=${voiceInteractor.isReady} voskModelReady=$voskModelReady")
-        if (voiceInteractor.isReady && voskModelReady) {
+        Log.d(TAG, "maybeStartListening() ttsReady=$ttsReady voiceInteractorReady=${voiceInteractor.isReady} voskModelReady=$voskModelReady")
+        if (ttsReady && voskModelReady) {
             val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
             speak("Voice assistant ready. Say $word to activate.") { startWakeWordDetection() }
         }
     }
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            ttsReady = true
+            Log.d(TAG, "TextToSpeech initialized.")
+            maybeStartListening()
+        } else {
+            ttsReady = false
+            Log.e(TAG, "TextToSpeech setup failed.")
+        }
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
+        if (this::tts.isInitialized) {
+            tts.stop()
+            tts.shutdown()
+        }
         super.onDestroy()
         // Mark as stopped so widget reflects reality even if killed by system
         WidgetPrefs.setVoiceAst(this, false)
@@ -485,6 +558,7 @@ class VoiceAssistantService : Service() {
         if (navigationHandler.isNavigationCommand(c)) {
             Log.d(TAG, "Navigation command detected")
             navigationHandler.handleNavigation(command) { text, onDone ->
+                Log.d(TAG, "Navigation onSpeak callback: \"$text\" onDone=${onDone != null}")
                 speak(text) { onDone?.invoke(); resumeWakeWord() }
             }
             return
@@ -666,8 +740,7 @@ class VoiceAssistantService : Service() {
             }
             return
         }
-        // "bing <query>" → route explicitly to Bing Chat (conversation mode)
-        // Also accept "being" — STT frequently mishears "bing" as "being"
+        // "leo <query>" → route explicitly to Brave Leo conversation mode
         val bingPrefix = when {
             c.startsWith("bing ")  -> 5
             c.startsWith("being ") -> 6
@@ -687,7 +760,6 @@ class VoiceAssistantService : Service() {
             }
             return
         }
-        // "brave <query>" → route explicitly to Brave Leo conversation mode
         val leoPrefix = if (c.startsWith("brave ")) 6 else -1
         if (leoPrefix > 0) {
             val leoQuery = command.drop(leoPrefix).trim()
@@ -1087,36 +1159,138 @@ class VoiceAssistantService : Service() {
     }
     // ── Debug helpers ─────────────────────────────────────────────────────────
     /**
-     * Write the last answer to files/debug_last_answer.txt for post-mortem comparison.
-     * Read: adb shell run-as com.silentpulse.messenger cat files/debug_last_answer.txt
+     * Write the last answer from [source] to `files/debug_last_answer.txt` so it
+     * can be compared against what TTS actually said.
+     * File is written to app-private storage — never uploaded anywhere.
+     * Read back with:  adb shell run-as com.silentpulse.messenger cat files/debug_last_answer.txt
      */
     private fun saveDebugAnswer(source: String, query: String, answer: String) {
         try {
+            val file = java.io.File(filesDir, "debug_last_answer.txt")
             val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-            java.io.File(filesDir, "debug_last_answer.txt")
-                .writeText("[$ts] source=$source\nquery: $query\n---\n$answer\n")
-            Log.d(TAG, "Debug answer saved (${answer.length} chars)")
+            file.writeText("[$ts] source=$source\nquery: $query\n---\n$answer\n")
+            Log.d(TAG, "Debug answer saved to ${file.absolutePath}")
         } catch (e: Exception) {
-            Log.w(TAG, "saveDebugAnswer failed: ${e.message}")
+            Log.w(TAG, "Failed to save debug answer: ${e.message}")
         }
     }
 
     // ── TTS helper ────────────────────────────────────────────────────────────
     /**
      * Speak [text] and optionally run [onDone] when the utterance finishes.
-     * Delegates to [VoiceInteractor] which handles locale detection and queuing.
+     *
+     * While TTS is playing, a lightweight Vosk stop-listener runs concurrently
+     * on the mic.  If the user says **"stop"** or **"computer stop"**, TTS is
+     * killed immediately, the notification reader (if active) is cancelled, and
+     * the assistant returns to wake-word mode without calling [onDone].
      */
     private fun speak(text: String, onDone: (() -> Unit)? = null) {
-        Log.d(TAG, "TTS speak (${text.length} chars): \"$text\"")
-        voiceInteractor.speak(text, onDone ?: {})
+        if (!ttsReady) {
+            Log.w(TAG, "speak() skipped because TTS is not ready: \"$text\"")
+            onDone?.invoke()
+            return
+        }
+        // Detect language via Unicode script ranges — zero external deps
+        val detectedLocale = detectLocaleByScript(text)
+        if (detectedLocale != null) {
+            val available = tts.isLanguageAvailable(detectedLocale)
+            if (available >= TextToSpeech.LANG_AVAILABLE) {
+                tts.language = detectedLocale
+                Log.d(TAG, "TTS language set to ${detectedLocale.toLanguageTag()}")
+            } else {
+                Log.w(TAG, "TTS locale ${detectedLocale.toLanguageTag()} not available, keeping English")
+                tts.language = Locale.US
+            }
+        } else {
+            tts.language = Locale.US
+        }
+        val preview = if (text.length > 80) text.take(80) + "\u2026" else text
+        Log.d(TAG, "TTS speak (${text.length} chars): \"$preview\"")
+        val utteranceId = UUID.randomUUID().toString()
+        // Android TTS can fire onDone AND onError for the same utterance on some
+        // devices (SM-A266U1 observed to double-fire).  Use a one-shot flag so
+        // the completion callback is invoked at most once per speak() call.
+        val callbackFired = java.util.concurrent.atomic.AtomicBoolean(false)
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {
+                if (id == utteranceId) Log.d(TAG, "TTS start: ${text.length} chars")
+            }
+            override fun onDone(id: String?) {
+                if (id == utteranceId && callbackFired.compareAndSet(false, true)) {
+                    Log.d(TAG, "TTS done: finished full ${text.length}-char utterance")
+                    mainHandler.post { onDone?.invoke() }
+                }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) {
+                if (id == utteranceId && callbackFired.compareAndSet(false, true)) {
+                    Log.w(TAG, "TTS ERROR on ${text.length}-char utterance")
+                    mainHandler.post { onDone?.invoke() }
+                }
+            }
+            // API 26+ — fires per word; lets us see exactly where TTS was cut
+            override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
+                if (id == utteranceId) Log.v(TAG, "TTS range $start..$end: '${text.substring(start.coerceIn(0, text.length), end.coerceIn(0, text.length))}'")
+            }
+            // API 23+ — fires when tts.stop() interrupts the utterance
+            override fun onStop(id: String?, interrupted: Boolean) {
+                if (id == utteranceId) {
+                    Log.w(TAG, "TTS STOPPED interrupted=$interrupted at utteranceId=$id (total ${text.length} chars)")
+                    // Do NOT call onDone here — the text was not fully spoken.
+                    // This log tells us what triggered the interruption.
+                }
+            }
+        })
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+    /**
+     * Detect the primary language from Unicode script ranges.
+     * Returns a [Locale] for the dominant non-Latin script, or null if Latin/ASCII
+     * (which stays English).  Zero external dependencies — fully offline.
+     */
+    private fun detectLocaleByScript(text: String): Locale? {
+        var cyrillic = 0; var arabic = 0; var cjk = 0; var hangul = 0
+        var kana = 0; var devanagari = 0; var thai = 0; var hebrew = 0
+        var greek = 0; var total = 0
+        for (c in text) {
+            if (c.isWhitespace() || c.isDigit()) continue
+            total++
+            when {
+                c in 'Ѐ'..'ӿ' || c in 'Ԁ'..'ԯ' -> cyrillic++
+                c in '؀'..'ۿ' || c in 'ݐ'..'ݿ' || c in 'ﭐ'..'﷿' || c in 'ﹰ'..'﻿' -> arabic++
+                c in '一'..'鿿' || c in '㐀'..'䶿' || c in '豈'..'﫿' -> cjk++
+                c in '가'..'힯' || c in 'ᄀ'..'ᇿ' -> hangul++
+                c in '぀'..'ゟ' || c in '゠'..'ヿ' -> kana++
+                c in 'ऀ'..'ॿ' -> devanagari++
+                c in '฀'..'๿' -> thai++
+                c in '֐'..'׿' || c in 'יִ'..'ﭏ' -> hebrew++
+                c in 'Ͱ'..'Ͽ' -> greek++
+            }
+        }
+        if (total == 0) return null
+        val threshold = total * 0.3 // 30% of non-whitespace chars
+        return when {
+            cyrillic > threshold    -> Locale("ru")
+            arabic > threshold      -> Locale("ar")
+            cjk > threshold && kana > 0 -> Locale("ja")  // CJK + kana = Japanese
+            cjk > threshold         -> Locale.SIMPLIFIED_CHINESE
+            hangul > threshold      -> Locale.KOREAN
+            kana > threshold        -> Locale("ja")
+            devanagari > threshold  -> Locale("hi")
+            thai > threshold        -> Locale("th")
+            hebrew > threshold      -> Locale("he")
+            greek > threshold       -> Locale("el")
+            else                    -> null // Latin or mixed — keep English
+        }
     }
 
     /**
-     * Enqueue a TTS utterance after whatever is already playing.
-     * Used for corridor weather so each city segment is spoken in sequence.
-     * AndroidTtsEngine.speak() uses QUEUE_ADD so this is a plain delegation.
+     * Enqueue a TTS utterance after whatever is already playing (QUEUE_ADD).
+     * Use this for corridor weather so each city is spoken in sequence
+     * without interrupting the previous one.
      */
     private fun speakQueued(text: String) {
-        voiceInteractor.speak(text)
+        if (!ttsReady) return
+        tts.speak(text, TextToSpeech.QUEUE_ADD, null, UUID.randomUUID().toString())
     }
 }

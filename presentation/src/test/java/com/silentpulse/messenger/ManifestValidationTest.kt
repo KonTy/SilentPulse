@@ -25,9 +25,9 @@ class ManifestValidationTest {
 
     private fun findProjectRoot(): File {
         var dir = File(System.getProperty("user.dir") ?: ".")
-        while (dir.parentFile != null) {
+        while (true) {
             if (File(dir, "settings.gradle").exists()) return dir
-            dir = dir.parentFile
+            dir = dir.parentFile ?: break
         }
         return File(".")
     }
@@ -80,6 +80,15 @@ class ManifestValidationTest {
         assertTrue(
             "SCHEDULE_EXACT_ALARM permission missing (required for API 31+)",
             content.contains("android.permission.SCHEDULE_EXACT_ALARM")
+        )
+    }
+
+    @Test
+    fun `SYSTEM_ALERT_WINDOW permission is declared for background navigation recovery`() {
+        val content = manifestFile.readText()
+        assertTrue(
+            "SYSTEM_ALERT_WINDOW permission missing (required for Android 14+ background navigation recovery)",
+            content.contains("android.permission.SYSTEM_ALERT_WINDOW")
         )
     }
 

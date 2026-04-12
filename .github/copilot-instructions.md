@@ -90,6 +90,17 @@ The following exist in the codebase and MUST be cleaned up in a dedicated privac
 - Voice assistant queries (weather, navigation, general questions) use only whitelisted open-source APIs
   (enforced by network_security_config.xml) — never Google.
 
+### Android 14+ Navigation Launch Guardrails
+
+- Background navigation launches from `VoiceAssistantService` must go through `PendingIntent.getActivity(...)` plus `PendingIntent.send(...)`.
+- **Never** delay the actual navigation launch until an `onSpeak(...)` / TTS completion callback. Launch first, then speak confirmation. Android background-activity privileges can be lost by the time the callback runs.
+- When using BAL on Android 14+, set **creator** opt-in during PendingIntent creation with `setPendingIntentCreatorBackgroundActivityStartMode(...)` and set **sender** opt-in only at send time with `setPendingIntentBackgroundActivityStartMode(...)`.
+- Do not set sender BAL mode while creating a `PendingIntent`; that crashes on modern Android.
+- Treat `SYSTEM_ALERT_WINDOW` as a required runtime dependency for background navigation launches on Android 14+. Check `Settings.canDrawOverlays(...)` before trying to launch, and if it is missing, refresh the assistant notification and direct the user to the overlay action instead of attempting a blocked launch.
+- Keep BAL / launch diagnostics behind `BuildConfig.DEBUG` so debug builds are richly diagnosable without increasing release logging.
+- Preserve the foreground assistant notification action that opens `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` when overlay permission is missing.
+- Preserve `VoiceAssistantService` TTS initialization (`tts = TextToSpeech(this, this)`) and keep `maybeStartListening()` gated on both `ttsReady` and `voskModelReady`.
+
 ---
 
 ## Dependency Rules
