@@ -61,6 +61,10 @@ class WebAiSearchScraper(private val context: Context) {
         private const val BING_MAX_POLLS = 16
         /** Chat mode: 24 × 500 ms = 12 s max wait for a streaming response. */
         private const val BING_CHAT_MAX_POLLS = 24
+        /** Leo /ask WebView: up to 20 × 700 ms = 14 s poll window after 2 s hydration. */
+        private const val LEO_TIMEOUT_MS      = 20_000L
+        private const val LEO_POLL_INTERVAL_MS = 700L
+        private const val LEO_MAX_POLLS        = 20
 
         /**
          * Disable or re-enable the AI scraping feature entirely.
@@ -93,6 +97,8 @@ class WebAiSearchScraper(private val context: Context) {
     private var bingChatInitialized = false
     /** Number of completed bot turns; used to detect when a new response arrives. */
     private var bingTurnCount = 0
+    // Separate WebView for Brave Leo (search.brave.com/ask) to avoid cookie mixing
+    private var leoWebView: WebView? = null
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -135,9 +141,9 @@ class WebAiSearchScraper(private val context: Context) {
                     } catch (e: Exception) {
                         Log.w(TAG, "Brave fetch threw: ${e.message}")
                     }
-                    // Brave had no AI summary — return null, let caller fall back
-                    Log.d(TAG, "Brave: no AI answer — caller will use DDG/Wikipedia")
-                    mainHandler.post { onResult(null) }
+                    // HTTP scraper got no AI summary — try the Leo /ask WebView
+                    Log.d(TAG, "Brave HTTP: no AI answer — falling back to Brave Leo WebView")
+                    mainHandler.post { fetchBraveLeo(query, onResult) }
                 }
             }
         }
@@ -148,6 +154,8 @@ class WebAiSearchScraper(private val context: Context) {
         mainHandler.post {
             bingWebView?.destroy()
             bingWebView = null
+            leoWebView?.destroy()
+            leoWebView = null
         }
     }
 
@@ -699,6 +707,139 @@ class WebAiSearchScraper(private val context: Context) {
                 pollBingChatResponse(wv, query, timeout, attempt + 1, priorCount, isDone, onResult, markDone)
             }, BING_POLL_INTERVAL_MS)
         }
+    }
+
+    // ── Brave Leo — WebView (/ask?q=QUERY) ───────────────────────────────────
+
+    /**
+     * JS run by [pollBraveLeoResult] after SvelteKit hydration.
+     * Tries class-name patterns in order of specificity, logging which selector
+     * won so it can be tuned via `adb logcat -s WebAiScraper`.
+     * Falls back to a debug dump of all ask/leo/chatllm-classed elements.
+     */
+    private val LEO_SELECTORS_JS = """
+    (function() {
+        var sels = [
+            '[class*="chatllm"] p',
+            '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
+            '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
+            '[class*="answer-content"] p', '[class*="ai-answer"] p', '[class*="summary-answer"] p',
+            '[data-testid*="answer"] p', '[data-type="answer"] p',
+            '[class*="response-content"] p', '[class*="result-content"] p',
+            'main [class*="answer"]', 'main [class*="summary"]',
+        ];
+        for (var i = 0; i < sels.length; i++) {
+            try {
+                var els = document.querySelectorAll(sels[i]);
+                var texts = [];
+                for (var k = 0; k < els.length; k++) {
+                    var t = (els[k].innerText || els[k].textContent || '').trim();
+                    if (t.length > 40) texts.push(t);
+                }
+                if (texts.length) {
+                    texts.sort(function(a, b) { return b.length - a.length; });
+                    console.log('[LeoAI] sel=' + sels[i] + ' n=' + texts.length +
+                        ' best=' + texts[0].length + 'ch: ' + texts[0].substring(0, 60));
+                    return texts[0].substring(0, 1500);
+                }
+            } catch(e) {}
+        }
+        // Debug: dump all named ask/leo/chatllm elements to help tune selectors
+        var dbg = [];
+        document.querySelectorAll('[class*="ask"],[class*="leo"],[class*="chatllm"],[class*="answer"]')
+            .forEach(function(el) {
+                var t = (el.innerText || '').trim();
+                if (t.length > 20 && t.length < 2000) dbg.push(el.className + ':' + t.substring(0,60));
+            });
+        console.log('[LeoAI] no match — dump: ' + JSON.stringify(dbg.slice(0, 8)));
+        return null;
+    })()
+    """.trimIndent()
+
+    private fun fetchBraveLeo(query: String, onResult: (String?) -> Unit) {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://search.brave.com/ask?q=$encoded"
+        Log.d(TAG, "Brave Leo WebView: $url")
+
+        val wv = getOrCreateLeoWebView()
+        var done = false
+
+        val timeoutCallback = Runnable {
+            if (!done) {
+                done = true
+                Log.w(TAG, "Brave Leo WebView timed out after ${LEO_TIMEOUT_MS}ms")
+                wv.stopLoading()
+                onResult(null)
+            }
+        }
+        mainHandler.postDelayed(timeoutCallback, LEO_TIMEOUT_MS)
+
+        wv.webViewClient = object : WebViewClient() {
+            private var pageLoaded = false
+            override fun onPageFinished(view: WebView, urlStr: String) {
+                if (done || pageLoaded) return
+                pageLoaded = true
+                Log.d(TAG, "Brave Leo page finished: $urlStr")
+                // Give SvelteKit ~2 s to hydrate and kick off the AI fetch
+                mainHandler.postDelayed({
+                    if (!done) pollBraveLeoResult(wv, timeoutCallback, 0, onResult) { done = true }
+                }, 2_000L)
+            }
+        }
+        wv.loadUrl(url)
+    }
+
+    private fun pollBraveLeoResult(
+        wv: WebView,
+        timeout: Runnable,
+        attempt: Int,
+        onResult: (String?) -> Unit,
+        markDone: () -> Unit,
+    ) {
+        if (attempt >= LEO_MAX_POLLS) {
+            Log.d(TAG, "Brave Leo: no AI answer after $attempt polls — giving up")
+            markDone()
+            mainHandler.removeCallbacks(timeout)
+            onResult(null)
+            return
+        }
+
+        wv.evaluateJavascript(LEO_SELECTORS_JS) { raw ->
+            if (raw != null && raw != "null" && raw.length > 6) {
+                val text = raw
+                    .removeSurrounding("\"")
+                    .replace("\\n", " ")
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\")
+                    .trim()
+                if (text.length > 50) {
+                    Log.d(TAG, "Brave Leo answer (${text.length} chars): ${text.take(80)}...")
+                    markDone()
+                    mainHandler.removeCallbacks(timeout)
+                    onResult(cleanForSpeech(text))
+                    return@evaluateJavascript
+                }
+            }
+            mainHandler.postDelayed({
+                pollBraveLeoResult(wv, timeout, attempt + 1, onResult, markDone)
+            }, LEO_POLL_INTERVAL_MS)
+        }
+    }
+
+    private fun getOrCreateLeoWebView(): WebView {
+        return leoWebView ?: WebView(context).apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled   = true
+                userAgentString =
+                    "Mozilla/5.0 (Linux; Android 14; Pixel 9) " +
+                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                    "Chrome/124.0.0.0 Mobile Safari/537.36"
+            }
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+        }.also { leoWebView = it }
     }
 
     // ── WebView factory ───────────────────────────────────────────────────────
