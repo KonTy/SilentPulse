@@ -6,7 +6,7 @@ A ❌ means "wrong answer, silence, or crash — investigate before shipping."
 
 Log monitor to run in parallel:
 ```
-adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D ConfirmSend:D SmsHandler:D VoiceAssistantSvc:D
+adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D SP_SESSION:D SP_XAPP:D ConfirmSend:D SmsHandler:D VoiceAssistantSvc:D NavCmd:D DriveTimeCmd:D MusicCmd:D
 ```
 
 ---
@@ -26,6 +26,7 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 |---|-----|----------|
 | 2.1 | "What can you do?" | Lists all capabilities |
 | 2.2 | "What apps can you talk to?" | Lists installed assistant-capable apps, or "none" |
+| 2.3 | "What can SilentPulse do?" *(if cross-app schema is enabled)* | Reads SilentPulse app-specific commands |
 
 ---
 
@@ -35,6 +36,8 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 |---|-----|----------|
 | 3.1 | "What time is it?" | Speaks current time |
 | 3.2 | "What's today's date?" | Speaks today's date |
+| 3.3 | "What time is it in Tokyo?" | Speaks Tokyo time |
+| 3.4 | "Time in New York" | Speaks New York time |
 
 ---
 
@@ -54,8 +57,12 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 | # | Say | Expected |
 |---|-----|----------|
 | 5.1 | "Navigate to the nearest hospital" | Launches nav app with destination |
-| 5.2 | "Directions to Times Square New York" | Launches nav app |
-| 5.3 | "Stop navigation" | Confirms navigation stopped |
+| 5.2 | "Directions to Times Square New York with Google Maps" | Launches Google Maps specifically |
+| 5.3 | "Directions to Times Square New York" | Launches preferred open-source map app |
+| 5.4 | "What's my ETA?" / "When will I arrive?" | Speaks current route ETA / arrival time from nav notification |
+| 5.5 | "How long left on this route?" | Speaks time remaining if a nav notification is active |
+| 5.6 | "Stop navigation" | Confirms navigation stopped |
+| 5.7 | *(Android 14+, overlay permission disabled)* "Navigate to the airport" | Does **not** crash. Speaks overlay warning and shows SilentPulse foreground notification action **Enable overlay** |
 
 ---
 
@@ -65,6 +72,9 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 |---|-----|----------|
 | 6.1 | "How long to downtown?" | Speaks estimated drive time |
 | 6.2 | "How far is it to the airport?" | Speaks drive time/distance |
+| 6.3 | "Drive time to Chicago" | Speaks route duration and distance |
+| 6.4 | "ETA to the nearest gas station" | Speaks estimated drive time |
+| 6.5 | "How many miles to Seattle?" | Speaks approximate distance and time |
 
 ---
 
@@ -88,6 +98,7 @@ adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D C
 | 8.3 | "Open Calculator" | Opens Calculator |
 | 8.4 | "Close Settings" | Closes Settings |
 | 8.5 | "Launch Camera" | Opens Camera |
+| 8.6 | "Close Google Maps" | Attempts to stop Maps / navigation cleanly |
 
 ---
 
@@ -143,9 +154,10 @@ Post a fresh test notification, then say "Read my notifications" and wait for th
 
 ---
 
-## 11. General knowledge — Brave AI (fast path, ~1-2 s)
+## 11. General knowledge — default Brave path (HTTP first, Leo fallback if needed)
 
-These should be answered by Brave Search. Log line: `Brave answer candidate`.
+These should normally be answered by Brave Search. Log line: `Brave answer candidate`.
+If the HTTP answer is missing, the app may fall back to the Brave Leo WebView path.
 
 | # | Say | Expected |
 |---|-----|----------|
@@ -174,6 +186,7 @@ If injection fails (`Bing chat: input not found`) it falls back to the search-pa
 | 12.1 | "Bing what are good exercises for lower back pain?" | Exercise suggestions (first call loads chat page) |
 | 12.2 | "Bing what should I eat to build muscle?" | Protein / diet advice |
 | 12.3 | "Bing how do I treat a blister?" | First aid steps |
+| 12.4 | "Being what is a red giant star?" | Same as `bing ...` path; alias works |
 
 ### 12b. Multi-turn conversation (context carry-over)
 
@@ -181,21 +194,22 @@ Start a topic, then follow up without re-stating it:
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.4 | "Bing tell me about the James Webb telescope" | Speaks summary about JWST |
-| 12.5 | "Bing how far away is it?" | Answers *about JWST* (not a generic "how far" — context preserved) |
-| 12.6 | "Bing what has it discovered so far?" | Continues the JWST conversation |
-| 12.7 | "Bing who built it?" | Still about JWST |
+| 12.5 | "Bing tell me about the James Webb telescope" | Speaks summary about JWST |
+| 12.6 | "Bing how far away is it?" | Answers *about JWST* (not a generic "how far" — context preserved) |
+| 12.7 | "Bing what has it discovered so far?" | Continues the JWST conversation |
+| 12.8 | "Bing who built it?" | Still about JWST |
 
 ### 12c. Clear session & start fresh
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.8 | "Bing clear" | "Clearing Bing session." → "Bing session cleared. Say bing followed by your question to start fresh." |
-| 12.9 | "Bing delete cookies" | Same as above |
-| 12.10 | "Bing reset" | Same as above |
-| 12.11 | "Bing new session" | Same as above |
-| 12.12 | *(after clear)* "Bing what are the planets?" | Answer is correct AND starts a fresh conversation (log: `Bing chat: first use`) |
-| 12.13 | *(after clear)* "Bing what's the largest one?" | Should NOT know prior context (fresh) |
+| 12.9 | "Bing clear" | "Clearing Bing session." → "Bing session cleared. Say bing followed by your question to start fresh." |
+| 12.10 | "Bing delete cookies" | Same as above |
+| 12.11 | "Bing reset" | Same as above |
+| 12.12 | "Bing new session" | Same as above |
+| 12.13 | "Bing fresh" / "Bing erase" | Same as above |
+| 12.14 | *(after clear)* "Bing what are the planets?" | Answer is correct AND starts a fresh conversation (log: `Bing chat: first use`) |
+| 12.15 | *(after clear)* "Bing what's the largest one?" | Should NOT know prior context (fresh) |
 
 ---
 
@@ -204,6 +218,7 @@ Start a topic, then follow up without re-stating it:
 Triggered by saying "brave …" (prefix is "brave" to avoid STT mis-recognition of the short word "leo").
 First call loads `search.brave.com/ask?q=…` in a hidden WebView. SvelteKit hydration takes ~2 s, then Leo's AI answer is polled from the DOM.
 Follow-up calls inject the query into Leo's follow-up textarea (preserving conversation context).
+**Important:** keep saying the `brave` prefix on follow-up turns; the shared conversation state lives in Leo's WebView, not in the generic app session manager.
 Leo cookies are **separate** from Bing — clearing Brave does not affect Bing.
 
 Log lines to watch (tag `WebAiScraper`):
@@ -231,16 +246,18 @@ Log lines to watch (tag `WebAiScraper`):
 | 12.5.4 | "Brave tell me about black holes" | Speaks Leo summary |
 | 12.5.5 | "Brave how are they formed?" | Continues the *black holes* topic (context preserved) |
 | 12.5.6 | "Brave how massive is the largest known one?" | Still on topic |
+| 12.5.7 | "Brave what about quasars?" | Continues in the same conversation thread |
 
 ### 12.5c. Clear session & start fresh
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.5.7 | "Brave clear" | "Clearing Brave session." → "Brave session cleared. Say brave followed by your question to start fresh." |
-| 12.5.8 | "Brave delete" | Same as above |
-| 12.5.9 | "Brave reset" | Same as above |
-| 12.5.10 | *(after clear)* "Brave what are neutron stars?" | Fresh conversation (log: `Brave Leo: first use`) |
-| 12.5.11 | "Brave what's the largest one?" | Should NOT carry prior black-holes context (new session) |
+| 12.5.8 | "Brave clear" | "Clearing Brave session." → "Brave session cleared. Say brave followed by your question to start fresh." |
+| 12.5.9 | "Brave delete" | Same as above |
+| 12.5.10 | "Brave reset" | Same as above |
+| 12.5.11 | "Brave new session" / "Brave fresh" / "Brave erase" | Same as above |
+| 12.5.12 | *(after clear)* "Brave what are neutron stars?" | Fresh conversation (log: `Brave Leo: first use`) |
+| 12.5.13 | "Brave what's the largest one?" | Should NOT carry prior black-holes context (new session) |
 
 ---
 
@@ -271,6 +288,8 @@ adb shell am broadcast -a com.silentpulse.SET_SCRAPER_ENABLED \
 | 14.3 | "What can SilentPulse do?" *(if cross-app)* | Lists SilentPulse commands |
 | 14.4 | *(wake word while TTS is speaking)* | Does not interrupt mid-sentence |
 | 14.5 | Two quick commands back-to-back | Second queues or waits correctly |
+| 14.6 | *(Android 14+, overlay permission off)* navigation request | No crash; assistant refreshes notification with **Enable overlay** action |
+| 14.7 | *(turn off location, then ask drive time)* "How long to the airport?" | Explains location is required |
 
 ---
 

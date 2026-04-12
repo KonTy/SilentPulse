@@ -794,7 +794,10 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             val flags = sbn.notification?.flags ?: 0
             if (flags and android.app.Notification.FLAG_ONGOING_EVENT != 0) return@mapNotNull null
             if (flags and android.app.Notification.FLAG_FOREGROUND_SERVICE != 0) return@mapNotNull null
-            if (sbn.packageName == ownPkg) return@mapNotNull null
+            // Skip our own notifications, but allow debug test channel through in debug builds
+            val isDebugTest = BuildConfig.DEBUG &&
+                sbn.notification?.channelId == "debug_test_channel"
+            if (sbn.packageName == ownPkg && !isDebugTest) return@mapNotNull null
             val extras = sbn.notification?.extras ?: return@mapNotNull null
             val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()?.trim()
                 ?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
