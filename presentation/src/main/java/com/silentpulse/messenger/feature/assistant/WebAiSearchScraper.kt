@@ -984,6 +984,14 @@ class WebAiSearchScraper(private val context: Context) {
                     ?.replace("\\n", " ")?.replace("\\\"", "\"")
                     ?.replace("\\\\", "\\")?.trim()
                 if (!answer.isNullOrBlank() && answer.length > 20) {
+                    // Extract the actual <p> count so the next turn's PRIOR_COUNT
+                    // correctly skips ALL paragraphs from previous turns.
+                    val countMatch = Regex("\"count\":\\s*(\\d+)").find(payload)
+                    val actualCount = countMatch?.groupValues?.get(1)?.toIntOrNull()
+                    if (actualCount != null && actualCount > 0) {
+                        leoTurnCount = actualCount
+                        Log.d(TAG, "Leo leoTurnCount updated to $actualCount (from response)")
+                    }
                     Log.d(TAG, "Leo answer (${answer.length} chars): ${answer.take(80)}...")
                     markDone()
                     mainHandler.removeCallbacks(timeout)
@@ -1022,10 +1030,26 @@ class WebAiSearchScraper(private val context: Context) {
                     .trim()
                 if (text.length > 50) {
                     Log.d(TAG, "Brave Leo answer (${text.length} chars): ${text.take(80)}...")
-                    // Count current answer blocks to seed leoTurnCount for follow-ups
-                    leoTurnCount = text.split(Regex("\\s{3,}")).size.coerceAtLeast(1)
                     markDone()
                     mainHandler.removeCallbacks(timeout)
+                    // Count actual <p> elements on the page to seed leoTurnCount
+                    // for subsequent turns.  The old heuristic (whitespace-split)
+                    // was not correlated with <p> count, causing follow-ups to
+                    // re-read old paragraphs when the user switched topics.
+                    val countJs = LEO_RESPONSE_JS.replace("PRIOR_COUNT", "0")
+                    wv.evaluateJavascript(countJs) { countRaw ->
+                        val countPayload = countRaw?.removeSurrounding("\"")
+                            ?.replace("\\\"", "\"") ?: ""
+                        val countMatch = Regex("\"count\":\\s*(\\d+)").find(countPayload)
+                        val actualCount = countMatch?.groupValues?.get(1)?.toIntOrNull()
+                        if (actualCount != null && actualCount > 0) {
+                            leoTurnCount = actualCount
+                            Log.d(TAG, "Leo initial leoTurnCount = $actualCount (from <p> count)")
+                        } else {
+                            leoTurnCount = 1
+                            Log.w(TAG, "Leo: could not count <p> elements, defaulting leoTurnCount=1")
+                        }
+                    }
                     onResult(cleanForSpeech(text))
                     return@evaluateJavascript
                 }
