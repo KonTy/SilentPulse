@@ -510,8 +510,10 @@ class WebAiSearchScraper(private val context: Context) {
         mainHandler.postDelayed(timeoutCallback, BING_TIMEOUT_MS)
 
         wv.webViewClient = object : WebViewClient() {
+            private var pageLoaded = false
             override fun onPageFinished(view: WebView, url: String) {
-                if (done) return
+                if (done || pageLoaded) return
+                pageLoaded = true
                 Log.d(TAG, "Bing page finished: $url")
                 pollBingResult(wv, timeoutCallback, 0, onResult) { done = true }
             }
@@ -567,14 +569,21 @@ class WebAiSearchScraper(private val context: Context) {
     // ── Bing Chat — conversation mode ─────────────────────────────────────────
 
     /**
-     * Chat-mode Bing: loads `bing.com/chat` once and keeps it open between
-     * turns, preserving full multi-turn conversational context.
+     * Chat-mode Bing: loads `bing.com/chat` once and keeps it open between turns.
      *
-     * First call → loads the page, waits for render, then injects the query.
-     * Subsequent calls → injects directly into the already-loaded chat textarea.
-     * If injection fails (NO_INPUT), falls back to [fetchBingWebView].
+     * Requires one-time verification via [BingChatVerificationActivity] to log in
+     * and solve any CAPTCHA.  Until [bingChatReady] is true, falls back immediately
+     * to [fetchBingWebView] (Bing search-page scraper) — no chat attempt is made.
+     *
+     * Once verified, first call loads the page and injects; subsequent calls inject
+     * directly into the already-loaded textarea preserving conversation context.
      */
     private fun fetchBingChat(query: String, onResult: (String?) -> Unit) {
+        if (!bingChatReady) {
+            Log.d(TAG, "Bing chat: not verified — using search-page scraper directly")
+            fetchBingWebView(query, onResult)
+            return
+        }
         val wv = getOrCreateBingWebView()
         var done = false
         // Give extra time on first call for the SPA to boot
