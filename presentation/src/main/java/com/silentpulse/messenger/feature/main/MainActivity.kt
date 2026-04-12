@@ -151,6 +151,7 @@ class MainActivity : QkThemedActivity(), MainView {
     private val syncing by lazy { findViewById<View>(R.id.syncing) }
     private val backPressedSubject: Subject<NavItem> = PublishSubject.create()
     private var driveModeAccessDialogShown = false
+    private var defaultSmsDialogShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AndroidInjection.inject(this)
@@ -350,7 +351,9 @@ class MainActivity : QkThemedActivity(), MainView {
         ensureDriveModeMicService()
         autoStartVoiceAssistant()
         updateAssistantMenuIcon()
-        if (android.provider.Telephony.Sms.getDefaultSmsPackage(this) != packageName) {
+        if (!defaultSmsDialogShown &&
+            android.provider.Telephony.Sms.getDefaultSmsPackage(this) != packageName) {
+            defaultSmsDialogShown = true
             navigator.showDefaultSmsDialog(this)
         }
     }
