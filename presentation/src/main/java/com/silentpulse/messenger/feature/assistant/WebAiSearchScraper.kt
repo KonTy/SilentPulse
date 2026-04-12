@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.io.BufferedReader
@@ -58,6 +59,8 @@ class WebAiSearchScraper(private val context: Context) {
         private const val BING_TIMEOUT_MS = 8_000L
         private const val BING_POLL_INTERVAL_MS = 500L
         private const val BING_MAX_POLLS = 16
+        /** Chat mode: 24 × 500 ms = 12 s max wait for a streaming response. */
+        private const val BING_CHAT_MAX_POLLS = 24
 
         /**
          * Disable or re-enable the AI scraping feature entirely.
@@ -86,6 +89,10 @@ class WebAiSearchScraper(private val context: Context) {
 
     // Reuse the Bing WebView to avoid repeated Chromium initialisation (~80 ms)
     private var bingWebView: WebView? = null
+    /** True once bing.com/chat has fully loaded and is ready for query injection. */
+    private var bingChatInitialized = false
+    /** Number of completed bot turns; used to detect when a new response arrives. */
+    private var bingTurnCount = 0
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -114,7 +121,7 @@ class WebAiSearchScraper(private val context: Context) {
         when (source) {
             Source.BING -> {
                 Log.d(TAG, "Explicit Bing query: \"$query\"")
-                mainHandler.post { fetchBingWebView(query, onResult) }
+                mainHandler.post { fetchBingChat(query, onResult) }
             }
             Source.BRAVE -> {
                 executor.execute {
@@ -141,6 +148,33 @@ class WebAiSearchScraper(private val context: Context) {
         mainHandler.post {
             bingWebView?.destroy()
             bingWebView = null
+        }
+    }
+
+    /**
+     * Wipe all Bing session cookies, WebView cache, and DOM storage, then reset
+     * conversation state.  Call this when the user says "bing clear" /
+     * "[wake word] bing delete cookies".  The next "bing" query starts fresh.
+     */
+    fun clearBingSession(onDone: () -> Unit) {
+        mainHandler.post {
+            Log.i(TAG, "Clearing Bing session: cookies, storage, WebView")
+            CookieManager.getInstance().apply {
+                removeAllCookies(null)
+                flush()
+            }
+            WebStorage.getInstance().deleteAllData()
+            bingWebView?.apply {
+                clearCache(true)
+                clearHistory()
+                clearFormData()
+                destroy()
+            }
+            bingWebView = null
+            bingChatInitialized = false
+            bingTurnCount = 0
+            Log.i(TAG, "Bing session cleared")
+            onDone()
         }
     }
 
@@ -300,6 +334,74 @@ class WebAiSearchScraper(private val context: Context) {
             .trim()
     }
 
+    // ── Bing Chat — shadow-DOM JS templates ──────────────────────────────────
+
+    /**
+     * Inject a query into the Bing Chat textarea (which lives inside nested
+     * shadow DOMs) and press Enter.  Caller replaces SP_QUERY_PLACEHOLDER
+     * with the escaped query string before calling evaluateJavascript.
+     */
+    private val BING_CHAT_INJECT_JS = """
+    (function() {
+        function deepQ(root, sel) {
+            var el = root.querySelector(sel);
+            if (el) return el;
+            var all = root.querySelectorAll('*');
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].shadowRoot) { var f = deepQ(all[i].shadowRoot, sel); if (f) return f; }
+            }
+            return null;
+        }
+        var ta = deepQ(document, 'textarea') || deepQ(document, '[contenteditable="true"]');
+        if (!ta) return 'NO_INPUT';
+        var desc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+        if (desc && desc.set) desc.set.call(ta, 'SP_QUERY_PLACEHOLDER');
+        else ta.value = 'SP_QUERY_PLACEHOLDER';
+        ta.dispatchEvent(new Event('input',  {bubbles: true}));
+        ta.dispatchEvent(new Event('change', {bubbles: true}));
+        setTimeout(function() {
+            ta.dispatchEvent(new KeyboardEvent('keydown',  {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+            ta.dispatchEvent(new KeyboardEvent('keypress', {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+            ta.dispatchEvent(new KeyboardEvent('keyup',    {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+            var btn = deepQ(document, 'button[type="submit"]') ||
+                      deepQ(document, '[aria-label*="send" i]') ||
+                      deepQ(document, '[title*="send" i]');
+            if (btn) btn.click();
+        }, 250);
+        return 'OK:' + ta.tagName;
+    })()
+    """.trimIndent()
+
+    /**
+     * Poll for a new Bing Chat bot response.  Caller replaces PRIOR_COUNT with
+     * the turn count snapshot taken right before submitting the query.
+     * Returns JSON: {status:"done",text:"…",count:N} | {status:"typing"} | {status:"waiting",count:N}
+     */
+    private val BING_CHAT_RESPONSE_JS = """
+    (function() {
+        function deepAll(root, sel) {
+            var r = [].slice.call(root.querySelectorAll(sel));
+            var all = root.querySelectorAll('*');
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].shadowRoot) r = r.concat(deepAll(all[i].shadowRoot, sel));
+            }
+            return r;
+        }
+        var typing = deepAll(document, '.streaming-cursor, cib-typing-indicator, [aria-label*="typing" i], .is-generating');
+        if (typing.length > 0) return JSON.stringify({status:'typing'});
+        var msgs = deepAll(document, 'cib-message[source="bot"]');
+        if (!msgs.length) msgs = deepAll(document, '[data-source="bot"]');
+        if (!msgs.length) msgs = deepAll(document, '.ac-container .ac-textBlock, .sydney-reply');
+        var count = msgs.length;
+        if (count > PRIOR_COUNT) {
+            var last = msgs[msgs.length - 1];
+            var text = (last.innerText || last.textContent || '').trim();
+            if (text.length > 20) return JSON.stringify({status:'done', text:text.substring(0,800), count:count});
+        }
+        return JSON.stringify({status:'waiting', count:count});
+    })()
+    """.trimIndent()
+
     // ── Bing Search — WebView ─────────────────────────────────────────────────
 
     /**
@@ -439,6 +541,121 @@ class WebAiSearchScraper(private val context: Context) {
             // Not found yet — wait and retry
             mainHandler.postDelayed({
                 pollBingResult(wv, timeout, attempt + 1, onResult, markDone)
+            }, BING_POLL_INTERVAL_MS)
+        }
+    }
+
+    // ── Bing Chat — conversation mode ─────────────────────────────────────────
+
+    /**
+     * Chat-mode Bing: loads `bing.com/chat` once and keeps it open between
+     * turns, preserving full multi-turn conversational context.
+     *
+     * First call → loads the page, waits for render, then injects the query.
+     * Subsequent calls → injects directly into the already-loaded chat textarea.
+     * If injection fails (NO_INPUT), falls back to [fetchBingWebView].
+     */
+    private fun fetchBingChat(query: String, onResult: (String?) -> Unit) {
+        val wv = getOrCreateBingWebView()
+        var done = false
+        // Give extra time on first call for the SPA to boot
+        val timeoutMs = if (bingChatInitialized) BING_TIMEOUT_MS else BING_TIMEOUT_MS + 5_000L
+
+        val timeoutCallback = Runnable {
+            if (!done) {
+                done = true
+                Log.w(TAG, "Bing chat timed out after ${timeoutMs}ms")
+                wv.stopLoading()
+                onResult(null)
+            }
+        }
+        mainHandler.postDelayed(timeoutCallback, timeoutMs)
+
+        if (!bingChatInitialized) {
+            Log.d(TAG, "Bing chat: first use — loading bing.com/chat")
+            wv.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    if (done) return
+                    Log.d(TAG, "Bing chat page loaded: $url")
+                    // 2 s for the SPA to render the input box
+                    mainHandler.postDelayed({
+                        if (!done) {
+                            bingChatInitialized = true
+                            injectBingChatQuery(wv, query, timeoutCallback, onResult) { done = true }
+                        }
+                    }, 2_000L)
+                }
+            }
+            wv.loadUrl("https://www.bing.com/chat")
+        } else {
+            Log.d(TAG, "Bing chat: continuing conversation (turn ${bingTurnCount + 1})")
+            injectBingChatQuery(wv, query, timeoutCallback, onResult) { done = true }
+        }
+    }
+
+    private fun injectBingChatQuery(
+        wv: WebView,
+        query: String,
+        timeout: Runnable,
+        onResult: (String?) -> Unit,
+        markDone: () -> Unit,
+    ) {
+        val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
+        val js = BING_CHAT_INJECT_JS.replace("SP_QUERY_PLACEHOLDER", escaped)
+        wv.evaluateJavascript(js) { result ->
+            Log.d(TAG, "Bing chat inject: $result")
+            if (result == null || result.contains("NO_INPUT")) {
+                Log.w(TAG, "Bing chat: input not found — falling back to search-page scraper")
+                bingChatInitialized = false
+                markDone()
+                mainHandler.removeCallbacks(timeout)
+                fetchBingWebView(query, onResult)
+            } else {
+                val priorCount = bingTurnCount
+                bingTurnCount++
+                // 1.5 s head-start before polling so the response has time to begin
+                mainHandler.postDelayed({
+                    pollBingChatResponse(wv, timeout, 0, priorCount, onResult, markDone)
+                }, 1_500L)
+            }
+        }
+    }
+
+    private fun pollBingChatResponse(
+        wv: WebView,
+        timeout: Runnable,
+        attempt: Int,
+        priorCount: Int,
+        onResult: (String?) -> Unit,
+        markDone: () -> Unit,
+    ) {
+        if (attempt >= BING_CHAT_MAX_POLLS) {
+            Log.w(TAG, "Bing chat: no response after $attempt polls — giving up")
+            markDone()
+            mainHandler.removeCallbacks(timeout)
+            onResult(null)
+            return
+        }
+        val js = BING_CHAT_RESPONSE_JS.replace("PRIOR_COUNT", priorCount.toString())
+        wv.evaluateJavascript(js) { raw ->
+            val payload = raw?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: ""
+            Log.v(TAG, "Bing chat poll $attempt: ${payload.take(120)}")
+            if (payload.contains("\"status\":\"done\"")) {
+                val match = Regex("\"text\":\"(.*?)\"\\s*[,}]",
+                    setOf(RegexOption.DOT_MATCHES_ALL)).find(payload)
+                val answer = match?.groupValues?.get(1)
+                    ?.replace("\\n", " ")?.replace("\\\"", "\"")
+                    ?.replace("\\\\", "\\")?.trim()
+                if (!answer.isNullOrBlank() && answer.length > 20) {
+                    Log.d(TAG, "Bing chat answer (${answer.length} chars): ${answer.take(80)}...")
+                    markDone()
+                    mainHandler.removeCallbacks(timeout)
+                    onResult(answer)
+                    return@evaluateJavascript
+                }
+            }
+            mainHandler.postDelayed({
+                pollBingChatResponse(wv, timeout, attempt + 1, priorCount, onResult, markDone)
             }, BING_POLL_INTERVAL_MS)
         }
     }
