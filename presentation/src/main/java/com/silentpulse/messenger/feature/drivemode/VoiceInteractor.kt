@@ -60,10 +60,10 @@ class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
         val detected = detectLocaleByScript(text)
         if (detected != null) {
             ttsEngine.setLocale(detected)
-            Timber.d("VoiceInteractor TTS [${detected.language}]: ${text.take(80)}")
+            Timber.d("VoiceInteractor TTS [${detected.language}] (${text.length} chars): $text")
         } else {
             ttsEngine.setLocale(Locale.getDefault())
-            Timber.d("VoiceInteractor TTS: ${text.take(80)}")
+            Timber.d("VoiceInteractor TTS (${text.length} chars): $text")
         }
         ttsEngine.speak(text) {
             if (detected != null) ttsEngine.setLocale(Locale.getDefault())

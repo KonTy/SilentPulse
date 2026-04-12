@@ -41,20 +41,33 @@ class AndroidTtsEngine(
                     // Set up utterance progress listener for callbacks
                     engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {
-                            // Speech started
+                            Timber.d("TTS start id=$utteranceId pending=${completionCallbacks.size}")
                         }
                         
                         override fun onDone(utteranceId: String?) {
+                            Timber.d("TTS done id=$utteranceId")
                             utteranceId?.let { id ->
                                 completionCallbacks.remove(id)?.invoke()
                             }
                         }
                         
                         override fun onError(utteranceId: String?) {
-                            Timber.e("TTS error for utterance: $utteranceId")
+                            Timber.e("TTS error id=$utteranceId")
                             utteranceId?.let { id ->
                                 completionCallbacks.remove(id)?.invoke()
                             }
+                        }
+
+                        // API 23+: fires when tts.stop() cuts speech mid-utterance
+                        override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                            Timber.w("TTS STOPPED id=$utteranceId interrupted=$interrupted remaining_callbacks=${completionCallbacks.size}")
+                            // Callback was already cleared by AndroidTtsEngine.stop();
+                            // log only — do not invoke callback here.
+                        }
+
+                        // API 26+: fires per word — use verbose to avoid logcat flood
+                        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                            Timber.v("TTS word id=$utteranceId pos=$start")
                         }
                     })
                 }

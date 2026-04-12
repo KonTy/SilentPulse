@@ -672,6 +672,8 @@ class VoiceAssistantService : Service() {
                 speak("Asking Bing.") {
                     webAiSearchScraper.search(bingQuery, WebAiSearchScraper.Source.BING) { answer ->
                         if (answer != null) {
+                            Log.d(TAG, "Bing full answer (${answer.length} chars): $answer")
+                            saveDebugAnswer("bing", bingQuery, answer)
                             speak(answer) { resumeWakeWord() }
                         } else {
                             // Bing WebView failed or timed out.
@@ -1041,14 +1043,29 @@ class VoiceAssistantService : Service() {
         }
         return dp[a.length][b.length]
     }
+    // ── Debug helpers ─────────────────────────────────────────────────────────
+    /**
+     * Write the last answer to files/debug_last_answer.txt for post-mortem comparison.
+     * Read: adb shell run-as com.silentpulse.messenger cat files/debug_last_answer.txt
+     */
+    private fun saveDebugAnswer(source: String, query: String, answer: String) {
+        try {
+            val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            java.io.File(filesDir, "debug_last_answer.txt")
+                .writeText("[$ts] source=$source\nquery: $query\n---\n$answer\n")
+            Log.d(TAG, "Debug answer saved (${answer.length} chars)")
+        } catch (e: Exception) {
+            Log.w(TAG, "saveDebugAnswer failed: ${e.message}")
+        }
+    }
+
     // ── TTS helper ────────────────────────────────────────────────────────────
     /**
      * Speak [text] and optionally run [onDone] when the utterance finishes.
      * Delegates to [VoiceInteractor] which handles locale detection and queuing.
      */
     private fun speak(text: String, onDone: (() -> Unit)? = null) {
-        val preview = if (text.length > 80) text.take(80) + "\u2026" else text
-        Log.d(TAG, "TTS speak: \"$preview\"")
+        Log.d(TAG, "TTS speak (${text.length} chars): \"$text\"")
         voiceInteractor.speak(text, onDone ?: {})
     }
 
