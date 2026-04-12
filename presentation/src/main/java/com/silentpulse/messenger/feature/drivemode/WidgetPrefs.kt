@@ -67,9 +67,18 @@ object WidgetPrefs {
         getPrefs(ctx).edit().putBoolean(KEY_VOICE_AST, enabled).apply()
     }
 
-    fun getWakeWord(ctx: Context): String =
-        getPrefs(ctx).getString(KEY_WAKE_WORD, "bubblegum")?.trim()
-            ?.lowercase()?.ifBlank { "bubblegum" } ?: "bubblegum"
+    fun getWakeWord(ctx: Context): String {
+        val raw = getPrefs(ctx).getString(KEY_WAKE_WORD, "bubblegum")
+            ?.trim()?.lowercase()?.ifBlank { "bubblegum" } ?: "bubblegum"
+        // Migrate devices that still have the old default "computer" saved from
+        // a previous version of the app.
+        return if (raw == "computer") {
+            setWakeWord(ctx, "bubblegum")
+            "bubblegum"
+        } else {
+            raw
+        }
+    }
 
     fun setWakeWord(ctx: Context, word: String) {
         getPrefs(ctx).edit()

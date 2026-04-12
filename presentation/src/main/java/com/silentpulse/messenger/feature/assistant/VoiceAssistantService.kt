@@ -379,7 +379,7 @@ class VoiceAssistantService : Service() {
                         speak("I didn't catch that. Try again.") { startSttOneShot() }
                     } else {
                         Log.d(TAG, "STT $errorCode — max retries reached, resuming wake word")
-                        speak("I didn't catch that. Say Computer to try again.") {
+                        speak("I didn't catch that. Say ${getWakeWord(this@VoiceAssistantService)} to try again.") {
                             resumeWakeWord()
                         }
                     }
@@ -1026,15 +1026,23 @@ class VoiceAssistantService : Service() {
         }
         return dp[a.length][b.length]
     }
-    // ── TTS helpers ─────────────────────────────────────────────────────────────────────
-    /** Delegate to shared [VoiceInteractor]. Language auto-detected from Unicode script. */
-    private fun speak(text: String, onDone: (() -> Unit)? = null) =
+    // ── TTS helper ────────────────────────────────────────────────────────────
+    /**
+     * Speak [text] and optionally run [onDone] when the utterance finishes.
+     * Delegates to [VoiceInteractor] which handles locale detection and queuing.
+     */
+    private fun speak(text: String, onDone: (() -> Unit)? = null) {
+        val preview = if (text.length > 80) text.take(80) + "\u2026" else text
+        Log.d(TAG, "TTS speak: \"$preview\"")
         voiceInteractor.speak(text, onDone ?: {})
+    }
 
     /**
      * Enqueue a TTS utterance after whatever is already playing.
-     * [AndroidTtsEngine] uses QUEUE_ADD internally, so this is safe to call
-     * in rapid succession (e.g. corridor weather segments).
+     * Used for corridor weather so each city segment is spoken in sequence.
+     * AndroidTtsEngine.speak() uses QUEUE_ADD so this is a plain delegation.
      */
-    private fun speakQueued(text: String) = voiceInteractor.speak(text)
+    private fun speakQueued(text: String) {
+        voiceInteractor.speak(text)
+    }
 }
