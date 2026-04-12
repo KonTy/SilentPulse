@@ -309,7 +309,7 @@ class NavigationCommandHandler(private val context: Context) {
             .replace("from my location", "")
             .replace("from current location", "")
             .replace("please", "")
-            .replace("computer", "")
+            .replace(com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(context), "")
             .trim()
 
         // Try each trigger phrase and extract what comes after it

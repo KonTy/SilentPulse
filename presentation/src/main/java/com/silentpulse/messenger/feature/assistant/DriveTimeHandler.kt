@@ -125,7 +125,7 @@ class DriveTimeHandler(private val context: Context) {
                 .replace("from here", "")
                 .replace("from my location", "")
                 .replace("from current location", "")
-                .replace("computer", "")
+                .replace(com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(context), "")
                 .trim()
             if (dest.isNotEmpty()) return dest.replaceFirstChar { it.uppercase() }
         }
