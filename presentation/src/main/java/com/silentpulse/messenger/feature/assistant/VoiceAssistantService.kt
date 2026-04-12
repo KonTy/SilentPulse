@@ -665,6 +665,40 @@ class VoiceAssistantService : Service() {
             c.startsWith("being ") -> 6
             else                  -> -1
         }
+        // "brave clear / delete / reset / new session" → wipe Leo session
+        val leoClearKeywords = listOf("clear", "delete", "reset", "new session", "fresh", "erase")
+        val isLeoClear = c.startsWith("brave ") && leoClearKeywords.any { c.contains(it) }
+        if (isLeoClear) {
+            Log.d(TAG, "Leo clear session command")
+            speak("Clearing Brave session.") {
+                webAiSearchScraper.clearLeoSession {
+                    speak("Brave session cleared. Say brave followed by your question to start fresh.") {
+                        resumeWakeWord()
+                    }
+                }
+            }
+            return
+        }
+        // "brave <query>" → route explicitly to Brave Leo conversation mode
+        val leoPrefix = if (c.startsWith("brave ")) 6 else -1
+        if (leoPrefix > 0) {
+            val leoQuery = command.drop(leoPrefix).trim()
+            if (leoQuery.isNotEmpty()) {
+                Log.d(TAG, "Leo explicit query: \"$leoQuery\"")
+                speak("Asking Brave.") {
+                    webAiSearchScraper.search(leoQuery, WebAiSearchScraper.Source.LEO) { answer ->
+                        if (answer != null) {
+                            speak(answer) { resumeWakeWord() }
+                        } else {
+                            speak("Brave didn't have an answer. Try rephrasing or say brave clear to start fresh.") {
+                                resumeWakeWord()
+                            }
+                        }
+                    }
+                }
+                return
+            }
+        }
         if (bingPrefix > 0) {
             val bingQuery = command.drop(bingPrefix).trim()
             if (bingQuery.isNotEmpty()) {
