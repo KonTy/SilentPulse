@@ -1,5 +1,7 @@
 package com.silentpulse.messenger.feature.assistant
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
@@ -7,6 +9,8 @@ import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.util.Log
+import com.silentpulse.messenger.model.Message
+import io.realm.Realm
 
 /**
  * Handles reading and sending SMS messages via on-device APIs.
@@ -34,6 +38,7 @@ class SmsCommandHandler(private val context: Context) {
 
     data class SmsMessage(
         val id: Long,             // _id in content://sms — needed for deletion
+        val threadId: Long,       // conversation thread id — needed for Realm markRead
         val address: String,      // raw phone number
         val senderName: String,   // display name from Contacts, or raw number
         val body: String,
@@ -95,32 +100,21 @@ class SmsCommandHandler(private val context: Context) {
      */
     fun fetchUnreadSms(): List<SmsMessage> {
         val results = mutableListOf<SmsMessage>()
-        var cursor: Cursor? = null
         try {
-            cursor = context.contentResolver.query(
-                Uri.parse("content://sms/inbox"),
-                arrayOf("_id", "address", "body", "date", "read"),
-                "read = 0",
-                null,
-                "date DESC"
-            ) ?: run {
-                Log.w(TAG, "fetchUnreadSms: ContentResolver returned null cursor")
-                return emptyList()
-            }
-            while (cursor.moveToNext()) {
-                val id      = cursor.getLong(cursor.getColumnIndexOrThrow("_id"))
-                val address = cursor.getString(cursor.getColumnIndexOrThrow("address"))
-                    ?: continue
-                val body = cursor.getString(cursor.getColumnIndexOrThrow("body"))
-                    ?: continue
-                val date = cursor.getLong(cursor.getColumnIndexOrThrow("date"))
-                val name = resolveNameForNumber(address) ?: address
-                results += SmsMessage(id, address, name, body, date)
+            // Query Realm — the same store the UI reads from — so voice and UI agree.
+            Realm.getDefaultInstance()?.use { realm ->
+                val messages = realm.where(Message::class.java)
+                    .equalTo("read", false)
+                    .equalTo("boxId", Telephony.Sms.MESSAGE_TYPE_INBOX)
+                    .findAll()
+                    .sortedByDescending { it.date }
+                for (msg in messages) {
+                    val name = resolveNameForNumber(msg.address) ?: msg.address
+                    results += SmsMessage(msg.id, msg.threadId, msg.address, name, msg.body, msg.date)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "fetchUnreadSms failed", e)
-        } finally {
-            cursor?.close()
         }
         Log.d(TAG, "fetchUnreadSms: ${results.size} unread")
         return results
@@ -140,24 +134,42 @@ class SmsCommandHandler(private val context: Context) {
         context.packageName == Telephony.Sms.getDefaultSmsPackage(context)
 
     /**
-     * Marks a single SMS as read (read=1) in the inbox.
-     * Uses [Telephony.Sms.CONTENT_URI] with a WHERE clause — more reliable on
-     * Android 10+ Samsung devices than the direct-id URI (content://sms/{id}).
-     * Requires this app to be the default SMS handler.
+     * Marks a message as read in both Realm (UI cache) and Android SMS provider.
+     * Mirrors [com.silentpulse.messenger.repository.MessageRepositoryImpl.markRead]
+     * so the UI badge clears immediately after the assistant reads the message.
      */
     fun markAsRead(msg: SmsMessage) {
+        // 1. Realm — clears the UI unread badge
         try {
-            val values = android.content.ContentValues().apply {
+            Realm.getDefaultInstance()?.use { realm ->
+                val messages = realm.where(Message::class.java)
+                    .equalTo("threadId", msg.threadId)
+                    .beginGroup()
+                        .equalTo("read", false)
+                        .or()
+                        .equalTo("seen", false)
+                    .endGroup()
+                    .findAll()
+                realm.executeTransaction {
+                    messages.forEach { m -> m.read = true; m.seen = true }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "markAsRead Realm failed for threadId=${msg.threadId}", e)
+        }
+        // 2. Android SMS provider — keeps system DB in sync
+        try {
+            val values = ContentValues().apply {
                 put(Telephony.Sms.READ, 1)
                 put(Telephony.Sms.SEEN, 1)
             }
-            val updated = context.contentResolver.update(
-                Telephony.Sms.CONTENT_URI, values,
-                "${Telephony.Sms._ID} = ?", arrayOf(msg.id.toString())
+            val uri = ContentUris.withAppendedId(
+                Telephony.MmsSms.CONTENT_CONVERSATIONS_URI, msg.threadId
             )
-            Log.d(TAG, "markAsRead id=${msg.id}: $updated row(s) updated")
+            val updated = context.contentResolver.update(uri, values, "${Telephony.Sms.READ} = 0", null)
+            Log.d(TAG, "markAsRead threadId=${msg.threadId}: $updated row(s) updated in Android DB")
         } catch (e: Exception) {
-            Log.e(TAG, "markAsRead failed for id=${msg.id}", e)
+            Log.e(TAG, "markAsRead Android DB failed for threadId=${msg.threadId}", e)
         }
     }
 
