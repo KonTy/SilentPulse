@@ -6,7 +6,7 @@ A ❌ means "wrong answer, silence, or crash — investigate before shipping."
 
 Log monitor to run in parallel:
 ```
-adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D ConfirmSend:D SmsHandler:D
+adb logcat -s WebAiScraper:V BraveSearch:D GeneralQuery:D SP_ROUTE:V SP_WAKE:D ConfirmSend:D SmsHandler:D VoiceAssistantSvc:D
 ```
 
 ---
@@ -159,16 +159,43 @@ These should be answered by Brave Search. Log line: `Brave answer candidate`.
 
 ---
 
-## 12. General knowledge — Bing WebView fallback (~3-8 s)
+## 12. Bing Chat — conversation mode (~5-15 s first turn, ~3-8 s follow-ups)
 
-Ask something Brave is less likely to have an AI card for.
-Log line: `Bing WebView:` then `[BingAI] matched:`.
+Triggered by saying "bing ..." (or "being ..." — STT mishear alias).
+First call loads `bing.com/chat` in a hidden WebView and waits for the SPA to boot.
+Follow-up calls inject text directly, preserving multi-turn context.
+Log lines to watch: `Bing chat page loaded:`, `Bing chat inject: OK:`, `Bing chat answer`.
+If injection fails (`Bing chat: input not found`) it falls back to the search-page scraper.
+
+### 12a. Single-turn queries
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.1 | "What are good exercises for lower back pain?" | Exercise suggestions |
-| 12.2 | "What should I eat to build muscle?" | Protein / diet advice |
-| 12.3 | "How do I treat a blister?" | First aid steps |
+| 12.1 | "Bing what are good exercises for lower back pain?" | Exercise suggestions (first call loads chat page) |
+| 12.2 | "Bing what should I eat to build muscle?" | Protein / diet advice |
+| 12.3 | "Bing how do I treat a blister?" | First aid steps |
+
+### 12b. Multi-turn conversation (context carry-over)
+
+Start a topic, then follow up without re-stating it:
+
+| # | Say | Expected |
+|---|-----|----------|
+| 12.4 | "Bing tell me about the James Webb telescope" | Speaks summary about JWST |
+| 12.5 | "Bing how far away is it?" | Answers *about JWST* (not a generic "how far" — context preserved) |
+| 12.6 | "Bing what has it discovered so far?" | Continues the JWST conversation |
+| 12.7 | "Bing who built it?" | Still about JWST |
+
+### 12c. Clear session & start fresh
+
+| # | Say | Expected |
+|---|-----|----------|
+| 12.8 | "Bing clear" | "Clearing Bing session." → "Bing session cleared. Say bing followed by your question to start fresh." |
+| 12.9 | "Bing delete cookies" | Same as above |
+| 12.10 | "Bing reset" | Same as above |
+| 12.11 | "Bing new session" | Same as above |
+| 12.12 | *(after clear)* "Bing what are the planets?" | Answer is correct AND starts a fresh conversation (log: `Bing chat: first use`) |
+| 12.13 | *(after clear)* "Bing what's the largest one?" | Should NOT know prior context (fresh) |
 
 ---
 
@@ -240,17 +267,25 @@ Remove and re-add the drive mode widget if it still shows 3 buttons (the 4-butto
 
 ---
 
-## 17. Bing Chat verification (one-time, skip if already done)
+## 17. Bing Chat — first-run setup (required before section 12 tests)
+
+`bing.com/chat` is now the **primary** Bing backend. All "bing ..." voice queries
+go to `fetchBingChat()` which opens `bing.com/chat` in a hidden WebView.
+If Bing shows a CAPTCHA or login gate on first use, complete it here once —
+cookies persist for all subsequent headless queries.
 
 ```
 adb shell am start -n com.silentpulse.messenger.debug/com.silentpulse.messenger.feature.assistant.BingChatVerificationActivity
 ```
 
-- [ ] Bing Chat page loads
-- [ ] CAPTCHA / "I'm human" appears and can be solved
-- [ ] Chat interface loads after verification
-- [ ] Tap **Done** — app confirms verified
-- [ ] Subsequent queries use Bing Chat cookies (check log: `bing_chat_verified=true`)
+- [ ] `bing.com/chat` page loads in the verification activity
+- [ ] If CAPTCHA / "I'm human" appears: solve it manually
+- [ ] Chat input box becomes visible and functional
+- [ ] Tap **Done** — app saves `bing_chat_verified = true`
+- [ ] Re-run section 12 — log should show `Bing chat: continuing conversation` on second+ turns (not `first use`)
+
+> **Note:** If no CAPTCHA appears on first use, section 12 tests can be run
+> directly. The hidden WebView uses a real Chrome UA which often bypasses it.
 
 ---
 
