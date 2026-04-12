@@ -296,28 +296,33 @@ class NavigationCommandHandler(private val context: Context) {
         )
         onSpeak("Starting navigation to $destination with Google Maps.") {
             try {
-                // Try direct startActivity first — works from foreground services
-                context.startActivity(intent)
-                Log.d(TAG, "Google Maps launched via startActivity")
-            } catch (e: Exception) {
-                Log.w(TAG, "startActivity failed ($e), trying PendingIntent")
-                try {
-                    val opts = android.app.ActivityOptions.makeBasic().apply {
+                val opts = android.app.ActivityOptions.makeBasic().apply {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         setPendingIntentBackgroundActivityStartMode(
                             android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                         )
                     }
-                    pending.send(context, 0, null, null, null, null, opts.toBundle())
-                    Log.d(TAG, "Google Maps PendingIntent sent (BAL-allowed)")
-                } catch (e2: Exception) {
-                    Log.e(TAG, "PendingIntent also failed", e2)
-                    try {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
-                                .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                        )
-                    } catch (e3: Exception) { Log.e(TAG, "All launch methods failed", e3) }
                 }
+                pending.send(context, 0, null, null, null, null, opts.toBundle())
+                Log.d(TAG, "Google Maps PendingIntent sent (BAL-allowed)")
+            } catch (e: Exception) {
+                Log.w(TAG, "PendingIntent failed ($e), trying fallback geo URI")
+                try {
+                    val fallbackOpts = android.app.ActivityOptions.makeBasic().apply {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            setPendingIntentBackgroundActivityStartMode(
+                                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                            )
+                        }
+                    }
+                    val i = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}")).apply { 
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) 
+                    }
+                    PendingIntent.getActivity(
+                        context, 1, i,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
+                    ).send(context, 0, null, null, null, null, fallbackOpts.toBundle())
+                } catch (e3: Exception) { Log.e(TAG, "All launch methods failed", e3) }
             }
         }
     }
@@ -343,9 +348,11 @@ class NavigationCommandHandler(private val context: Context) {
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT
                 )
                 val opts = android.app.ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        setPendingIntentBackgroundActivityStartMode(
+                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        )
+                    }
                 }
                 pi.send(context, 0, null, null, null, null, opts.toBundle())
             }
