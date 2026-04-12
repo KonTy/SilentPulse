@@ -643,7 +643,22 @@ class VoiceAssistantService : Service() {
             return
         }
         // ── 7. General knowledge queries ──────────────────────────────────────
-        // "bing <query>" → route explicitly to Bing WebView
+        // "bing clear / delete cookies / reset / new session" → wipe Bing session
+        val bingClearKeywords = listOf("clear", "delete", "reset", "new session", "fresh", "erase")
+        val isBingClear = (c.startsWith("bing ") || c.startsWith("being ")) &&
+            bingClearKeywords.any { c.contains(it) }
+        if (isBingClear) {
+            Log.d(TAG, "Bing clear session command")
+            speak("Clearing Bing session.") {
+                webAiSearchScraper.clearBingSession {
+                    speak("Bing session cleared. Say bing followed by your question to start fresh.") {
+                        resumeWakeWord()
+                    }
+                }
+            }
+            return
+        }
+        // "bing <query>" → route explicitly to Bing Chat (conversation mode)
         // Also accept "being" — STT frequently mishears "bing" as "being"
         val bingPrefix = when {
             c.startsWith("bing ")  -> 5
