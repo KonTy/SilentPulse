@@ -4,7 +4,7 @@
 ### is there a way to get estimate  for my current route when I will arrive to my destination, what date and time I will arrive at and how long it will take. If not possbile with OSM& maybe google maps can do that? or both can provide that that would be awesome
 
 
-ok now it said bing didn't have an answer for that? can you look into it, I mean If I type "What is the best Insta360 action camera right now" into www.bing.com/chat or has no problems answering it. Is it possbile there is a capch problem or something? Also when you use bing how are you handling capcha? 
+ok now it said bing didn't have an answer for that? can you look into it, I mean If I say "What is the best Insta360 action camera right now" into www.bing.com/chat or has no problems answering it. Is it possbile there is a capch problem or something? Also when you use bing how are you handling capcha? 
 
 Are we storing cookies? I'd like to not store cookies becuase bing reads them and tracks them, I want them to not know my prevous ocnverartions
 
