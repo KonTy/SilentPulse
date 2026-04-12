@@ -11,6 +11,7 @@ import android.telephony.SmsManager
 import android.util.Log
 import com.silentpulse.messenger.model.Message
 import io.realm.Realm
+import me.leolin.shortcutbadger.ShortcutBadger
 
 /**
  * Handles reading and sending SMS messages via on-device APIs.
@@ -170,6 +171,20 @@ class SmsCommandHandler(private val context: Context) {
             Log.d(TAG, "markAsRead threadId=${msg.threadId}: $updated row(s) updated in Android DB")
         } catch (e: Exception) {
             Log.e(TAG, "markAsRead Android DB failed for threadId=${msg.threadId}", e)
+        }
+        // 3. Refresh the launcher badge so the count reflects 0
+        try {
+            val unread = Realm.getDefaultInstance()?.use { realm ->
+                realm.refresh()
+                realm.where(com.silentpulse.messenger.model.Conversation::class.java)
+                    .equalTo("archived", false)
+                    .equalTo("blocked", false)
+                    .equalTo("lastMessage.read", false)
+                    .count().toInt()
+            } ?: 0
+            ShortcutBadger.applyCount(context, unread)
+        } catch (e: Exception) {
+            Log.e(TAG, "markAsRead badge refresh failed", e)
         }
     }
 

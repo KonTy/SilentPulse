@@ -27,6 +27,7 @@ import com.silentpulse.messenger.extensions.mapNotNull
 import com.silentpulse.messenger.interactor.DeleteConversations
 import com.silentpulse.messenger.interactor.MarkAllSeen
 import com.silentpulse.messenger.interactor.MarkArchived
+import com.silentpulse.messenger.interactor.UpdateBadge
 import com.silentpulse.messenger.interactor.MarkPinned
 import com.silentpulse.messenger.interactor.MarkRead
 import com.silentpulse.messenger.interactor.MarkUnarchived
@@ -78,7 +79,8 @@ class MainViewModel @Inject constructor(
     private val prefs: Preferences,
     private val ratingManager: RatingManager,
     private val syncContacts: SyncContacts,
-    private val syncMessages: SyncMessages
+    private val syncMessages: SyncMessages,
+    private val updateBadge: UpdateBadge
 ) : QkViewModel<MainView, MainState>(MainState(page = Inbox(data = conversationRepo.getConversations()))) {
 
     init {
@@ -89,6 +91,7 @@ class MainViewModel @Inject constructor(
         disposables += migratePreferences
         disposables += syncContacts
         disposables += syncMessages
+        disposables += updateBadge
 
         // Show the syncing UI
         disposables += syncRepository.syncProgress
@@ -126,6 +129,7 @@ class MainViewModel @Inject constructor(
 
         ratingManager.addSession()
         markAllSeen.execute(Unit)
+        updateBadge.execute(Unit)
     }
 
     override fun bindView(view: MainView) {
