@@ -201,10 +201,10 @@ Start a topic, then follow up without re-stating it:
 
 ## 12.5. Brave Leo — conversation mode (~5-20 s first turn, ~3-10 s follow-ups)
 
-Triggered by saying "leo …".
+Triggered by saying "brave …" (prefix is "brave" to avoid STT mis-recognition of the short word "leo").
 First call loads `search.brave.com/ask?q=…` in a hidden WebView. SvelteKit hydration takes ~2 s, then Leo's AI answer is polled from the DOM.
 Follow-up calls inject the query into Leo's follow-up textarea (preserving conversation context).
-Leo cookies are **separate** from Bing — clearing Leo does not affect Bing.
+Leo cookies are **separate** from Bing — clearing Brave does not affect Bing.
 
 Log lines to watch (tag `WebAiScraper`):
 - `Brave Leo: first use — loading …` → initial page load
@@ -220,27 +220,27 @@ Log lines to watch (tag `WebAiScraper`):
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.5.1 | "Leo what is the James Webb telescope?" | Speaks Leo AI answer (first call loads page) |
-| 12.5.2 | "Leo explain photosynthesis" | Speaks AI summary |
-| 12.5.3 | "Leo what causes thunder?" | Correct answer |
+| 12.5.1 | "Brave what is the James Webb telescope?" | Speaks Leo AI answer (first call loads page) |
+| 12.5.2 | "Brave explain photosynthesis" | Speaks AI summary |
+| 12.5.3 | "Brave what causes thunder?" | Correct answer |
 
 ### 12.5b. Multi-turn conversation (context carry-over)
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.5.4 | "Leo tell me about black holes" | Speaks Leo summary |
-| 12.5.5 | "Leo how are they formed?" | Continues the *black holes* topic (context preserved) |
-| 12.5.6 | "Leo how massive is the largest known one?" | Still on topic |
+| 12.5.4 | "Brave tell me about black holes" | Speaks Leo summary |
+| 12.5.5 | "Brave how are they formed?" | Continues the *black holes* topic (context preserved) |
+| 12.5.6 | "Brave how massive is the largest known one?" | Still on topic |
 
 ### 12.5c. Clear session & start fresh
 
 | # | Say | Expected |
 |---|-----|----------|
-| 12.5.7 | "Leo clear" | "Clearing Leo session." → "Leo session cleared. Say leo followed by your question to start fresh." |
-| 12.5.8 | "Leo delete" | Same as above |
-| 12.5.9 | "Leo reset" | Same as above |
-| 12.5.10 | *(after clear)* "Leo what are neutron stars?" | Fresh conversation (log: `Brave Leo: first use`) |
-| 12.5.11 | "Leo what's the largest one?" | Should NOT carry prior black-holes context (new session) |
+| 12.5.7 | "Brave clear" | "Clearing Brave session." → "Brave session cleared. Say brave followed by your question to start fresh." |
+| 12.5.8 | "Brave delete" | Same as above |
+| 12.5.9 | "Brave reset" | Same as above |
+| 12.5.10 | *(after clear)* "Brave what are neutron stars?" | Fresh conversation (log: `Brave Leo: first use`) |
+| 12.5.11 | "Brave what's the largest one?" | Should NOT carry prior black-holes context (new session) |
 
 ---
 
