@@ -99,11 +99,15 @@ class WebAiSearchScraper(private val context: Context) {
     private var bingTurnCount = 0
     // Separate WebView for Brave Leo (search.brave.com/ask) to avoid cookie mixing
     private var leoWebView: WebView? = null
+    /** True once the first /ask page has loaded and Leo is ready for follow-up injection. */
+    private var leoInitialized = false
+    /** Number of Leo answer blocks already rendered; used to detect new turns. */
+    private var leoTurnCount = 0
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /** Which AI source to query. */
-    enum class Source { BRAVE, BING }
+    enum class Source { BRAVE, BING, LEO }
 
     /**
      * Search for an AI-generated answer for [query].
@@ -128,6 +132,10 @@ class WebAiSearchScraper(private val context: Context) {
             Source.BING -> {
                 Log.d(TAG, "Explicit Bing query: \"$query\"")
                 mainHandler.post { fetchBingChat(query, onResult) }
+            }
+            Source.LEO -> {
+                Log.d(TAG, "Explicit Leo query: \"$query\"")
+                mainHandler.post { fetchBraveLeo(query, onResult) }
             }
             Source.BRAVE -> {
                 executor.execute {
@@ -156,6 +164,8 @@ class WebAiSearchScraper(private val context: Context) {
             bingWebView = null
             leoWebView?.destroy()
             leoWebView = null
+            leoInitialized = false
+            leoTurnCount = 0
         }
     }
 
@@ -182,6 +192,39 @@ class WebAiSearchScraper(private val context: Context) {
             bingChatInitialized = false
             bingTurnCount = 0
             Log.i(TAG, "Bing session cleared")
+            onDone()
+        }
+    }
+
+    /**
+     * Wipe the Brave Leo WebView session so the next "leo" query starts a fresh
+     * conversation.  Only clears search.brave.com cookies — Bing cookies are
+     * not touched.
+     */
+    fun clearLeoSession(onDone: () -> Unit) {
+        mainHandler.post {
+            Log.i(TAG, "Clearing Leo session: WebView + brave.com cookies")
+            // Remove only search.brave.com cookies to avoid disturbing Bing session
+            val cm = CookieManager.getInstance()
+            val existingCookies = cm.getCookie("https://search.brave.com") ?: ""
+            existingCookies.split(";").forEach { pair ->
+                val name = pair.trim().substringBefore("=").trim()
+                if (name.isNotEmpty()) {
+                    cm.setCookie("https://search.brave.com", "$name=; Max-Age=0; Path=/")
+                    cm.setCookie("https://brave.com", "$name=; Max-Age=0; Path=/")
+                }
+            }
+            cm.flush()
+            leoWebView?.apply {
+                clearCache(true)
+                clearHistory()
+                clearFormData()
+                destroy()
+            }
+            leoWebView = null
+            leoInitialized = false
+            leoTurnCount = 0
+            Log.i(TAG, "Leo session cleared")
             onDone()
         }
     }
@@ -709,7 +752,89 @@ class WebAiSearchScraper(private val context: Context) {
         }
     }
 
-    // ── Brave Leo — WebView (/ask?q=QUERY) ───────────────────────────────────
+    // ── Brave Leo — WebView (/ask?q=QUERY, conversation mode) ──────────────────
+
+    /**
+     * Injects a follow-up query into Leo's textarea and submits it.
+     * Replace SP_QUERY_PLACEHOLDER with the escaped query before calling.
+     * Returns 'OK:<placeholder_text>' or 'NO_INPUT'.
+     */
+    private val LEO_INJECT_JS = """
+    (function() {
+        var selectors = [
+            'textarea[placeholder*="follow" i]',
+            'textarea[placeholder*="ask" i]',
+            'textarea[placeholder*="message" i]',
+            '[class*="ask-input"] textarea',
+            '[class*="chat-input"] textarea',
+            '[class*="input"] textarea',
+            'textarea',
+        ];
+        var ta = null;
+        for (var i = 0; i < selectors.length && !ta; i++) {
+            ta = document.querySelector(selectors[i]);
+        }
+        if (!ta) {
+            console.log('[LeoAI] inject: no input found');
+            return 'NO_INPUT';
+        }
+        var desc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+        if (desc && desc.set) desc.set.call(ta, 'SP_QUERY_PLACEHOLDER');
+        else ta.value = 'SP_QUERY_PLACEHOLDER';
+        ta.dispatchEvent(new Event('input',  {bubbles: true}));
+        ta.dispatchEvent(new Event('change', {bubbles: true}));
+        setTimeout(function() {
+            ta.dispatchEvent(new KeyboardEvent('keydown',  {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+            ta.dispatchEvent(new KeyboardEvent('keypress', {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+            ta.dispatchEvent(new KeyboardEvent('keyup',    {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+            var btn = document.querySelector(
+                'button[type="submit"],[aria-label*="send" i],[class*="submit"],[class*="send-btn"]');
+            if (btn) btn.click();
+        }, 250);
+        return 'OK:' + (ta.placeholder || ta.className);
+    })()
+    """.trimIndent()
+
+    /**
+     * Polls for a new Leo answer.  PRIOR_COUNT is replaced with the answer-block
+     * count taken right before the injection.
+     * Returns JSON: {status:"done",text:"…",count:N} | {status:"typing"} | {status:"waiting",count:N}
+     */
+    private val LEO_RESPONSE_JS = """
+    (function() {
+        var streaming = document.querySelector(
+            '[class*="streaming"],[class*="generating"],[class*="typing"],[class*="loading"]');
+        if (streaming && (streaming.innerText || '').length < 100) {
+            return JSON.stringify({status:'typing'});
+        }
+        var sels = [
+            '[class*="chatllm"] p',
+            '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
+            '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
+            '[class*="answer-content"] p', '[class*="ai-answer"] p',
+            '[class*="response-content"] p',
+            'main [class*="answer"] p', 'main [class*="summary"] p',
+        ];
+        var best = [];
+        for (var i = 0; i < sels.length; i++) {
+            try {
+                var els = document.querySelectorAll(sels[i]);
+                var texts = [];
+                for (var k = 0; k < els.length; k++) {
+                    var t = (els[k].innerText || els[k].textContent || '').trim();
+                    if (t.length > 40) texts.push(t);
+                }
+                if (texts.length > best.length) best = texts;
+            } catch(e) {}
+        }
+        var count = best.length;
+        if (count > PRIOR_COUNT) {
+            var text = best.slice(PRIOR_COUNT).join(' ');
+            return JSON.stringify({status:'done', text:text.substring(0,1500), count:count});
+        }
+        return JSON.stringify({status:'waiting', count:count});
+    })()
+    """.trimIndent()
 
     /**
      * JS run by [pollBraveLeoResult] after SvelteKit hydration.
@@ -757,36 +882,119 @@ class WebAiSearchScraper(private val context: Context) {
     """.trimIndent()
 
     private fun fetchBraveLeo(query: String, onResult: (String?) -> Unit) {
-        val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://search.brave.com/ask?q=$encoded"
-        Log.d(TAG, "Brave Leo WebView: $url")
-
         val wv = getOrCreateLeoWebView()
         var done = false
+        val timeoutMs = if (leoInitialized) LEO_TIMEOUT_MS else LEO_TIMEOUT_MS + 3_000L
 
         val timeoutCallback = Runnable {
             if (!done) {
                 done = true
-                Log.w(TAG, "Brave Leo WebView timed out after ${LEO_TIMEOUT_MS}ms")
+                Log.w(TAG, "Brave Leo WebView timed out after ${timeoutMs}ms")
                 wv.stopLoading()
+                leoInitialized = false
+                if (leoTurnCount > 0) leoTurnCount--
                 onResult(null)
             }
         }
-        mainHandler.postDelayed(timeoutCallback, LEO_TIMEOUT_MS)
+        mainHandler.postDelayed(timeoutCallback, timeoutMs)
 
-        wv.webViewClient = object : WebViewClient() {
-            private var pageLoaded = false
-            override fun onPageFinished(view: WebView, urlStr: String) {
-                if (done || pageLoaded) return
-                pageLoaded = true
-                Log.d(TAG, "Brave Leo page finished: $urlStr")
-                // Give SvelteKit ~2 s to hydrate and kick off the AI fetch
+        if (!leoInitialized) {
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val url = "https://search.brave.com/ask?q=$encoded"
+            Log.d(TAG, "Brave Leo: first use — loading $url")
+            var pageLoaded = false
+            wv.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, urlStr: String) {
+                    if (done || pageLoaded) return
+                    pageLoaded = true
+                    Log.d(TAG, "Brave Leo page finished: $urlStr")
+                    // 2 s for SvelteKit to hydrate and kick off the AI fetch
+                    mainHandler.postDelayed({
+                        if (!done) {
+                            leoInitialized = true
+                            pollBraveLeoResult(wv, timeoutCallback, 0, onResult) { done = true }
+                        }
+                    }, 2_000L)
+                }
+            }
+            wv.loadUrl(url)
+        } else {
+            Log.d(TAG, "Brave Leo: continuing conversation (turn ${leoTurnCount + 1})")
+            injectLeoChatQuery(wv, query, timeoutCallback, onResult, { done = true }, { done })
+        }
+    }
+
+    private fun injectLeoChatQuery(
+        wv: WebView,
+        query: String,
+        timeout: Runnable,
+        onResult: (String?) -> Unit,
+        markDone: () -> Unit,
+        isDone: () -> Boolean,
+    ) {
+        val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
+        val js = LEO_INJECT_JS.replace("SP_QUERY_PLACEHOLDER", escaped)
+        wv.evaluateJavascript(js) { result ->
+            Log.d(TAG, "Leo inject: $result")
+            if (result == null || result.contains("NO_INPUT")) {
+                Log.w(TAG, "Leo: input not found — resetting for next turn")
+                leoInitialized = false
+                markDone()
+                mainHandler.removeCallbacks(timeout)
+                onResult(null)
+            } else {
+                val priorCount = leoTurnCount
+                leoTurnCount++
+                // 1.5 s head-start before polling
                 mainHandler.postDelayed({
-                    if (!done) pollBraveLeoResult(wv, timeoutCallback, 0, onResult) { done = true }
-                }, 2_000L)
+                    pollLeoChatResponse(wv, timeout, 0, priorCount, isDone, onResult, markDone)
+                }, 1_500L)
             }
         }
-        wv.loadUrl(url)
+    }
+
+    private fun pollLeoChatResponse(
+        wv: WebView,
+        timeout: Runnable,
+        attempt: Int,
+        priorCount: Int,
+        isDone: () -> Boolean,
+        onResult: (String?) -> Unit,
+        markDone: () -> Unit,
+    ) {
+        if (isDone()) return
+        if (attempt >= LEO_MAX_POLLS) {
+            Log.w(TAG, "Leo chat: no new response after $attempt polls — resetting")
+            leoInitialized = false
+            if (leoTurnCount > 0) leoTurnCount--
+            markDone()
+            mainHandler.removeCallbacks(timeout)
+            onResult(null)
+            return
+        }
+        val js = LEO_RESPONSE_JS.replace("PRIOR_COUNT", priorCount.toString())
+        wv.evaluateJavascript(js) { raw ->
+            if (isDone()) return@evaluateJavascript
+            val payload = raw?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: ""
+            Log.v(TAG, "Leo chat poll $attempt: ${payload.take(120)}")
+            if (payload.contains("\"status\":\"done\"")) {
+                val match = Regex("\"text\":\"(.*?)\"\\s*[,}]",
+                    setOf(RegexOption.DOT_MATCHES_ALL)).find(payload)
+                val answer = match?.groupValues?.get(1)
+                    ?.replace("\\n", " ")?.replace("\\\"", "\"")
+                    ?.replace("\\\\", "\\")?.trim()
+                if (!answer.isNullOrBlank() && answer.length > 20) {
+                    Log.d(TAG, "Leo answer (${answer.length} chars): ${answer.take(80)}...")
+                    markDone()
+                    mainHandler.removeCallbacks(timeout)
+                    onResult(cleanForSpeech(answer))
+                    return@evaluateJavascript
+                }
+            }
+            mainHandler.postDelayed({
+                pollLeoChatResponse(wv, timeout, attempt + 1, priorCount, isDone, onResult, markDone)
+            }, LEO_POLL_INTERVAL_MS)
+        }
     }
 
     private fun pollBraveLeoResult(
@@ -814,6 +1022,8 @@ class WebAiSearchScraper(private val context: Context) {
                     .trim()
                 if (text.length > 50) {
                     Log.d(TAG, "Brave Leo answer (${text.length} chars): ${text.take(80)}...")
+                    // Count current answer blocks to seed leoTurnCount for follow-ups
+                    leoTurnCount = text.split(Regex("\\s{3,}")).size.coerceAtLeast(1)
                     markDone()
                     mainHandler.removeCallbacks(timeout)
                     onResult(cleanForSpeech(text))
