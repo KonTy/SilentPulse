@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
+import com.silentpulse.messenger.feature.drivemode.NavEtaInfo
 import com.silentpulse.messenger.feature.drivemode.SilentPulseNotificationListener
 
 /**
@@ -156,6 +157,85 @@ class NavigationCommandHandler(private val context: Context) {
             }
         }
         lastNavPackage = null
+    }
+
+    // ── ETA / arrival time ────────────────────────────────────────────────────
+
+    /**
+     * @return true if the command is asking for arrival time / ETA of the current route.
+     * Matches phrases like "when will I arrive", "what time will I get there",
+     * "how long left", "eta", "arrival time", "time remaining".
+     */
+    fun isEtaCommand(command: String): Boolean {
+        val c = command.lowercase()
+        return c.contains("eta") ||
+            c.contains("arrival time") ||
+            c.contains("time of arrival") ||
+            c.contains("time remaining") ||
+            c.contains("how much time left") ||
+            (c.contains("when") && (c.contains("arriv") || c.contains("get there") || c.contains("destinat"))) ||
+            (c.contains("what time") && (c.contains("arriv") || c.contains("get there") || c.contains("there"))) ||
+            (c.contains("how long") && (c.contains("left") || c.contains("remaining") || c.contains("destinat") || c.contains("get there")))
+    }
+
+    /**
+     * Read the active navigation notification and speak the ETA back to the user.
+     * Requires [SilentPulseNotificationListener] to be running and connected.
+     */
+    fun handleEta(onSpeak: (String, (() -> Unit)?) -> Unit) {
+        val eta = SilentPulseNotificationListener.getNavEta(context)
+        if (eta == null) {
+            onSpeak("No active navigation found. Start a route first.", null)
+            return
+        }
+        Log.d(TAG, "Nav ETA from ${eta.appName}: \"${eta.text}\"")
+        onSpeak(buildEtaResponse(eta), null)
+    }
+
+    /**
+     * Convert a raw [NavEtaInfo] into a natural-language spoken string.
+     *
+     * Handles common formats:
+     *   OsmAnd:      "3 min · 1.2 km · Arriving at 3:45 PM"
+     *   Google Maps: "Arriving at 3:45 PM · 15 min (8.2 km)"
+     */
+    private fun buildEtaResponse(eta: NavEtaInfo): String {
+        val raw = eta.text
+
+        // Extract "arriving at HH:MM AM/PM" — works for both apps
+        val arrivalMatch = Regex(
+            "arri(?:ving|val)\\s+(?:at\\s+)?(\\d{1,2}:\\d{2}\\s*(?:am|pm)?)",
+            RegexOption.IGNORE_CASE
+        ).find(raw)
+
+        // Extract "N min" or "N mins"
+        val minuteMatch = Regex("(\\d+)\\s*min", RegexOption.IGNORE_CASE).find(raw)
+
+        // Extract "N.N km" or "N mi"
+        val distMatch = Regex("([\\d.]+)\\s*(km|mi\\b)", RegexOption.IGNORE_CASE).find(raw)
+
+        return buildString {
+            when {
+                arrivalMatch != null && minuteMatch != null -> {
+                    append("You'll arrive at ${arrivalMatch.groupValues[1]}")
+                    append(", in about ${minuteMatch.groupValues[1]} minutes")
+                    distMatch?.let { append(", ${it.groupValues[1]} ${it.groupValues[2]} remaining") }
+                    append(".")
+                }
+                arrivalMatch != null -> {
+                    append("You'll arrive at ${arrivalMatch.groupValues[1]}.")
+                }
+                minuteMatch != null -> {
+                    append("About ${minuteMatch.groupValues[1]} minutes remaining")
+                    distMatch?.let { append(", ${it.groupValues[1]} ${it.groupValues[2]} to go") }
+                    append(".")
+                }
+                else -> {
+                    // Fallback: speak the raw notification text as-is
+                    append("Navigation says: $raw.")
+                }
+            }
+        }
     }
 
     /**

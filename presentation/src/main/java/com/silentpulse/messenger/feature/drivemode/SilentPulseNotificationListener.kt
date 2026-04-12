@@ -35,6 +35,15 @@ data class NotifSnapshot(
     val hasReplyAction: Boolean
 )
 
+/** ETA info scraped from a live navigation app notification. */
+data class NavEtaInfo(
+    val appName: String,
+    /** Raw notification title, e.g. "3 min · 1.2 km" or "Turn left in 500 m" */
+    val title: String,
+    /** All available notification strings joined, e.g. "3 min · 1.2 km · Arriving 3:45 PM" */
+    val text: String
+)
+
 class SilentPulseNotificationListener : NotificationListenerService() {
 
     // TTS with onDone callback support
@@ -103,6 +112,49 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         /** Scan ALL active notifications for any nav app's Stop action. */
         fun fireStopAnyNav(): Boolean =
             sInstance?.stopAnyNavigation() ?: false
+
+        /**
+         * Scrape the active navigation notification to get ETA / arrival time.
+         * Works with OsmAnd (net.osmand*), Organic Maps (app.organicmaps*), and
+         * Google Maps (com.google.android.apps.maps).
+         *
+         * OsmAnd example:  title="3 min · 1.2 km"  text="Arriving at 3:45 PM"
+         * Google Maps:     title="Arriving at 3:45 PM"  bigText="15 min (8.2 km)"
+         *
+         * @return [NavEtaInfo] if a navigation notification is active, null otherwise.
+         */
+        fun getNavEta(context: Context): NavEtaInfo? {
+            val instance = sInstance ?: return null
+            if (!instance.listenerConnected) return null
+            val navPackages = setOf(
+                "com.google.android.apps.maps",
+                "net.osmand", "net.osmand.plus", "net.osmand.dev",
+                "app.organicmaps", "app.organicmaps.debug"
+            )
+            val sbns = try { instance.activeNotifications } catch (_: Exception) { return null }
+            for (sbn in sbns) {
+                if (sbn.packageName !in navPackages) continue
+                val extras = sbn.notification?.extras ?: continue
+                val title    = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()    ?: ""
+                val text     = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()     ?: ""
+                val bigText  = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+                val subText  = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
+                val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()?: ""
+                // Skip notifications with nothing useful
+                if (title.isBlank() && text.isBlank() && bigText.isBlank()) continue
+                val appLabel = try {
+                    val ai = context.packageManager.getApplicationInfo(sbn.packageName, 0)
+                    context.packageManager.getApplicationLabel(ai).toString()
+                } catch (_: Exception) { sbn.packageName }
+                // Combine all non-blank strings with " · " separator
+                val combined = listOf(title, text.ifBlank { bigText }, subText, infoText)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+                Log.d("NavETA", "Found nav notification from $appLabel: \"$combined\"")
+                return NavEtaInfo(appLabel, title, combined)
+            }
+            return null
+        }
 
         /**
          * Whisper commonly hallucinates short phrases when given silence or noise.

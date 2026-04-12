@@ -473,6 +473,14 @@ class VoiceAssistantService : Service() {
             }
             return
         }
+        // ── 3b. Built-in: current route ETA / arrival time ─────────────────
+        if (navigationHandler.isEtaCommand(c)) {
+            Log.d(TAG, "Nav ETA command detected")
+            navigationHandler.handleEta { text, onDone ->
+                speak(text) { onDone?.invoke(); resumeWakeWord() }
+            }
+            return
+        }
         // ── 4. Built-in: navigation / directions ───────────────────────
         if (navigationHandler.isNavigationCommand(c)) {
             Log.d(TAG, "Navigation command detected")
