@@ -350,7 +350,7 @@ class MainActivity : QkThemedActivity(), MainView {
         ensureDriveModeMicService()
         autoStartVoiceAssistant()
         updateAssistantMenuIcon()
-        if (!android.provider.Telephony.Sms.getDefaultSmsPackage(this).equals(packageName)) {
+        if (android.provider.Telephony.Sms.getDefaultSmsPackage(this) != packageName) {
             navigator.showDefaultSmsDialog(this)
         }
     }
