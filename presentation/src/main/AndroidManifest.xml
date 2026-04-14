@@ -350,6 +350,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".feature.debug.BraveDebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.silentpulse.messenger.BRAVE_DEBUG" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name="com.android.mms.transaction.TransactionService"
             android:exported="false" />

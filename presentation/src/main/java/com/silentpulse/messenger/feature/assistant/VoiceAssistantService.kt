@@ -264,10 +264,17 @@ class VoiceAssistantService : Service() {
 
     private fun refreshAssistantNotification() {
         val notification = buildAssistantNotification()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            startForeground(777, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(777, notification)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                startForeground(777, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(777, notification)
+            }
+        } catch (e: SecurityException) {
+            // Android 14+ blocks microphone FGS when started from background
+            // (e.g. after force-stop + widget toggle).  Gracefully stop instead of crashing.
+            Log.e(TAG, "Cannot start foreground service from background: ${e.message}")
+            stopSelf()
         }
     }
 
@@ -744,15 +751,21 @@ class VoiceAssistantService : Service() {
             if (leoQuery.isNotEmpty()) {
                 Log.d(TAG, "Leo explicit query: \"$leoQuery\"")
                 speak("Asking Brave.") {
-                    webAiSearchScraper.search(leoQuery, WebAiSearchScraper.Source.LEO) { answer ->
-                        if (answer != null) {
-                            speak(answer) { resumeWakeWord() }
-                        } else {
-                            speak("Brave didn't have an answer. Try rephrasing or say brave clear to start fresh.") {
-                                resumeWakeWord()
+                    webAiSearchScraper.searchStreaming(leoQuery, WebAiSearchScraper.Source.LEO,
+                        onChunk = { paragraph -> speakQueued(paragraph) },
+                        onDone  = { fullAnswer ->
+                            if (fullAnswer == null) {
+                                speak("Brave didn't have an answer. Try rephrasing or say brave clear to start fresh.") {
+                                    resumeWakeWord()
+                                }
+                            } else {
+                                // Chunks already queued to TTS via QUEUE_ADD.
+                                // Queue a silent sentinel so its onDone fires
+                                // after the last real chunk finishes speaking.
+                                speak(" ") { resumeWakeWord() }
                             }
                         }
-                    }
+                    )
                 }
                 return
             }
@@ -762,30 +775,26 @@ class VoiceAssistantService : Service() {
             if (bingQuery.isNotEmpty()) {
                 Log.d(TAG, "Bing explicit query: \"$bingQuery\"")
                 speak("Asking Bing.") {
-                    webAiSearchScraper.search(bingQuery, WebAiSearchScraper.Source.BING) { answer ->
-                        if (answer != null) {
-                            Log.d(TAG, "Bing full answer (${answer.length} chars): $answer")
-                            saveDebugAnswer("bing", bingQuery, answer)
-                            speak(answer) { resumeWakeWord() }
-                        } else {
-                            // Bing WebView failed or timed out.
-                            // DO NOT fall back to DDG/Wikipedia for explicit Bing queries:
-                            // "best X cameras right now" style queries are recommendation/
-                            // shopping queries that Wikipedia fundamentally cannot answer.
-                            // Doing so caused unrelated Wikipedia articles to be spoken
-                            // (e.g. asking about Insta360 cameras returned Leica content).
-                            // Instead: try Brave API if available, otherwise tell the user.
-                            if (braveSearchHandler.hasApiKey()) {
-                                braveSearchHandler.search(bingQuery) { braveAnswer ->
-                                    speak(braveAnswer) { resumeWakeWord() }
-                                }
+                    webAiSearchScraper.searchStreaming(bingQuery, WebAiSearchScraper.Source.BING,
+                        onChunk = { paragraph -> speakQueued(paragraph) },
+                        onDone  = { answer ->
+                            if (answer != null) {
+                                Log.d(TAG, "Bing full answer (${answer.length} chars): $answer")
+                                saveDebugAnswer("bing", bingQuery, answer)
+                                speak(" ") { resumeWakeWord() }
                             } else {
-                                speak("Bing didn't have an answer for that. Try rephrasing or asking without the bing prefix.") {
-                                    resumeWakeWord()
+                                if (braveSearchHandler.hasApiKey()) {
+                                    braveSearchHandler.search(bingQuery) { braveAnswer ->
+                                        speak(braveAnswer) { resumeWakeWord() }
+                                    }
+                                } else {
+                                    speak("Bing didn't have an answer for that. Try rephrasing or asking without the bing prefix.") {
+                                        resumeWakeWord()
+                                    }
                                 }
                             }
                         }
-                    }
+                    )
                 }
                 return
             }
@@ -799,16 +808,20 @@ class VoiceAssistantService : Service() {
         ) {
             Log.d(TAG, "General query — trying Brave AI")
             speak("Let me look that up.") {
-                webAiSearchScraper.search(command, WebAiSearchScraper.Source.BRAVE) { aiAnswer ->
-                    if (aiAnswer != null) {
-                        speak(aiAnswer) { resumeWakeWord() }
-                    } else {
-                        Log.d(TAG, "Brave returned nothing — falling back to DuckDuckGo")
-                        generalQueryHandler.fetchAndSpeak(command) { answer ->
-                            speak(answer) { resumeWakeWord() }
+                webAiSearchScraper.searchStreaming(command, WebAiSearchScraper.Source.BRAVE,
+                    onChunk = { paragraph -> speakQueued(paragraph) },
+                    onDone  = { aiAnswer ->
+                        if (aiAnswer != null) {
+                            // Chunks already queued to TTS — resume after they finish
+                            speak(" ") { resumeWakeWord() }
+                        } else {
+                            Log.d(TAG, "Brave returned nothing — falling back to DuckDuckGo")
+                            generalQueryHandler.fetchAndSpeak(command) { answer ->
+                                speak(answer) { resumeWakeWord() }
+                            }
                         }
                     }
-                }
+                )
             }
             return
         }

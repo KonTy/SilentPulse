@@ -14,6 +14,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.Executors
+import org.json.JSONArray
 
 /**
  * AI answer scraper using real browser rendering — no API key required.
@@ -61,10 +62,10 @@ class WebAiSearchScraper(private val context: Context) {
         private const val BING_MAX_POLLS = 16
         /** Chat mode: 24 × 500 ms = 12 s max wait for a streaming response. */
         private const val BING_CHAT_MAX_POLLS = 24
-        /** Leo /ask WebView: up to 20 × 700 ms = 14 s poll window after 2 s hydration. */
-        private const val LEO_TIMEOUT_MS      = 20_000L
-        private const val LEO_POLL_INTERVAL_MS = 700L
-        private const val LEO_MAX_POLLS        = 20
+        /** Leo /ask WebView: up to 40 × 800 ms = 32 s poll window after 2 s hydration. */
+        private const val LEO_TIMEOUT_MS      = 35_000L
+        private const val LEO_POLL_INTERVAL_MS = 800L
+        private const val LEO_MAX_POLLS        = 40
 
         /**
          * Disable or re-enable the AI scraping feature entirely.
@@ -99,10 +100,8 @@ class WebAiSearchScraper(private val context: Context) {
     private var bingTurnCount = 0
     // Separate WebView for Brave Leo (search.brave.com/ask) to avoid cookie mixing
     private var leoWebView: WebView? = null
-    /** True once the first /ask page has loaded and Leo is ready for follow-up injection. */
+    /** True once the first /ask page has loaded. */
     private var leoInitialized = false
-    /** Number of Leo answer blocks already rendered; used to detect new turns. */
-    private var leoTurnCount = 0
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -157,6 +156,67 @@ class WebAiSearchScraper(private val context: Context) {
         }
     }
 
+    /**
+     * Streaming search — calls [onChunk] for each new paragraph as Leo generates
+     * it, then [onDone] once the answer stabilises (or null on failure).
+     *
+     * **Only for Brave/Leo source.** Bing and HTTP-only Brave fall back to the
+     * non-streaming [search] path internally.
+     *
+     * @param onChunk  Called on the main thread with each NEW paragraph text
+     *                 as Leo streams it.  The caller should queue it to TTS.
+     * @param onDone   Called on the main thread when streaming is complete.
+     *                 Receives the full concatenated answer (or null on failure).
+     */
+    fun searchStreaming(
+        query: String,
+        source: Source = Source.BRAVE,
+        onChunk: (String) -> Unit,
+        onDone: (String?) -> Unit,
+    ) {
+        if (!enabled) {
+            Log.d(TAG, "Disabled — skipping")
+            onDone(null)
+            return
+        }
+
+        when (source) {
+            Source.LEO -> {
+                Log.d(TAG, "Streaming Leo query: \"$query\"")
+                mainHandler.post { fetchBraveLeoStreaming(query, onChunk, onDone) }
+            }
+            Source.BRAVE -> {
+                executor.execute {
+                    try {
+                        val brave = fetchBrave(query)
+                        if (brave != null) {
+                            Log.d(TAG, "Brave HTTP answered — single chunk")
+                            mainHandler.post {
+                                onChunk(brave)
+                                onDone(brave)
+                            }
+                            return@execute
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Brave fetch threw: ${e.message}")
+                    }
+                    Log.d(TAG, "Brave HTTP: no AI answer — falling back to Brave Leo streaming")
+                    mainHandler.post { fetchBraveLeoStreaming(query, onChunk, onDone) }
+                }
+            }
+            Source.BING -> {
+                // Bing doesn't support paragraph-level streaming; use normal search
+                Log.d(TAG, "Bing query (non-streaming): \"$query\"")
+                mainHandler.post {
+                    fetchBingChat(query) { answer ->
+                        if (answer != null) onChunk(answer)
+                        onDone(answer)
+                    }
+                }
+            }
+        }
+    }
+
     /** Release resources. Call from VoiceAssistantService.onDestroy(). */
     fun destroy() {
         mainHandler.post {
@@ -165,7 +225,6 @@ class WebAiSearchScraper(private val context: Context) {
             leoWebView?.destroy()
             leoWebView = null
             leoInitialized = false
-            leoTurnCount = 0
         }
     }
 
@@ -223,7 +282,6 @@ class WebAiSearchScraper(private val context: Context) {
             }
             leoWebView = null
             leoInitialized = false
-            leoTurnCount = 0
             Log.i(TAG, "Leo session cleared")
             onDone()
         }
@@ -755,88 +813,6 @@ class WebAiSearchScraper(private val context: Context) {
     // ── Brave Leo — WebView (/ask?q=QUERY, conversation mode) ──────────────────
 
     /**
-     * Injects a follow-up query into Leo's textarea and submits it.
-     * Replace SP_QUERY_PLACEHOLDER with the escaped query before calling.
-     * Returns 'OK:<placeholder_text>' or 'NO_INPUT'.
-     */
-    private val LEO_INJECT_JS = """
-    (function() {
-        var selectors = [
-            'textarea[placeholder*="follow" i]',
-            'textarea[placeholder*="ask" i]',
-            'textarea[placeholder*="message" i]',
-            '[class*="ask-input"] textarea',
-            '[class*="chat-input"] textarea',
-            '[class*="input"] textarea',
-            'textarea',
-        ];
-        var ta = null;
-        for (var i = 0; i < selectors.length && !ta; i++) {
-            ta = document.querySelector(selectors[i]);
-        }
-        if (!ta) {
-            console.log('[LeoAI] inject: no input found');
-            return 'NO_INPUT';
-        }
-        var desc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-        if (desc && desc.set) desc.set.call(ta, 'SP_QUERY_PLACEHOLDER');
-        else ta.value = 'SP_QUERY_PLACEHOLDER';
-        ta.dispatchEvent(new Event('input',  {bubbles: true}));
-        ta.dispatchEvent(new Event('change', {bubbles: true}));
-        setTimeout(function() {
-            ta.dispatchEvent(new KeyboardEvent('keydown',  {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
-            ta.dispatchEvent(new KeyboardEvent('keypress', {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
-            ta.dispatchEvent(new KeyboardEvent('keyup',    {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
-            var btn = document.querySelector(
-                'button[type="submit"],[aria-label*="send" i],[class*="submit"],[class*="send-btn"]');
-            if (btn) btn.click();
-        }, 250);
-        return 'OK:' + (ta.placeholder || ta.className);
-    })()
-    """.trimIndent()
-
-    /**
-     * Polls for a new Leo answer.  PRIOR_COUNT is replaced with the answer-block
-     * count taken right before the injection.
-     * Returns JSON: {status:"done",text:"…",count:N} | {status:"typing"} | {status:"waiting",count:N}
-     */
-    private val LEO_RESPONSE_JS = """
-    (function() {
-        var streaming = document.querySelector(
-            '[class*="streaming"],[class*="generating"],[class*="typing"],[class*="loading"]');
-        if (streaming && (streaming.innerText || '').length < 100) {
-            return JSON.stringify({status:'typing'});
-        }
-        var sels = [
-            '[class*="chatllm"] p',
-            '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
-            '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
-            '[class*="answer-content"] p', '[class*="ai-answer"] p',
-            '[class*="response-content"] p',
-            'main [class*="answer"] p', 'main [class*="summary"] p',
-        ];
-        var best = [];
-        for (var i = 0; i < sels.length; i++) {
-            try {
-                var els = document.querySelectorAll(sels[i]);
-                var texts = [];
-                for (var k = 0; k < els.length; k++) {
-                    var t = (els[k].innerText || els[k].textContent || '').trim();
-                    if (t.length > 40) texts.push(t);
-                }
-                if (texts.length > best.length) best = texts;
-            } catch(e) {}
-        }
-        var count = best.length;
-        if (count > PRIOR_COUNT) {
-            var text = best.slice(PRIOR_COUNT).join(' ');
-            return JSON.stringify({status:'done', text:text.substring(0,1500), count:count});
-        }
-        return JSON.stringify({status:'waiting', count:count});
-    })()
-    """.trimIndent()
-
-    /**
      * JS run by [pollBraveLeoResult] after SvelteKit hydration.
      * Tries class-name patterns in order of specificity, logging which selector
      * won so it can be tuned via `adb logcat -s WebAiScraper`.
@@ -846,6 +822,7 @@ class WebAiSearchScraper(private val context: Context) {
     (function() {
         var sels = [
             '[class*="chatllm"] p',
+            '[class*="llm-output"] p',
             '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
             '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
             '[class*="answer-content"] p', '[class*="ai-answer"] p', '[class*="summary-answer"] p',
@@ -862,10 +839,10 @@ class WebAiSearchScraper(private val context: Context) {
                     if (t.length > 40) texts.push(t);
                 }
                 if (texts.length) {
-                    texts.sort(function(a, b) { return b.length - a.length; });
+                    var joined = texts.join(' ');
                     console.log('[LeoAI] sel=' + sels[i] + ' n=' + texts.length +
-                        ' best=' + texts[0].length + 'ch: ' + texts[0].substring(0, 60));
-                    return texts[0].substring(0, 1500);
+                        ' total=' + joined.length + 'ch: ' + joined.substring(0, 60));
+                    return joined.substring(0, 3000);
                 }
             } catch(e) {}
         }
@@ -882,9 +859,10 @@ class WebAiSearchScraper(private val context: Context) {
     """.trimIndent()
 
     private fun fetchBraveLeo(query: String, onResult: (String?) -> Unit) {
+        // Always load a fresh URL per query — conversation injection is unreliable.
         val wv = getOrCreateLeoWebView()
         var done = false
-        val timeoutMs = if (leoInitialized) LEO_TIMEOUT_MS else LEO_TIMEOUT_MS + 3_000L
+        val timeoutMs = LEO_TIMEOUT_MS + 3_000L
 
         val timeoutCallback = Runnable {
             if (!done) {
@@ -892,115 +870,44 @@ class WebAiSearchScraper(private val context: Context) {
                 Log.w(TAG, "Brave Leo WebView timed out after ${timeoutMs}ms")
                 wv.stopLoading()
                 leoInitialized = false
-                if (leoTurnCount > 0) leoTurnCount--
                 onResult(null)
             }
         }
         mainHandler.postDelayed(timeoutCallback, timeoutMs)
 
-        if (!leoInitialized) {
-            val encoded = URLEncoder.encode(query, "UTF-8")
-            val url = "https://search.brave.com/ask?q=$encoded"
-            Log.d(TAG, "Brave Leo: first use — loading $url")
-            var pageLoaded = false
-            wv.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView, urlStr: String) {
-                    if (done || pageLoaded) return
-                    pageLoaded = true
-                    Log.d(TAG, "Brave Leo page finished: $urlStr")
-                    // 2 s for SvelteKit to hydrate and kick off the AI fetch
-                    mainHandler.postDelayed({
-                        if (!done) {
-                            leoInitialized = true
-                            pollBraveLeoResult(wv, timeoutCallback, 0, onResult) { done = true }
-                        }
-                    }, 2_000L)
-                }
-            }
-            wv.loadUrl(url)
-        } else {
-            Log.d(TAG, "Brave Leo: continuing conversation (turn ${leoTurnCount + 1})")
-            injectLeoChatQuery(wv, query, timeoutCallback, onResult, { done = true }, { done })
-        }
-    }
-
-    private fun injectLeoChatQuery(
-        wv: WebView,
-        query: String,
-        timeout: Runnable,
-        onResult: (String?) -> Unit,
-        markDone: () -> Unit,
-        isDone: () -> Boolean,
-    ) {
-        val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
-        val js = LEO_INJECT_JS.replace("SP_QUERY_PLACEHOLDER", escaped)
-        wv.evaluateJavascript(js) { result ->
-            Log.d(TAG, "Leo inject: $result")
-            if (result == null || result.contains("NO_INPUT")) {
-                Log.w(TAG, "Leo: input not found — resetting for next turn")
-                leoInitialized = false
-                markDone()
-                mainHandler.removeCallbacks(timeout)
-                onResult(null)
-            } else {
-                val priorCount = leoTurnCount
-                leoTurnCount++
-                // 1.5 s head-start before polling
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://search.brave.com/ask?q=$encoded"
+        Log.d(TAG, "Brave Leo: loading $url")
+        var pageLoaded = false
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, urlStr: String) {
+                if (done || pageLoaded) return
+                pageLoaded = true
+                Log.d(TAG, "Brave Leo page finished: $urlStr")
                 mainHandler.postDelayed({
-                    pollLeoChatResponse(wv, timeout, 0, priorCount, isDone, onResult, markDone)
-                }, 1_500L)
+                    if (!done) {
+                        leoInitialized = true
+                        pollBraveLeoResult(wv, timeoutCallback, 0, 0, onResult) { done = true }
+                    }
+                }, 2_000L)
             }
         }
+        wv.loadUrl(url)
     }
 
-    private fun pollLeoChatResponse(
-        wv: WebView,
-        timeout: Runnable,
-        attempt: Int,
-        priorCount: Int,
-        isDone: () -> Boolean,
-        onResult: (String?) -> Unit,
-        markDone: () -> Unit,
-    ) {
-        if (isDone()) return
-        if (attempt >= LEO_MAX_POLLS) {
-            Log.w(TAG, "Leo chat: no new response after $attempt polls — resetting")
-            leoInitialized = false
-            if (leoTurnCount > 0) leoTurnCount--
-            markDone()
-            mainHandler.removeCallbacks(timeout)
-            onResult(null)
-            return
-        }
-        val js = LEO_RESPONSE_JS.replace("PRIOR_COUNT", priorCount.toString())
-        wv.evaluateJavascript(js) { raw ->
-            if (isDone()) return@evaluateJavascript
-            val payload = raw?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: ""
-            Log.v(TAG, "Leo chat poll $attempt: ${payload.take(120)}")
-            if (payload.contains("\"status\":\"done\"")) {
-                val match = Regex("\"text\":\"(.*?)\"\\s*[,}]",
-                    setOf(RegexOption.DOT_MATCHES_ALL)).find(payload)
-                val answer = match?.groupValues?.get(1)
-                    ?.replace("\\n", " ")?.replace("\\\"", "\"")
-                    ?.replace("\\\\", "\\")?.trim()
-                if (!answer.isNullOrBlank() && answer.length > 20) {
-                    Log.d(TAG, "Leo answer (${answer.length} chars): ${answer.take(80)}...")
-                    markDone()
-                    mainHandler.removeCallbacks(timeout)
-                    onResult(cleanForSpeech(answer))
-                    return@evaluateJavascript
-                }
-            }
-            mainHandler.postDelayed({
-                pollLeoChatResponse(wv, timeout, attempt + 1, priorCount, isDone, onResult, markDone)
-            }, LEO_POLL_INTERVAL_MS)
-        }
-    }
-
+    /**
+     * Polls Leo for the AI answer using [LEO_SELECTORS_JS].  Returns only
+     * when the text **stabilises** (same length for 2 consecutive polls) so
+     * that streaming answers are not truncated prematurely.
+     *
+     * @param prevLen  Text length from the previous poll (0 on first call).
+     *                 Used for stability detection.
+     */
     private fun pollBraveLeoResult(
         wv: WebView,
         timeout: Runnable,
         attempt: Int,
+        prevLen: Int,
         onResult: (String?) -> Unit,
         markDone: () -> Unit,
     ) {
@@ -1021,9 +928,18 @@ class WebAiSearchScraper(private val context: Context) {
                     .replace("\\\\", "\\")
                     .trim()
                 if (text.length > 50) {
-                    Log.d(TAG, "Brave Leo answer (${text.length} chars): ${text.take(80)}...")
-                    // Count current answer blocks to seed leoTurnCount for follow-ups
-                    leoTurnCount = text.split(Regex("\\s{3,}")).size.coerceAtLeast(1)
+                    // Stability check: Leo streams <p> elements incrementally.
+                    // Only return when the text length stopped growing between
+                    // two consecutive polls — meaning Leo finished generating.
+                    if (text.length > prevLen) {
+                        Log.v(TAG, "Brave Leo text still growing: ${text.length} chars (prev $prevLen) — poll $attempt")
+                        mainHandler.postDelayed({
+                            pollBraveLeoResult(wv, timeout, attempt + 1, text.length, onResult, markDone)
+                        }, LEO_POLL_INTERVAL_MS)
+                        return@evaluateJavascript
+                    }
+                    // Text stabilised — return the answer.
+                    Log.d(TAG, "Brave Leo answer (${text.length} chars, stable at poll $attempt): ${text.take(80)}...")
                     markDone()
                     mainHandler.removeCallbacks(timeout)
                     onResult(cleanForSpeech(text))
@@ -1031,7 +947,167 @@ class WebAiSearchScraper(private val context: Context) {
                 }
             }
             mainHandler.postDelayed({
-                pollBraveLeoResult(wv, timeout, attempt + 1, onResult, markDone)
+                pollBraveLeoResult(wv, timeout, attempt + 1, 0, onResult, markDone)
+            }, LEO_POLL_INTERVAL_MS)
+        }
+    }
+
+    // ── Streaming Leo (paragraph-by-paragraph) ───────────────────────────────
+
+    /**
+     * JS that returns an array of paragraph texts from the best-matching selector.
+     * Used by [pollBraveLeoStreaming] to detect new paragraphs incrementally.
+     */
+    private val LEO_PARAGRAPHS_JS = """
+    (function() {
+        var sels = [
+            '[class*="chatllm"] p',
+            '[class*="llm-output"] p',
+            '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
+            '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
+            '[class*="answer-content"] p', '[class*="ai-answer"] p', '[class*="summary-answer"] p',
+            '[class*="response-content"] p', '[class*="result-content"] p',
+            'main [class*="answer"] p', 'main [class*="summary"] p',
+        ];
+        var best = [];
+        for (var i = 0; i < sels.length; i++) {
+            try {
+                var els = document.querySelectorAll(sels[i]);
+                var texts = [];
+                for (var k = 0; k < els.length; k++) {
+                    var t = (els[k].innerText || els[k].textContent || '').trim();
+                    if (t.length > 30) texts.push(t);
+                }
+                if (texts.length > best.length) best = texts;
+            } catch(e) {}
+        }
+        return JSON.stringify(best);
+    })()
+    """.trimIndent()
+
+    private fun fetchBraveLeoStreaming(
+        query: String,
+        onChunk: (String) -> Unit,
+        onDone: (String?) -> Unit,
+    ) {
+        // Always load a fresh URL per query.  Conversation injection via textarea
+        // is unreliable (follow-up DOM elements differ, polls stall, state breaks).
+        // A fresh /ask?q=… is fast and always works.
+        val wv = getOrCreateLeoWebView()
+        var done = false
+        val timeoutMs = LEO_TIMEOUT_MS + 3_000L
+
+        val timeoutCallback = Runnable {
+            if (!done) {
+                done = true
+                Log.w(TAG, "Leo streaming timed out after ${timeoutMs}ms")
+                wv.stopLoading()
+                leoInitialized = false
+                onDone(null)
+            }
+        }
+        mainHandler.postDelayed(timeoutCallback, timeoutMs)
+
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://search.brave.com/ask?q=$encoded"
+        Log.d(TAG, "Leo streaming: loading $url")
+        var pageLoaded = false
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, urlStr: String) {
+                if (done || pageLoaded) return
+                pageLoaded = true
+                Log.d(TAG, "Leo streaming page finished: $urlStr")
+                mainHandler.postDelayed({
+                    if (!done) {
+                        leoInitialized = true
+                        pollBraveLeoStreaming(wv, timeoutCallback, 0, mutableListOf(),
+                            onChunk, onDone, markDone = { done = true })
+                    }
+                }, 2_000L)
+            }
+        }
+        wv.loadUrl(url)
+    }
+
+    /**
+     * Polls Leo for individual paragraphs and emits each new one via [onChunk].
+     * When no new paragraphs appear for 2 consecutive polls the answer is
+     * considered complete — [onDone] is called with the full text.
+     *
+     * @param emitted       List of paragraph texts already emitted (mutated in place).
+     * @param stablePolls   Consecutive polls with no new paragraphs.
+     */
+    private fun pollBraveLeoStreaming(
+        wv: WebView,
+        timeout: Runnable,
+        attempt: Int,
+        emitted: MutableList<String>,
+        onChunk: (String) -> Unit,
+        onDone: (String?) -> Unit,
+        markDone: () -> Unit,
+        stablePolls: Int = 0,
+    ) {
+        if (attempt >= LEO_MAX_POLLS) {
+            // Timed out, but if we already emitted something, return that.
+            if (emitted.isNotEmpty()) {
+                val full = emitted.joinToString(" ")
+                Log.d(TAG, "Leo streaming: max polls reached, returning ${full.length} chars")
+                markDone()
+                mainHandler.removeCallbacks(timeout)
+                onDone(cleanForSpeech(full))
+            } else {
+                Log.d(TAG, "Leo streaming: no paragraphs after $attempt polls")
+                markDone()
+                mainHandler.removeCallbacks(timeout)
+                onDone(null)
+            }
+            return
+        }
+
+        wv.evaluateJavascript(LEO_PARAGRAPHS_JS) { raw ->
+            val paragraphs = try {
+                // evaluateJavascript returns a JSON-encoded string: the outer
+                // layer is a JSON string literal wrapping our JS return value.
+                // Use JSONTokener to properly unescape the outer layer, then
+                // parse the inner value as a JSONArray.
+                val inner = if (raw != null && raw.startsWith("\"")) {
+                    org.json.JSONTokener(raw).nextValue() as? String ?: "[]"
+                } else {
+                    raw ?: "[]"
+                }
+                val arr = JSONArray(inner)
+                (0 until arr.length()).map { arr.getString(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Leo streaming: JSON parse error: ${e.message}")
+                emptyList()
+            }
+
+            // Emit any paragraphs we haven't emitted yet
+            var emittedNew = false
+            for (i in emitted.size until paragraphs.size) {
+                val text = paragraphs[i]
+                emitted.add(text)
+                Log.d(TAG, "Leo streaming chunk #${emitted.size}: ${text.take(60)}... (${text.length}ch)")
+                onChunk(cleanForSpeech(text))
+                emittedNew = true
+            }
+
+            val newStablePolls = if (emittedNew || emitted.isEmpty()) 0 else stablePolls + 1
+
+            // Need 2 consecutive stable polls to consider the answer complete
+            if (emitted.isNotEmpty() && newStablePolls >= 2) {
+                val full = emitted.joinToString(" ")
+                Log.d(TAG, "Leo streaming complete: ${emitted.size} paragraphs, ${full.length} chars")
+                leoInitialized = true
+                markDone()
+                mainHandler.removeCallbacks(timeout)
+                onDone(cleanForSpeech(full))
+                return@evaluateJavascript
+            }
+
+            mainHandler.postDelayed({
+                pollBraveLeoStreaming(wv, timeout, attempt + 1, emitted,
+                    onChunk, onDone, markDone, newStablePolls)
             }, LEO_POLL_INTERVAL_MS)
         }
     }
@@ -1070,6 +1146,190 @@ class WebAiSearchScraper(private val context: Context) {
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
         }.also { bingWebView = it }
+    }
+
+    // ── Debug dump ──────────────────────────────────────────────────────────
+
+    /**
+     * Run a diagnostic query that dumps EVERYTHING to files in the app directory.
+     * Triggered via ADB:
+     *   adb shell am broadcast -n com.silentpulse.messenger/.feature.debug.BraveDebugReceiver \
+     *       -a com.silentpulse.messenger.BRAVE_DEBUG --es query "what is quantum physics"
+     *
+     * Then pull the results:
+     *   adb pull /sdcard/Android/data/com.silentpulse.messenger/files/brave_debug/
+     *
+     * Files written:
+     *   1_http_raw.html         — raw Brave Search HTML (plain HTTP)
+     *   2_http_extracted.txt    — what extractBraveAnswer() produces
+     *   3_leo_dom.html          — full Leo WebView DOM after hydration
+     *   4_leo_selectors.txt     — what every CSS selector matched
+     *   5_leo_state.txt         — leoInitialized, etc.
+     *
+     * The user can open 1_http_raw.html or 3_leo_dom.html in a browser,
+     * inspect with F12, and tell us which elements contain the AI answer.
+     */
+    fun debugDump(query: String, onDone: (String) -> Unit) {
+        if (!com.silentpulse.messenger.BuildConfig.DEBUG) {
+            onDone("Debug dump is only available in debug builds.")
+            return
+        }
+        val dir = java.io.File(context.getExternalFilesDir(null), "brave_debug")
+        dir.mkdirs()
+        // Clean old files
+        dir.listFiles()?.forEach { it.delete() }
+
+        Log.i(TAG, "=== BRAVE DEBUG DUMP: query=\"$query\" ===")
+        val stateFile = java.io.File(dir, "5_leo_state.txt")
+        stateFile.writeText(buildString {
+            appendLine("query: $query")
+            appendLine("timestamp: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("leoInitialized: $leoInitialized")
+            appendLine("leoWebView: ${if (leoWebView != null) "exists" else "null"}")
+            appendLine("bingWebView: ${if (bingWebView != null) "exists" else "null"}")
+            appendLine("enabled: $enabled")
+        })
+
+        // Step 1: HTTP fetch
+        executor.execute {
+            try {
+                val encoded = URLEncoder.encode(query, "UTF-8")
+                val url = "https://search.brave.com/search?q=$encoded&summary=1&source=web"
+                Log.d(TAG, "Debug: HTTP GET $url")
+                val html = httpGet(url, BRAVE_TIMEOUT_MS.toInt())
+                java.io.File(dir, "1_http_raw.html").writeText(html)
+                Log.d(TAG, "Debug: saved ${html.length} bytes to 1_http_raw.html")
+
+                val extracted = if (html.isNotEmpty()) extractBraveAnswer(html) else null
+                java.io.File(dir, "2_http_extracted.txt").writeText(
+                    extracted ?: "(extractBraveAnswer returned null — no AI answer found in HTTP response)"
+                )
+            } catch (e: Exception) {
+                java.io.File(dir, "2_http_extracted.txt").writeText("HTTP fetch failed: ${e.message}")
+                Log.e(TAG, "Debug: HTTP step failed", e)
+            }
+
+            // Step 2: Leo WebView dump
+            mainHandler.post {
+                debugDumpLeoWebView(query, dir, onDone)
+            }
+        }
+    }
+
+    private fun debugDumpLeoWebView(query: String, dir: java.io.File, onDone: (String) -> Unit) {
+        val wv = getOrCreateLeoWebView()
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://search.brave.com/ask?q=$encoded"
+        Log.d(TAG, "Debug: Leo loading $url")
+
+        var pageLoaded = false
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, urlStr: String) {
+                if (pageLoaded) return
+                pageLoaded = true
+                Log.d(TAG, "Debug: Leo page finished, waiting 12s for hydration + answer generation...")
+                // Wait 12s for SvelteKit to hydrate AND for Leo to generate the full answer
+                mainHandler.postDelayed({
+                    debugExtractLeoState(wv, dir, onDone)
+                }, 12_000L)
+            }
+        }
+        wv.loadUrl(url)
+    }
+
+    private fun debugExtractLeoState(wv: WebView, dir: java.io.File, onDone: (String) -> Unit) {
+        // 1. Dump all page HTML
+        wv.evaluateJavascript(
+            "(function(){ return document.documentElement.outerHTML; })()"
+        ) { rawHtml ->
+            val html = rawHtml?.removeSurrounding("\"")
+                ?.replace("\\n", "\n")
+                ?.replace("\\t", "\t")
+                ?.replace("\\\"", "\"")
+                ?.replace("\\\\/", "/")
+                ?.replace("\\\\", "\\")
+                ?: "(null)"
+            java.io.File(dir, "3_leo_dom.html").writeText(html)
+            Log.d(TAG, "Debug: saved ${html.length} chars to 3_leo_dom.html")
+
+            // 2. Run ALL selectors and dump matches
+            val selectorDumpJs = """
+            (function() {
+                var result = [];
+                var sels = [
+                    '[class*="chatllm"] p',
+                    '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
+                    '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
+                    '[class*="answer-content"] p', '[class*="ai-answer"] p', '[class*="summary-answer"] p',
+                    '[data-testid*="answer"] p', '[data-type="answer"] p',
+                    '[class*="response-content"] p', '[class*="result-content"] p',
+                    'main [class*="answer"]', 'main [class*="summary"]',
+                    '[class*="streaming"]', '[class*="generating"]',
+                    '[class*="typing"]', '[class*="loading"]',
+                    'textarea', 'input[type="text"]',
+                ];
+                for (var i = 0; i < sels.length; i++) {
+                    try {
+                        var els = document.querySelectorAll(sels[i]);
+                        var matches = [];
+                        for (var k = 0; k < els.length; k++) {
+                            var el = els[k];
+                            var t = (el.innerText || el.textContent || '').trim();
+                            matches.push({
+                                tag: el.tagName,
+                                className: (el.className || '').substring(0, 120),
+                                id: el.id || '',
+                                textLen: t.length,
+                                text: t.substring(0, 200),
+                                childCount: el.children.length,
+                            });
+                        }
+                        if (matches.length > 0) {
+                            result.push({selector: sels[i], count: matches.length, matches: matches});
+                        }
+                    } catch(e) {
+                        result.push({selector: sels[i], error: e.message});
+                    }
+                }
+
+                // Also dump all elements with class containing 'answer', 'leo', 'ask', 'chat', 'summary'
+                var interesting = document.querySelectorAll(
+                    '[class*="answer"],[class*="leo"],[class*="ask"],[class*="chat"],[class*="summary"],[class*="llm"],[class*="response"]'
+                );
+                var interestingList = [];
+                for (var j = 0; j < interesting.length && j < 50; j++) {
+                    var el = interesting[j];
+                    var t = (el.innerText || '').trim();
+                    interestingList.push({
+                        tag: el.tagName,
+                        className: (el.className || '').substring(0, 150),
+                        id: el.id || '',
+                        textLen: t.length,
+                        textPreview: t.substring(0, 150),
+                    });
+                }
+                result.push({label: 'INTERESTING_ELEMENTS', count: interestingList.length, elements: interestingList});
+
+                return JSON.stringify(result, null, 2);
+            })()
+            """.trimIndent()
+
+            wv.evaluateJavascript(selectorDumpJs) { rawJson ->
+                val json = rawJson?.removeSurrounding("\"")
+                    ?.replace("\\n", "\n")
+                    ?.replace("\\\"", "\"")
+                    ?.replace("\\\\", "\\")
+                    ?: "(null)"
+                java.io.File(dir, "4_leo_selectors.txt").writeText(json)
+                Log.d(TAG, "Debug: saved selector dump to 4_leo_selectors.txt")
+
+                val summary = "Debug dump complete → ${dir.absolutePath}\n" +
+                        "Pull with: adb pull ${dir.absolutePath}/ ./brave_debug/"
+                Log.i(TAG, summary)
+                leoInitialized = false // Reset so normal queries start fresh
+                onDone(summary)
+            }
+        }
     }
 
     // ── HTTP helper ───────────────────────────────────────────────────────────

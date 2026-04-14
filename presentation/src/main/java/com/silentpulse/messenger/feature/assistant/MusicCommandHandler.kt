@@ -6,6 +6,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
@@ -176,8 +177,8 @@ class MusicCommandHandler(private val context: Context) {
         }
     }
 
-    fun isVlcInstalled(): Boolean  = isAppInstalled(VLC_PACKAGE)
-    fun isVoiceInstalled(): Boolean = isAppInstalled(VOICE_PACKAGE)
+    fun isVlcInstalled(): Boolean     = isAppInstalled(VLC_PACKAGE)
+    fun isVoiceInstalled(): Boolean   = isAppInstalled(VOICE_PACKAGE)
 
     private fun isAppInstalled(pkg: String) = try {
         context.packageManager.getPackageInfo(pkg, 0); true

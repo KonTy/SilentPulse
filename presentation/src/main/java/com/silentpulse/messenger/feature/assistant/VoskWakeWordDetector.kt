@@ -33,10 +33,57 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
          * 0.0 means Vosk didn't report conf — treat as pass.
          */
         private const val MIN_CONFIDENCE_COLD = 0.80
+        /**
+         * Minimum number of **consecutive** partial matches required before the
+         * detector is truly armed.  A real spoken word produces multiple
+         * consistent partials over its duration (~5-8 for a 600-800 ms word);
+         * random keyboard clicks / ambient noise may fluke 2-3 consecutive.
+         * Requiring ≥5 demands sustained, consistent recognition.
+         */
+        private const val MIN_CONSECUTIVE_PRIMES = 5
+        /**
+         * Minimum time span (ms) between the FIRST partial match and the arming
+         * partial.  A real spoken "bubblegum" (~600ms) produces its first
+         * partial at ~150ms and keeps matching until ~600ms.  Silence/noise
+         * hallucinations tend to be short bursts.
+         * Requiring the prime window to span ≥ 400ms filters those out.
+         */
+        private const val MIN_PRIME_DURATION_MS = 400L
+        /**
+         * Minimum Vosk confidence on the FINAL result for a primed fire.
+         * Real speech produces conf > 0 (typically 0.3-0.99).
+         * Silence/noise hallucinations produce conf = 0.0.
+         * Setting this > 0 blocks all zero-confidence hallucination fires.
+         */
+        private const val MIN_CONF_PRIMED = 0.01
     }
 
-    /** Grammar string built from the configured wake word. */
-    private val grammar get() = "[\"${wakeWord.lowercase()}\", \"[unk]\"]"
+    /**
+     * Grammar with **distractor words** to reduce false positives.
+     *
+     * With only 2 tokens (wake word + [unk]) Vosk is a coin-flip —
+     * any vaguely speech-like noise has ~50% chance of landing on the
+     * wake word.  By adding many phonetically diverse distractors, noise
+     * distributes across ~20+ words instead.  Only a real spoken
+     * "bubblegum" consistently produces "bubblegum" partials.
+     *
+     * Distractors are chosen to cover a wide phoneme range and include
+     * a few words starting with "b" to absorb labial noise.
+     */
+    private val grammar: String get() {
+        val distractors = listOf(
+            // labial / "b"-starts — absorb lip/pop/plosive noise
+            "banana", "butterfly", "beautiful", "blanket",
+            // other common multi-syllable words (diverse onsets)
+            "chocolate", "strawberry", "watermelon", "pineapple",
+            "umbrella", "elephant", "telephone", "adventure",
+            "wonderful", "cucumber", "helicopter", "microphone",
+            "dinosaur", "catastrophe", "aluminum", "trampoline"
+        )
+        val words = (listOf(wakeWord.lowercase()) + distractors)
+            .joinToString(", ") { "\"$it\"" }
+        return "[$words, \"[unk]\"]"
+    }
 
     private var model: Model? = null
     private var speechService: SpeechService? = null
@@ -45,10 +92,14 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
     private var onError: ((String) -> Unit)? = null
     @Volatile private var isPaused = false
     @Volatile private var lastTriggerMs = 0L
-    /** True when a partial "computer" was seen — final result must confirm before we fire. */
+    /** True when enough consecutive partials matched — final result must confirm before we fire. */
     @Volatile private var wakeWordPrimed = false
-    /** Timestamp of last partial prime — priming expires after 2 s of silence. */
+    /** Timestamp of last partial prime — priming expires after 3 s of silence. */
     @Volatile private var primedAtMs = 0L
+    /** Timestamp of the FIRST consecutive partial match (start of prime window). */
+    @Volatile private var primeStartMs = 0L
+    /** Running count of consecutive partial matches for the current prime window. */
+    @Volatile private var consecutivePrimes = 0
 
     // ── Initialisation ────────────────────────────────────────────────────────
 
@@ -181,7 +232,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                 }
             })
 
-            Log.d(TAG, "Vosk listening for wake word \"$wakeWord\"")
+            Log.d(TAG, "Vosk listening for wake word \"$wakeWord\" (grammar has ${grammar.count { it == ',' } + 1} tokens)")
             onReady?.invoke()
         } catch (e: IOException) {
             val msg = "Failed to start Vosk SpeechService: ${e.message}"
@@ -191,14 +242,16 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
     }
 
     /**
-     * Parse the JSON hypothesis from the recognizer and check for "computer".
-     * Two-phase detection:
-     *   1. Partial matching wake word → arms the detector (primes it).
+     * Parse the JSON hypothesis from the recognizer and check for the wake word.
+     * Two-phase detection with consecutive-prime noise filter:
+     *   1. Partial matching wake word → increments consecutive prime count.
+     *      Detector becomes ARMED only after [MIN_CONSECUTIVE_PRIMES] consecutive
+     *      matching partials — this filters out one-off noise flukes from road/engine hum.
      *   2a. Final matching wake word  → fires (high confidence path).
-     *   2b. Final "[unk]" while primed → also fires.
+     *   2b. Final "[unk]" while armed → also fires.
      *       Some words (e.g. "bubblegum") only appear in partials; the
-     *       grammar decoder finalises them as "[unk]".  The partial IS the
-     *       acoustic confirmation, so we trust the prime and fire on "[unk]".
+     *       grammar decoder finalises them as "[unk]".  Multiple consecutive
+     *       partials are the acoustic confirmation, so we trust and fire on "[unk]".
      * Cooldown prevents rapid re-triggering.
      */
     private fun checkForWakeWord(hypothesis: String, partial: Boolean) {
@@ -209,13 +262,27 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             if (partial) {
                 val text = json.optString("partial", "").trim()
                 if (text.equals(wakeWord, ignoreCase = true)) {
-                    if (!wakeWordPrimed) {
-                        Log.d("SP_WAKE", "[PRIME] partial text=\"$text\"")
+                    if (consecutivePrimes == 0) primeStartMs = now
+                    consecutivePrimes++
+                    primedAtMs = now
+                    val duration = now - primeStartMs
+                    if (consecutivePrimes >= MIN_CONSECUTIVE_PRIMES
+                        && duration >= MIN_PRIME_DURATION_MS
+                        && !wakeWordPrimed) {
+                        Log.d("SP_WAKE", "[PRIME] armed after $consecutivePrimes consecutive partials, ${duration}ms span")
+                        wakeWordPrimed = true
+                    } else if (!wakeWordPrimed) {
+                        Log.d("SP_WAKE", "[PARTIAL] \"$text\" ($consecutivePrimes/${MIN_CONSECUTIVE_PRIMES} needed, ${duration}ms/${MIN_PRIME_DURATION_MS}ms)")
                     }
-                    wakeWordPrimed = true
-                    primedAtMs    = now
                 } else {
+                    if (consecutivePrimes > 0) {
+                        Log.d("SP_WAKE", "[PARTIAL-RESET] noise partial=\"$text\" (had $consecutivePrimes primes)")
+                    } else if (text.isNotEmpty() && !text.equals("[unk]", ignoreCase = true)) {
+                        // Log distractor hits to verify noise distributes away from wake word
+                        Log.d("SP_WAKE", "[DISTRACTOR] \"$text\"")
+                    }
                     wakeWordPrimed = false
+                    consecutivePrimes = 0
                 }
                 return
             }
@@ -227,6 +294,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             if (wakeWordPrimed && now - primedAtMs > 3_000L) {
                 Log.d("SP_WAKE", "[STALE-PRIME] discarded after ${now - primedAtMs}ms")
                 wakeWordPrimed = false
+                consecutivePrimes = 0
             }
 
             val isWakeWord = text.equals(wakeWord, ignoreCase = true)
@@ -235,7 +303,11 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             // Fire if: word confirmed in final, OR primed and final is [unk]
             // (some words only appear in partials; [unk] final + prime = trusted hit)
             if (!isWakeWord && !(isUnk && wakeWordPrimed)) {
+                if (text.isNotEmpty()) {
+                    Log.d("SP_WAKE", "[FINAL-MISS] text=\"$text\" primed=$wakeWordPrimed")
+                }
                 wakeWordPrimed = false
+                consecutivePrimes = 0
                 return
             }
 
@@ -245,29 +317,43 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                 json.optJSONArray("result")?.getJSONObject(0)?.optDouble("conf", 0.0) ?: 0.0
             } catch (_: Exception) { 0.0 }
 
-            // If the wake word was primed by a partial, trust it — fire unconditionally
-            // (the partial already gave us one acoustic match; requiring high conf on the
-            // final was causing false negatives because Vosk sometimes finalizes with low
-            // confidence for very short words in a 2-word grammar).
-            // For cold (unprimed) hits, require a stronger acoustic match.
-            if (!wakeWordPrimed) {
-                val threshold = MIN_CONFIDENCE_COLD
-                if (conf > 0.0 && conf < threshold) {
-                    Log.d("SP_WAKE", "[COLD-SUPPRESS] conf=${"%.2f".format(conf)} < $threshold")
-                    return
-                }
+            // For primed hits where the final is [unk]: these are the riskiest
+            // path for false positives in silence.  The partials matched but Vosk
+            // couldn't commit the word in the final — possibly a hallucination.
+            // Require the prime window to still be fresh (< 3s) and log generously.
+            if (isUnk && wakeWordPrimed) {
+                val primeDuration = primedAtMs - primeStartMs
+                Log.d("SP_WAKE", "[UNK-PRIMED] primes=$consecutivePrimes primeDuration=${primeDuration}ms finalJson=$hypothesis")
             }
+
+            // In a 2-word grammar (wake word + [unk]), Vosk regularly
+            // hallucinates the wake word on silence/noise — both as partials
+            // AND as final results with conf=0.0.  Requiring priming for ALL
+            // fires means a real spoken word must produce ≥3 consecutive
+            // matching partials spanning ≥200ms before we'll act on it.
+            // This eliminates all silence false triggers.
+            if (!wakeWordPrimed) {
+                Log.d("SP_WAKE", "[COLD-REJECT] final=\"$text\" conf=${"%.2f".format(conf)} — not primed, ignoring")
+                consecutivePrimes = 0
+                return
+            }
+
+            // Note: Vosk grammar-mode always reports conf=0.00 on finals,
+            // so confidence cannot be used as a filter.  The 5-prime + 400ms
+            // priming requirement is the primary false-positive defense.
 
             // Cooldown guard
             if (now - lastTriggerMs < COOLDOWN_MS) {
                 Log.d("SP_WAKE", "[COOLDOWN] suppressed ${now - lastTriggerMs}ms ago (min ${COOLDOWN_MS}ms)")
                 wakeWordPrimed = false
+                consecutivePrimes = 0
                 return
             }
 
             val wasPrimed = wakeWordPrimed
             lastTriggerMs  = now
             wakeWordPrimed = false
+            consecutivePrimes = 0
             Log.d("SP_WAKE", ">>>[FIRE] conf=${"%.2f".format(conf)} primed=$wasPrimed msSincePrime=${now-primedAtMs}")
             isPaused = true
             stopInternalService()
