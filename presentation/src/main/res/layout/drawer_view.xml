@@ -154,6 +154,35 @@
 
         </LinearLayout>
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/divider" />
+
+        <LinearLayout
+            android:id="@+id/locationSharing"
+            style="@style/DrawerRow">
+
+            <ImageView
+                style="@style/DrawerIcon"
+                android:src="@android:drawable/ic_menu_mylocation"
+                android:tint="?android:attr/textColorSecondary" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                style="@style/DrawerText"
+                android:text="@string/drawer_location_sharing" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/divider" />
+
         <LinearLayout
             android:id="@+id/settings"
             style="@style/DrawerRow">

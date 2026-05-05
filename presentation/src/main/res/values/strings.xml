@@ -96,6 +96,40 @@
     <string name="drawer_settings">Settings</string>
     <string name="drawer_assistant">Offline Assistant</string>
     <string name="drawer_notification_reader">Notification Reader</string>
+    <string name="drawer_location_sharing">Location Sharing</string>
+
+    <!-- Family Sharing Hub -->
+    <string name="family_share_my_location">Share my location</string>
+    <string name="family_share_my_location_hint">Master switch. When off, nothing is shared, no background services run.</string>
+    <string name="family_tile_cache_title">Cache map tiles to disk</string>
+    <string name="family_tile_cache_hint">Faster offline maps; uses storage.</string>
+    <string name="family_tile_cache_hint_on">On — tiles you\'ve viewed are kept on disk.</string>
+    <string name="family_tile_cache_hint_off">Off — tiles are fetched from openstreetmap.org each time.</string>
+    <string name="family_clear_tile_cache">Clear cached tiles</string>
+    <string name="family_tile_cache_cleared">Cached tiles cleared</string>
+    <string name="family_center_on_me">Center on my location</string>
+    <string name="family_zoom_in">Zoom in</string>
+    <string name="family_zoom_out">Zoom out</string>
+    <string name="family_you_are_here">You</string>
+    <string name="family_attribution">© OpenStreetMap contributors</string>
+    <string name="family_setup_checklist_title">Finish setup</string>
+    <string name="family_setup_location_perm">Location permission</string>
+    <string name="family_setup_battery">Ignore battery optimisations</string>
+    <string name="family_setup_oem_autostart">Whitelist app autostart</string>
+    <string name="family_setup_oem_autostart_fmt">Whitelist autostart on %1$s</string>
+    <string name="family_setup_status_done">Done</string>
+    <string name="family_setup_status_needed">Tap to grant</string>
+    <string name="family_setup_status_check">Tap to verify</string>
+    <string name="family_setup_open_map">Granted via the map screen</string>
+    <string name="family_settings_title">Location sharing settings</string>
+    <string name="family_settings_section_sharing">Sharing</string>
+    <string name="family_settings_section_map">Map</string>
+    <string name="family_settings_section_setup">Background reliability</string>
+    <string name="family_menu_location_settings">Settings</string>
+    <string name="family_peers_title">People sharing with you</string>
+    <string name="family_peers_empty">No one yet. Tap here to open settings — invite family in a future update.</string>
+    <string name="settings_location_sharing">Location sharing</string>
+    <string name="settings_location_sharing_summary">Map, sharing, battery</string>
     <string name="drawer_plus" translatable="false">SilentPulse+</string>
     <string name="drawer_help">Help &amp; feedback</string>
     <string name="drawer_invite">Invite friends</string>

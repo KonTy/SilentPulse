@@ -52,8 +52,9 @@ class VoskSttEngine(
                 Timber.d("VoskSTT: loading model from $modelPath")
                 model = Model(modelPath)
                 Timber.d("VoskSTT: model loaded")
-            } catch (e: Exception) {
-                Timber.e(e, "VoskSTT: failed to load model")
+            } catch (t: Throwable) {
+                // UnsatisfiedLinkError (JNA incompatibility) extends Error, not Exception
+                Timber.e(t, "VoskSTT: failed to load model")
                 onError("vosk_model_load_failed")
                 return
             }

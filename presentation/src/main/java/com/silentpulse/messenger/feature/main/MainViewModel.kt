@@ -270,6 +270,7 @@ class MainViewModel @Inject constructor(
                         NavItem.SETTINGS -> navigator.showSettings()
                         NavItem.ASSISTANT -> navigator.showAssistant()
                         NavItem.NOTIFICATION_READER -> navigator.showNotificationReader()
+                        NavItem.LOCATION_SHARING -> navigator.showLocationSharing()
                         NavItem.INVITE -> navigator.showInvite()
                         else -> Unit
                     }

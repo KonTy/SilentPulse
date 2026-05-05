@@ -35,6 +35,8 @@ import com.silentpulse.messenger.feature.backup.BackupActivity
 import com.silentpulse.messenger.feature.blocking.BlockingActivity
 import com.silentpulse.messenger.feature.compose.ComposeActivity
 import com.silentpulse.messenger.feature.conversationinfo.ConversationInfoActivity
+import com.silentpulse.messenger.feature.familyhub.location.LocationSharingActivity
+import com.silentpulse.messenger.feature.familyhub.location.LocationSharingSettingsActivity
 import com.silentpulse.messenger.feature.gallery.GalleryActivity
 import com.silentpulse.messenger.feature.notificationprefs.NotificationPrefsActivity
 import com.silentpulse.messenger.feature.plus.PlusActivity
@@ -150,6 +152,16 @@ class Navigator @Inject constructor(
 
     fun showNotificationReader() {
         val intent = Intent(context, NotificationReaderActivity::class.java)
+        startActivity(intent)
+    }
+
+    fun showLocationSharing() {
+        val intent = Intent(context, LocationSharingActivity::class.java)
+        startActivity(intent)
+    }
+
+    fun showLocationSharingSettings() {
+        val intent = Intent(context, LocationSharingSettingsActivity::class.java)
         startActivity(intent)
     }
 

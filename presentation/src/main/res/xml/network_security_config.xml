@@ -115,10 +115,45 @@
     <!-- WHITELIST: Bing Search + Bing Chat (WebAiSearchScraper + BingChatVerificationActivity) -->
     <!-- includeSubdomains covers r.bing.com, th.bing.com, etc. needed for page render -->
     <!-- microsoft.com covers static asset CDNs used by the Copilot/Bing interface -->
+    <!-- azure.com covers webpubsub real-time messaging used by Bing Chat -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">bing.com</domain>
         <domain includeSubdomains="true">microsoft.com</domain>
         <domain includeSubdomains="true">msn.com</domain>
+        <domain includeSubdomains="true">azure.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: OpenStreetMap tile servers (osmdroid map widget for Family Sharing).
+         Tiles are fetched on-demand and cached on-disk by osmdroid in the app's
+         private cache directory. The "Cache map tiles to disk" toggle in the
+         Location Sharing screen controls whether the disk cache is used.
+         No tracking, no API key, anonymous fetch. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">tile.openstreetmap.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- WHITELIST: Outlook Web App (OutlookWebScraper + OutlookVerificationActivity) -->
+    <!-- office.com covers outlook.office.com and CDN assets -->
+    <!-- office365.com covers API endpoints -->
+    <!-- live.com covers outlook.live.com (personal accounts) -->
+    <!-- microsoftonline.com covers login.microsoftonline.com (Azure AD SSO/MFA) -->
+    <!-- msauth.net covers MFA authentication flows -->
+    <!-- msftauth.net covers additional MFA/auth redirects -->
+    <!-- static.microsoft is the .microsoft brand TLD used by OWA CDN (res.public.onecdn.static.microsoft) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">office.com</domain>
+        <domain includeSubdomains="true">office365.com</domain>
+        <domain includeSubdomains="true">live.com</domain>
+        <domain includeSubdomains="true">microsoftonline.com</domain>
+        <domain includeSubdomains="true">msauth.net</domain>
+        <domain includeSubdomains="true">msftauth.net</domain>
+        <domain includeSubdomains="true">static.microsoft</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

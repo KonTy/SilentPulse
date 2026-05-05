@@ -41,7 +41,7 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
         private const val ACTION_TOGGLE_NOTIF_READER =
             "com.silentpulse.messenger.TOGGLE_NOTIF_READER"
         private const val ACTION_NEXT_NOTIF =
-            "com.silentpulse.messenger.NEXT_NOTIFICATION"
+            "com.silentpulse.messenger.WIDGET_NEXT_NOTIF"
         private const val ACTION_TOGGLE_VOICE_AST =
             "com.silentpulse.messenger.TOGGLE_VOICE_AST"
         private const val ACTION_STOP_SPEAKING =

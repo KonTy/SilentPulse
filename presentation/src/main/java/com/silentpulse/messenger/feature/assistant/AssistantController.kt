@@ -101,6 +101,10 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
                         assistantEnableSwitch.isChecked = false
                         return@subscribe
                     }
+                    if (!checkVoiceAssistantPrerequisites()) {
+                        assistantEnableSwitch.isChecked = false
+                        return@subscribe
+                    }
                     prefs.driveModeWakeWordEnabled.set(true)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         context.startForegroundService(Intent(context, VoiceAssistantService::class.java))
@@ -486,6 +490,54 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
             .setNegativeButton("Cancel", null)
             .show()
     }
+    // ── Voice assistant prerequisites check ────────────────────────────────
+
+    /**
+     * Checks that all apps required for the voice assistant are installed.
+     * Shows a dialog with an "Install" button (opens the user's default store)
+     * if anything is missing. Returns true only when all prerequisites are met.
+     */
+    private fun checkVoiceAssistantPrerequisites(): Boolean {
+        data class Dep(val label: String, val packageId: String)
+        val required = listOf(
+            Dep("Google Text-to-Speech", "com.google.android.tts")
+        )
+        val missing = required.filter { dep ->
+            try {
+                context.packageManager.getPackageInfo(dep.packageId, 0)
+                false
+            } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                true
+            }
+        }
+        if (missing.isEmpty()) return true
+
+        val ctx = activity ?: return true // no window to show dialog — allow anyway
+        val bulletList = missing.joinToString(separator = "\n") { "  \u2022 ${it.label}" }
+        val message = "The voice assistant needs the following app(s) to work:\n\n" +
+                bulletList +
+                "\n\nTap \"Install\" to open the app store, then come back and enable the assistant."
+
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("Missing requirement")
+            .setMessage(message)
+            .setPositiveButton("Install") { _, _ -> openInStore(missing.first().packageId) }
+            .setNegativeButton("Cancel", null)
+            .show()
+        return false
+    }
+
+    /** Opens [packageId] in the device's default app store (Aurora, Play, etc.). */
+    private fun openInStore(packageId: String) {
+        val marketUri = Uri.parse("market://details?id=$packageId")
+        val webUri    = Uri.parse("https://play.google.com/store/apps/details?id=$packageId")
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, marketUri))
+        } catch (_: android.content.ActivityNotFoundException) {
+            context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
+        }
+    }
+
     companion object {
         private const val RC_VOSK_ZIP   = 1003
         private const val RC_KOKORO_ZIP = 1004

@@ -30,7 +30,9 @@ class CommandRouter(private val context: Context) {
         val packageName: String,
         val label: String,
         /** Lowercase label for matching */
-        val labelLower: String
+        val labelLower: String,
+        /** Command prefixes that auto-route to this app (e.g. "journal", "todo") */
+        val commandPrefixes: List<String> = emptyList()
     )
 
     /** Cached list of assistant-capable apps. Refreshed on demand. */
@@ -49,7 +51,10 @@ class CommandRouter(private val context: Context) {
      */
     fun refreshApps() {
         val intent = Intent(ACTION_ASSISTANT_CAPABLE)
-        val resolved = context.packageManager.queryBroadcastReceivers(intent, PackageManager.GET_META_DATA)
+        val resolved = context.packageManager.queryBroadcastReceivers(
+            intent,
+            PackageManager.GET_META_DATA or PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
+        )
 
         val ownPackage = context.packageName
         discoveredApps = resolved.mapNotNull { info ->
@@ -57,10 +62,17 @@ class CommandRouter(private val context: Context) {
             // Skip our own package — debug mock receivers must not shadow real external apps
             if (pkg == ownPackage) return@mapNotNull null
             val label = info.activityInfo?.loadLabel(context.packageManager)?.toString() ?: pkg
+            val prefixes = info.activityInfo?.metaData
+                ?.getString("com.silentpulse.command_prefixes")
+                ?.split(",")
+                ?.map { it.trim().lowercase(Locale.getDefault()) }
+                ?.filter { it.isNotEmpty() }
+                ?: emptyList()
             DiscoveredApp(
                 packageName = pkg,
                 label = label,
-                labelLower = label.lowercase(Locale.getDefault())
+                labelLower = label.lowercase(Locale.getDefault()),
+                commandPrefixes = prefixes
             )
         }.distinctBy { it.packageName }
 
@@ -98,18 +110,26 @@ class CommandRouter(private val context: Context) {
 
         val lower = command.lowercase(Locale.getDefault())
 
-        // Find which app is mentioned (fuzzy match on label)
+        // Find which app is mentioned (fuzzy match on label or prefix match)
         val matchedApp = findApp(lower) ?: return null
 
-        // Strip the app name from the command
-        val withoutApp = removeAppName(lower, matchedApp.labelLower)
+        // Check if matched via command prefix — if so, send the full command as-is
+        val matchedViaPrefix = matchedApp.commandPrefixes.any { prefix ->
+            lower.startsWith("$prefix ") || lower == prefix
+        }
 
-        // Strip routing boilerplate ("tell", "ask", "to", "in", etc.)
-        val rawCommand = stripBoilerplate(withoutApp).trim()
+        val rawCommand = if (matchedViaPrefix) {
+            // Prefix match: send entire transcript (Grafium needs "journal X" to parse)
+            lower.trim()
+        } else {
+            // Label match: strip the app name and boilerplate
+            val withoutApp = removeAppName(lower, matchedApp.labelLower)
+            stripBoilerplate(withoutApp).trim()
+        }
 
         if (rawCommand.isBlank()) return null
 
-        Timber.d("CommandRouter: route(\"$command\") → app=${matchedApp.label}, raw=\"$rawCommand\"")
+        Timber.d("CommandRouter: route(\"$command\") → app=${matchedApp.label}, raw=\"$rawCommand\" prefix=$matchedViaPrefix")
         return RouteResult(
             targetPackage = matchedApp.packageName,
             appLabel = matchedApp.label,
@@ -125,6 +145,7 @@ class CommandRouter(private val context: Context) {
             setPackage(routeResult.targetPackage)
             putExtra(EXTRA_TRANSCRIPT, routeResult.rawCommand)
             putExtra(EXTRA_SESSION_ID, sessionId)
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
         context.sendBroadcast(intent)
         Timber.d("CommandRouter: dispatched to ${routeResult.targetPackage}: \"${routeResult.rawCommand}\" session=$sessionId")
@@ -153,7 +174,15 @@ class CommandRouter(private val context: Context) {
     }
 
     private fun findApp(lowerCommand: String): DiscoveredApp? {
-        // Exact substring match first
+        // Check command prefix matches first (e.g. "journal" → Grafium)
+        for (app in discoveredApps) {
+            for (prefix in app.commandPrefixes) {
+                if (lowerCommand.startsWith("$prefix ") || lowerCommand == prefix) {
+                    return app
+                }
+            }
+        }
+        // Exact substring match on app label
         for (app in discoveredApps) {
             if (lowerCommand.contains(app.labelLower)) return app
         }

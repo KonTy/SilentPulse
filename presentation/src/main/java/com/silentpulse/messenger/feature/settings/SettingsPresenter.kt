@@ -145,6 +145,8 @@ class SettingsPresenter @Inject constructor(
 
                         R.id.notifications -> navigator.showNotificationSettings()
 
+                        R.id.locationSharingPref -> navigator.showLocationSharingSettings()
+
                         R.id.swipeActions -> view.showSwipeActions()
 
                         R.id.delayed -> view.showDelayDurationDialog()

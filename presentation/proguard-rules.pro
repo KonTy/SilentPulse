@@ -1,5 +1,15 @@
 -dontobfuscate
 
+# ── Vosk / JNA ────────────────────────────────────────────────────────────────
+# R8 strips JNA reflection targets and native dispatch methods; Vosk crashes at
+# runtime with UnsatisfiedLinkError if these are removed.
+-keep class com.sun.jna.** { *; }
+-keep interface com.sun.jna.** { *; }
+-keepclassmembers class * implements com.sun.jna.Library { *; }
+-keep class org.vosk.** { *; }
+-dontwarn com.sun.jna.**
+-dontwarn org.vosk.**
+
 # android-smsmms
 # -keep class android.net.** { *; }
 -dontwarn android.net.ConnectivityManager

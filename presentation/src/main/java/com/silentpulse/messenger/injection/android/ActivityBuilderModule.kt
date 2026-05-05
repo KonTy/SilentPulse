@@ -27,6 +27,8 @@ import com.silentpulse.messenger.feature.compose.ComposeActivityModule
 import com.silentpulse.messenger.feature.contacts.ContactsActivity
 import com.silentpulse.messenger.feature.contacts.ContactsActivityModule
 import com.silentpulse.messenger.feature.conversationinfo.ConversationInfoActivity
+import com.silentpulse.messenger.feature.familyhub.location.LocationSharingActivity
+import com.silentpulse.messenger.feature.familyhub.location.LocationSharingSettingsActivity
 import com.silentpulse.messenger.feature.gallery.GalleryActivity
 import com.silentpulse.messenger.feature.gallery.GalleryActivityModule
 import com.silentpulse.messenger.feature.main.MainActivity
@@ -102,5 +104,13 @@ abstract class ActivityBuilderModule {
     @ActivityScope
     @ContributesAndroidInjector(modules = [])
     abstract fun bindBlockingActivity(): BlockingActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindLocationSharingActivity(): LocationSharingActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindLocationSharingSettingsActivity(): LocationSharingSettingsActivity
 
 }

@@ -54,7 +54,12 @@ android {
     buildTypes {
         debug {
             debuggable true
-            minifyEnabled false
+            // Enable minification in debug so ProGuard/R8 issues (e.g. missing -keep
+            // rules for JNA, Vosk, native libs) are caught during development rather
+            // than only discovered in release builds.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Debug-only flags accessible via BuildConfig
             buildConfigField 'boolean', 'ENABLE_PERF_LOGGING', 'true'
             buildConfigField 'boolean', 'ENABLE_DRIVE_MODE_VERBOSE', 'true'
@@ -139,6 +144,12 @@ dependencies {
     // whisper.cpp STT is built via JNI (see presentation/src/main/cpp/whisper/)
     // No third-party STT runtime dependency needed — we own the full stack.
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
+    // Family Sharing Hub — Slice 1: location sharing
+    // osmdroid: OSM map widget for Android (Apache-2). Embedded map view.
+    // Tiles are fetched from tile.openstreetmap.org and disk-cached on-device.
+    // No Google Maps, no Play Services. See network_security_config.xml.
+    implementation 'org.osmdroid:osmdroid-android:6.1.20'
 
     // androidx
     implementation "androidx.appcompat:appcompat:$androidx_appcompat_version"

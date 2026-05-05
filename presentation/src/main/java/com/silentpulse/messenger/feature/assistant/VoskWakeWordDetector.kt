@@ -36,19 +36,16 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
         /**
          * Minimum number of **consecutive** partial matches required before the
          * detector is truly armed.  A real spoken word produces multiple
-         * consistent partials over its duration (~5-8 for a 600-800 ms word);
-         * random keyboard clicks / ambient noise may fluke 2-3 consecutive.
-         * Requiring ≥5 demands sustained, consistent recognition.
+         * consistent partials over its duration; 3 is enough to confirm a real
+         * utterance while still filtering single-frame noise bursts.
          */
-        private const val MIN_CONSECUTIVE_PRIMES = 5
+        private const val MIN_CONSECUTIVE_PRIMES = 3
         /**
          * Minimum time span (ms) between the FIRST partial match and the arming
-         * partial.  A real spoken "bubblegum" (~600ms) produces its first
-         * partial at ~150ms and keeps matching until ~600ms.  Silence/noise
-         * hallucinations tend to be short bursts.
-         * Requiring the prime window to span ≥ 400ms filters those out.
+         * partial.  200ms is enough for a real spoken syllable while filtering
+         * sub-frame noise hallucinations.
          */
-        private const val MIN_PRIME_DURATION_MS = 400L
+        private const val MIN_PRIME_DURATION_MS = 200L
         /**
          * Minimum Vosk confidence on the FINAL result for a primed fire.
          * Real speech produces conf > 0 (typically 0.3-0.99).
@@ -112,9 +109,18 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
         Log.d(TAG, "Unpacking Vosk model from assets…")
         StorageService.unpack(context, "model-en-us", "model",
             { model ->
-                Log.d(TAG, "Vosk model loaded successfully")
-                this.model = model
-                onModelReady()
+                try {
+                    // Touch the model to force JNA/LibVosk class-loading now,
+                    // inside this try block, so an UnsatisfiedLinkError is caught
+                    // here rather than crashing the whole process later.
+                    Log.d(TAG, "Vosk model loaded successfully")
+                    this.model = model
+                    onModelReady()
+                } catch (t: Throwable) {
+                    val msg = "Vosk JNA incompatible with this device: ${t.message}"
+                    Log.e(TAG, msg, t)
+                    onModelError(msg)
+                }
             },
             { exception ->
                 val msg = "Failed to load Vosk model: ${exception.message}"

@@ -817,20 +817,27 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Public: immediately stop all TTS and STT, reset state to IDLE.
-     * Called from [DriveModeWidgetProvider] STOP button and OFF button.
+     * Public hard-reset: immediately tear down all in-flight TTS, STT, pending
+     * handler callbacks, and state machine — as if the notification reader had
+     * just been freshly started.  Called from the widget OFF button and the QS tile.
      */
     fun stopReading() {
-        Timber.d("Drive Mode: stopReading() called (widget or external)")
-        // interrupt() stops TTS (clears pending onDone callbacks), then posts
-        // the resume lambda to the main thread — single canonical stop+resume.
-        voiceInteractor.interrupt {
-            stopListeningNow()
-            pendingNotification = null
-            confirmWorkflow = null
-            listenState = ListenState.IDLE
-            totalVoiceAttempts = 0
-        }
+        Timber.d("Drive Mode: stopReading() — hard reset")
+        // Cancel all pending postDelayed work (STT retries, start-command delays, etc.)
+        mainHandler.removeCallbacksAndMessages(null)
+        // Tear down the cached STT engine so the next session loads fresh.
+        cachedSttEngine?.stopListening()
+        cachedSttEngine?.shutdown()
+        cachedSttEngine = null
+        // Reset all state machine variables.
+        pendingNotification = null
+        confirmWorkflow?.reset()
+        confirmWorkflow = null
+        listenState = ListenState.IDLE
+        totalVoiceAttempts = 0
+        recentlySpoken.clear()
+        // interrupt() stops TTS and fires the resume lambda on the main thread.
+        voiceInteractor.interrupt()
     }
 
     // ── Preference helpers ────────────────────────────────────────────────

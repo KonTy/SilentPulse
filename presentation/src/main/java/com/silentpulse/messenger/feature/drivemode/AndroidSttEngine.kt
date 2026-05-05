@@ -2,6 +2,7 @@ package com.silentpulse.messenger.feature.drivemode
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -42,6 +43,13 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
     /** Tracks last start time to throttle rapid restarts. */
     private var lastStartTime = 0L
 
+    /**
+     * Set to true immediately before calling recognizer.cancel() for a
+     * planned restart. Suppresses the resulting ERROR_CLIENT so it does not
+     * destroy the recognizer or propagate to the caller.
+     */
+    private var expectingCancel = false
+
     /** Accumulated transcript across continuation windows. */
     private var pendingTranscript: String? = null
     /** Runnable that fires after silence to submit the accumulated result. */
@@ -54,11 +62,11 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
         /** Minimum gap between consecutive startListening calls. */
         const val MIN_RESTART_GAP_MS = 600L
         /**
-         * How long to wait after the last recognised phrase before submitting.
-         * This is the "thinking pause" — the user has this many ms to continue
-         * speaking without the assistant cutting them off.
+         * How long to wait after the last recognised speech before submitting.
+         * Gives the user time to pause mid-thought and continue speaking.
+         * 2 seconds = comfortable thinking pause.
          */
-        const val CONTINUATION_WINDOW_MS = 2_500L
+        const val CONTINUATION_WINDOW_MS = 2_000L
     }
 
     /** Lazily build the recognizer intent (constant across calls). */
@@ -122,12 +130,12 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
 
     override fun stopListening() {
         Timber.d("AndroidSTT: stopListening()")
-        // Null callbacks immediately (on caller's thread) so any in-flight
-        // continuation-window results/errors are silently dropped.
         savedOnResult = null
         savedOnError  = null
         mainHandler.post {
+            expectingCancel = false
             cancelPendingSubmit()
+            pendingTranscript = null
             try { recognizer?.cancel() } catch (_: Exception) {}
             listening = false
         }
@@ -153,6 +161,11 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
 
     private fun doStart(onResult: (String) -> Unit, onError: (String) -> Unit) {
         lastStartTime = System.currentTimeMillis()
+
+        // Mute STREAM_MUSIC for 600ms to suppress the SpeechRecognizer start beep.
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        mainHandler.postDelayed({ am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0) }, 600)
 
         // Cancel any in-flight recognition (safe even if idle).
         try { recognizer?.cancel() } catch (_: Exception) {}
@@ -204,6 +217,31 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
                     recognizer = null
                 }
 
+                // If we already have buffered speech, any error just means the
+                // mic closed — let the 2s submit timer fire naturally.
+                if (pendingTranscript != null) {
+                    Timber.d("AndroidSTT: error $code with pending transcript — 2s timer will submit")
+                    return
+                }
+
+                // ERROR_CLIENT from our own cancel() before a planned restart
+                // — safe to ignore entirely.
+                if (error == SpeechRecognizer.ERROR_CLIENT && expectingCancel) {
+                    expectingCancel = false
+                    Timber.d("AndroidSTT: expected ERROR_CLIENT from cancel — ignored")
+                    return
+                }
+                expectingCancel = false
+
+                // If the recognizer died, null it so the next cycle creates a fresh one.
+                if (error == SpeechRecognizer.ERROR_CLIENT ||
+                    error == SpeechRecognizer.ERROR_AUDIO ||
+                    code.startsWith("unknown_error")) {
+                    Timber.w("AndroidSTT: destroying recognizer after fatal error $error")
+                    try { recognizer?.destroy() } catch (_: Exception) {}
+                    recognizer = null
+                }
+
                 // Use savedOnError — if stopListening() already nulled it this
                 // is a cancel-induced callback and should be silently dropped.
                 savedOnError?.invoke(code) ?: Timber.d("AndroidSTT: error $code suppressed (session stopped)")
@@ -221,16 +259,29 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
                 }
 
                 if (best.isNotBlank()) {
-                    // Deliver result immediately — no continuation restart.
-                    // The restart caused a second microphone beep on every command.
-                    val cb = savedOnResult
-                    savedOnResult = null
-                    savedOnError  = null
-                    pendingTranscript = null
-                    cb?.invoke(best)
+                    // Buffer the result and restart the mic so the user can
+                    // keep talking. The 2s silence timer submits when no more
+                    // speech arrives.
+                    val accumulated = listOfNotNull(pendingTranscript, best).joinToString(" ")
+                    pendingTranscript = accumulated
+                    Timber.d("AndroidSTT: buffered=\"$accumulated\" — restarting mic for continuation")
+                    scheduleSubmit()
+                    mainHandler.postDelayed({
+                        val onRes = savedOnResult
+                        val onErr = savedOnError
+                        if (onRes != null && pendingTranscript != null) {
+                            expectingCancel = true
+                            doStart(onRes, onErr ?: {})
+                        }
+                    }, 150)
                 } else {
-                    // No speech recognised
-                    savedOnError?.invoke("no_match") ?: Timber.d("AndroidSTT: no_match suppressed (session stopped)")
+                    // Blank result — if we already have buffered speech, the 2s
+                    // timer handles submission. Otherwise treat as no_match.
+                    if (pendingTranscript != null) {
+                        Timber.d("AndroidSTT: blank result with pending — 2s timer will submit")
+                    } else {
+                        savedOnError?.invoke("no_match") ?: Timber.d("AndroidSTT: no_match suppressed (session stopped)")
+                    }
                 }
             }
             override fun onPartialResults(partialResults: Bundle?) {
@@ -239,6 +290,8 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
                     ?.firstOrNull()
                 if (!partial.isNullOrBlank()) {
                     Timber.d("AndroidSTT: partial=\"$partial\"")
+                    // Reset the continuation timer on every partial — user is still speaking.
+                    if (pendingTranscript != null) scheduleSubmit()
                 }
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -246,5 +299,23 @@ class AndroidSttEngine(private val context: Context) : SttEngine {
 
         Timber.d("AndroidSTT: starting listening")
         sr.startListening(recognizerIntent)
+    }
+
+    private fun scheduleSubmit() {
+        cancelPendingSubmit()
+        val r = Runnable { submitNow() }
+        submitRunnable = r
+        mainHandler.postDelayed(r, CONTINUATION_WINDOW_MS)
+    }
+
+    private fun submitNow() {
+        cancelPendingSubmit()
+        val transcript = pendingTranscript ?: return
+        pendingTranscript = null
+        val cb = savedOnResult
+        savedOnResult = null
+        savedOnError  = null
+        Timber.d("AndroidSTT: submitting=\"$transcript\"")
+        cb?.invoke(transcript)
     }
 }

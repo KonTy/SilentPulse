@@ -67,6 +67,11 @@
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Family Sharing Hub: ask the user to exempt SilentPulse from battery
+         optimization so the location publisher / sync workers don't get killed.
+         User must accept; we never silently bypass. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Required on API 30+ for package visibility -->
     <queries>
         <!-- Discover any app that declares itself assistant-capable (cross-app voice routing) -->
@@ -180,6 +185,19 @@
         <activity android:name=".feature.scheduled.ScheduledActivity" />
         <activity android:name=".feature.backup.BackupActivity" />
         <activity android:name=".feature.contacts.ContactsActivity" />
+
+        <!-- Family Sharing Hub: location sharing screen (Slice 1) -->
+        <activity
+            android:name=".feature.familyhub.location.LocationSharingActivity"
+            android:exported="false"
+            android:label="@string/drawer_location_sharing"
+            android:parentActivityName=".feature.main.MainActivity" />
+
+        <activity
+            android:name=".feature.familyhub.location.LocationSharingSettingsActivity"
+            android:exported="false"
+            android:label="@string/family_settings_title"
+            android:parentActivityName=".feature.familyhub.location.LocationSharingActivity" />
 
         <receiver
             android:name=".receiver.BootReceiver"
@@ -330,7 +348,14 @@
         <activity
             android:name=".feature.assistant.BingChatVerificationActivity"
             android:label="Bing Chat Verification"
-            android:exported="false" />
+            android:exported="true" />
+
+        <!-- OutlookVerificationActivity: one-time MFA login for Outlook Web App.
+             User completes MFA, cookies persist for headless inbox scraping. -->
+        <activity
+            android:name=".feature.assistant.OutlookVerificationActivity"
+            android:label="Outlook Login"
+            android:exported="true" />
 
         <!-- ApiKeyReceiver: accepts Brave Search API key via adb broadcast (debug only).
              android:exported="false" — not reachable by other apps. -->

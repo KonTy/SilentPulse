@@ -49,6 +49,7 @@ class VoiceAssistantService : Service() {
     private var sttEngine: SttEngine? = null
     private lateinit var voiceInteractor: VoiceInteractor
     @Volatile private var isListening = false
+    @Volatile private var destroyed = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private lateinit var commandRouter: CommandRouter
@@ -63,6 +64,7 @@ class VoiceAssistantService : Service() {
     private lateinit var notifReaderHandler: NotificationReaderHandler
     private lateinit var smsCommandHandler: SmsCommandHandler
     private lateinit var timeHandler: TimeHandler
+    private lateinit var outlookHandler: OutlookCommandHandler
 
     // ── Notification reading state ─────────────────────────────────────────
     private var notifReaderActive           = false
@@ -73,6 +75,13 @@ class VoiceAssistantService : Service() {
     // ── SMS reading state ──────────────────────────────────────────────────
     private var smsReadingList: List<SmsCommandHandler.SmsMessage> = emptyList()
     private var smsReadingIndex = 0
+
+    // ── Outlook reading state ──────────────────────────────────────────────
+    private var outlookReadingActive       = false
+    private var outlookReadingList: List<OutlookWebScraper.EmailPreview> = emptyList()
+    private var outlookReadingIndex        = 0
+    private var outlookAwaitingReply       = false
+    private var outlookAwaitingForward     = false
 
     // ── Compose / confirm-send workflow (reused for SMS + notif replies) ────────
     /** Non-null while we are in the dictate→confirm loop. Takes priority over all routing. */
@@ -178,7 +187,7 @@ class VoiceAssistantService : Service() {
         // Mark as running immediately so the widget reflects reality
         WidgetPrefs.setVoiceAst(this, true)
         DriveModeWidgetProvider.refreshAll(this)
-        voiceInteractor = VoiceInteractor(applicationContext) { maybeStartListening() }
+        voiceInteractor = VoiceInteractor(this) { maybeStartListening() }
         commandRouter = CommandRouter(applicationContext)
         commandRouter.refreshApps()
         weatherHandler = WeatherCommandHandler(applicationContext)
@@ -192,6 +201,7 @@ class VoiceAssistantService : Service() {
         notifReaderHandler = NotificationReaderHandler(applicationContext)
         smsCommandHandler  = SmsCommandHandler(applicationContext)
         timeHandler        = TimeHandler()
+        outlookHandler     = OutlookCommandHandler(applicationContext)
         val filter = IntentFilter().apply {
             addAction(CommandRouter.ACTION_TTS_REPLY)
             addAction(CommandRouter.ACTION_REPORT_SCHEMA)
@@ -292,7 +302,9 @@ class VoiceAssistantService : Service() {
             Log.d(TAG, "Refreshing assistant notification")
         }
         refreshAssistantNotification()
-        return START_NOT_STICKY
+        // START_STICKY: if the service is killed (crash, OOM), Android will
+        // restart it automatically — preserving always-on wake word detection.
+        return START_STICKY
     }
     /**
      * Start listening only when both TTS *and* Vosk model are ready.
@@ -301,32 +313,52 @@ class VoiceAssistantService : Service() {
      */
     private fun maybeStartListening() {
         Log.d(TAG, "maybeStartListening() ttsReady=${voiceInteractor.isReady} voskModelReady=$voskModelReady")
-        if (voiceInteractor.isReady && voskModelReady) {
-            val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
+        if (!voskModelReady) return
+        val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
+        if (voiceInteractor.isReady) {
             speak("Voice assistant ready. Say $word to activate.") { startWakeWordDetection() }
+        } else {
+            // TTS unavailable (e.g. Samsung OEM engine allowlist rejected this package).
+            // Start wake word detection silently — the notification already informs the user.
+            Log.w(TAG, "TTS not ready — starting wake word detection without voice greeting")
+            startWakeWordDetection()
         }
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
+        destroyed = true
+        // Cancel all pending postDelayed callbacks (error retries, etc.) before
+        // any async engine teardown so they cannot re-enter after destroy.
+        mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
         // Mark as stopped so widget reflects reality even if killed by system
         WidgetPrefs.setVoiceAst(this, false)
         WidgetPrefs.broadcastStateChanged(this)
         DriveModeWidgetProvider.refreshAll(this)
         isListening = false
+        // Hard-reset all in-flight state
+        confirmWorkflow?.reset()
+        confirmWorkflow = null
+        notifReaderActive = false
+        notifReaderAwaitingReply = false
+        notifReaderList = emptyList()
+        smsReadingList = emptyList()
+        outlookReadingActive = false
+        // Tear down all engines — WebViews, STT, wake-word, TTS
         wakeWordDetector?.destroy()
         wakeWordDetector = null
         sttEngine?.stopListening()
         sttEngine?.shutdown()
+        sttEngine = null
         voiceInteractor.destroy()
         sessionManager.close()
+        webAiSearchScraper.destroy()
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(nextNotifReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(stopSpeakingReceiver) } catch (_: Exception) {}
-        webAiSearchScraper.destroy()
     }
     // ── Vosk model init ───────────────────────────────────────────────────────
     private fun initVoskModel() {
@@ -334,11 +366,13 @@ class VoiceAssistantService : Service() {
             com.silentpulse.messenger.feature.drivemode.WidgetPrefs.getWakeWord(this))
         wakeWordDetector!!.init(
             onModelReady = {
+                if (destroyed) return@init
                 Log.d(TAG, "Vosk model ready")
                 voskModelReady = true
                 maybeStartListening()
             },
             onModelError = { error ->
+                if (destroyed) return@init
                 Log.e(TAG, "Vosk model failed: $error")
                 speak("Wake word model failed to load. $error") {}
             }
@@ -346,18 +380,20 @@ class VoiceAssistantService : Service() {
     }
     // ── Phase 1: Vosk keyword spotter (silent, no beeps, low CPU) ───────────
     private fun startWakeWordDetection() {
+        if (destroyed) return
         Log.d(TAG, "Starting Vosk wake word detection")
         wakeWordDetector?.start(
             onWakeWordDetected = {
+                if (destroyed) return@start
                 Log.d(TAG, "WAKE WORD \"${getWakeWord(this@VoiceAssistantService)}\" detected — switching to STT")
-                // Vosk already paused itself and released the mic.
-                // Start SpeechRecognizer — its beep = "I'm ready" signal.
-                startSttOneShot()
+                // Give an immediate audio cue so user knows to speak their command.
+                speak("Yes?") { startSttOneShot() }
             },
             onListening = {
                 Log.d(TAG, "Vosk listening for \"${getWakeWord(this@VoiceAssistantService)}\"")
             },
             onErr = { error ->
+                if (destroyed) return@start
                 Log.e(TAG, "Vosk error: $error")
                 speak("Wake word error: $error") {
                     // Try to restart after a delay
@@ -367,6 +403,7 @@ class VoiceAssistantService : Service() {
         )
     }
     private fun resumeWakeWord() {
+        if (destroyed) return
         Log.d(TAG, "Resuming Vosk wake word detection")
         isListening = false
         sttRetryCount = 0
@@ -382,7 +419,7 @@ class VoiceAssistantService : Service() {
         sttEngine = AndroidSttEngine(this)
     }
     private fun startSttOneShot(commandPrefix: String? = null) {
-        if (isListening) return
+        if (destroyed || isListening) return
         val engine = sttEngine ?: run {
             Log.w(TAG, "startSttOneShot() ABORTED — no STT engine")
             speak("Speech recognition unavailable.") { resumeWakeWord() }
@@ -468,6 +505,13 @@ class VoiceAssistantService : Service() {
         // ── 0b. SMS reading mode intercept ─────────────────────────────────────
         if (smsReadingList.isNotEmpty() && smsReadingIndex > 0) {
             handleSmsReadingCommand(c)
+            return
+        }
+        // ── 0c. Outlook reading mode intercept ─────────────────────────────────
+        if (outlookReadingActive) {
+            if (outlookAwaitingReply) handleOutlookReplyText(command)
+            else if (outlookAwaitingForward) handleOutlookForwardRecipient(command)
+            else handleOutlookReadingCommand(c)
             return
         }
         // ── 0. Notification reading mode intercept ────────────────
@@ -588,6 +632,21 @@ class VoiceAssistantService : Service() {
             startEmailReading()
             return
         }
+        // ── 4f½. Outlook login ─────────────────────────────────────────────
+        if (outlookHandler.isOutlookLoginCommand(c)) {
+            speak("Opening Outlook login.") {
+                val intent = android.content.Intent(this, OutlookVerificationActivity::class.java)
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                resumeWakeWord()
+            }
+            return
+        }
+        // ── 4f¾. Read Outlook inbox ────────────────────────────────────────
+        if (outlookHandler.isOutlookCommand(c)) {
+            startOutlookReading()
+            return
+        }
         // ── 4g. Read unread SMS ──────────────────────────────────────────────
         if (smsCommandHandler.isReadSmsCommand(c)) {
             startSmsReading()
@@ -689,7 +748,13 @@ class VoiceAssistantService : Service() {
         }
         // ── 6. Try cross-app routing via CommandRouter ───────────────────────
         val routeResult = commandRouter.route(command)
-        if (routeResult != null) {
+        // ── 6a. Cross-app routing — but NOT if it would hijack built-in prefixes ──
+        // Brave browser is installed, so commandRouter.route("brave <query>") would
+        // route to it instead of Brave Leo. Guard: skip cross-app routing when the
+        // command starts with a reserved built-in prefix.
+        val isBuiltInPrefix = c.startsWith("brave ") || c.startsWith("bing ") ||
+            c.startsWith("being ") || c.startsWith("leo ")
+        if (routeResult != null && !isBuiltInPrefix) {
             val sessionId = sessionManager.open(routeResult.targetPackage, routeResult.appLabel)
             speak("Sending to ${routeResult.appLabel}.") {
                 commandRouter.dispatch(routeResult, sessionId)
@@ -999,6 +1064,166 @@ class VoiceAssistantService : Service() {
             else -> speak("Say next, delete, repeat, or stop.") {
                 isListening = false
                 startSttOneShot()
+            }
+        }
+    }
+
+    // ── Outlook reading methods ───────────────────────────────────────────────
+
+    private fun startOutlookReading() {
+        if (!outlookHandler.isReady) {
+            speak("You need to log in to Outlook first. Opening the login page now.") {
+                val intent = android.content.Intent(this, OutlookVerificationActivity::class.java)
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                resumeWakeWord()
+            }
+            return
+        }
+        speak("Checking your Outlook inbox.") {}
+        outlookHandler.fetchInbox(5) { emails ->
+            if (emails.isEmpty()) {
+                speak("I couldn't fetch your inbox. Your session may have expired. Try saying outlook again, or re-login.") { resumeWakeWord() }
+                return@fetchInbox
+            }
+            outlookReadingList   = emails
+            outlookReadingIndex  = 0
+            outlookReadingActive = true
+            val count = emails.size
+            val s = if (count > 1) "s" else ""
+            speak("You have $count email$s in your inbox.") { readNextOutlookEmail() }
+        }
+    }
+
+    private fun readNextOutlookEmail() {
+        if (outlookReadingIndex >= outlookReadingList.size) {
+            outlookReadingActive = false
+            speak("No more emails.") { resumeWakeWord() }
+            return
+        }
+        val email = outlookReadingList[outlookReadingIndex]
+        val text = outlookHandler.formatForSpeech(email, outlookReadingIndex + 1, outlookReadingList.size)
+        val prompt = outlookHandler.promptForCommands()
+        speak("$text $prompt") {
+            isListening = false
+            startSttOneShot()
+        }
+    }
+
+    private fun handleOutlookReadingCommand(c: String) {
+        Log.d(TAG, "handleOutlookReadingCommand(\"$c\") index=$outlookReadingIndex/${outlookReadingList.size}")
+        val email = outlookReadingList.getOrNull(outlookReadingIndex)
+        when {
+            outlookHandler.isNextCommand(c) -> {
+                outlookReadingIndex++
+                readNextOutlookEmail()
+            }
+            outlookHandler.isDeleteCommand(c) -> {
+                if (email != null) {
+                    // Click into the email first, then delete
+                    outlookHandler.readFullBody(email.index) { _ ->
+                        outlookHandler.deleteCurrentEmail { ok ->
+                            outlookReadingIndex++
+                            speak(if (ok) "Deleted." else "Couldn't delete.") {
+                                outlookHandler.goBackToInbox { readNextOutlookEmail() }
+                            }
+                        }
+                    }
+                } else {
+                    outlookReadingIndex++
+                    readNextOutlookEmail()
+                }
+            }
+            outlookHandler.isReplyCommand(c) -> {
+                outlookAwaitingReply = true
+                speak("What would you like to reply?") { startSttOneShot() }
+            }
+            outlookHandler.isForwardCommand(c) -> {
+                outlookAwaitingForward = true
+                speak("Who would you like to forward this to?") { startSttOneShot() }
+            }
+            outlookHandler.isReadBodyCommand(c) -> {
+                if (email != null) {
+                    speak("Reading email.") {}
+                    outlookHandler.readFullBody(email.index) { body ->
+                        if (body != null) {
+                            // Limit to first ~500 chars for TTS sanity
+                            val trimmed = if (body.length > 500) body.take(500) + "... That's the summary." else body
+                            speak(trimmed) {
+                                speak(outlookHandler.promptForCommands()) {
+                                    isListening = false
+                                    startSttOneShot()
+                                }
+                            }
+                        } else {
+                            speak("I couldn't read the full email. ${outlookHandler.promptForCommands()}") {
+                                isListening = false
+                                startSttOneShot()
+                            }
+                        }
+                    }
+                } else {
+                    speak("No email selected.") { readNextOutlookEmail() }
+                }
+            }
+            outlookHandler.isRepeatCommand(c) -> readNextOutlookEmail()
+            outlookHandler.isStopCommand(c) -> {
+                outlookReadingActive = false
+                outlookReadingList   = emptyList()
+                outlookReadingIndex  = 0
+                speak("Stopped.") { resumeWakeWord() }
+            }
+            else -> speak("Say next, reply, delete, forward, read, repeat, or stop.") {
+                isListening = false
+                startSttOneShot()
+            }
+        }
+    }
+
+    private fun handleOutlookReplyText(replyText: String) {
+        outlookAwaitingReply = false
+        val email = outlookReadingList.getOrNull(outlookReadingIndex) ?: run {
+            outlookReadingActive = false; resumeWakeWord(); return
+        }
+        confirmWorkflow = ConfirmSendWorkflow(
+            speak    = ::speak,
+            startStt = ::startSttOneShot,
+            onSend   = { text ->
+                confirmWorkflow = null
+                speak("Sending reply.") {}
+                // Click email, then reply
+                outlookHandler.readFullBody(email.index) { _ ->
+                    outlookHandler.replyToCurrentEmail(text) { ok ->
+                        outlookReadingIndex++
+                        speak(if (ok) "Reply sent." else "Couldn't send the reply.") {
+                            outlookHandler.goBackToInbox { readNextOutlookEmail() }
+                        }
+                    }
+                }
+            },
+            onCancel = {
+                confirmWorkflow = null
+                speak("Reply cancelled. ${outlookHandler.promptForCommands()}") {
+                    isListening = false
+                    startSttOneShot()
+                }
+            }
+        )
+        confirmWorkflow!!.startWithText(email.sender, replyText)
+    }
+
+    private fun handleOutlookForwardRecipient(recipientName: String) {
+        outlookAwaitingForward = false
+        val email = outlookReadingList.getOrNull(outlookReadingIndex) ?: run {
+            outlookReadingActive = false; resumeWakeWord(); return
+        }
+        speak("Forwarding email from ${email.sender} to $recipientName.") {}
+        outlookHandler.readFullBody(email.index) { _ ->
+            outlookHandler.forwardCurrentEmail(recipientName) { ok ->
+                outlookReadingIndex++
+                speak(if (ok) "Forwarded." else "Couldn't forward.") {
+                    outlookHandler.goBackToInbox { readNextOutlookEmail() }
+                }
             }
         }
     }

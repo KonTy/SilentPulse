@@ -7,7 +7,7 @@ import timber.log.Timber
 import java.util.Locale
 
 class AndroidTtsEngine(
-    context: Context,
+    private val context: Context,
     /** Optional callback fired on the TTS init thread when the engine is ready. */
     private val onInitialized: ((Boolean) -> Unit)? = null
 ) : TtsEngine {
@@ -20,62 +20,58 @@ class AndroidTtsEngine(
         private set
     
     init {
-        // PRIVACY: Android TextToSpeech is completely offline - no network calls
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.let { engine ->
-                    // IMPORTANT: Set language to device default for offline operation
-                    val result = engine.setLanguage(Locale.getDefault())
-                    
-                    if (result == TextToSpeech.LANG_MISSING_DATA || 
-                        result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        Timber.w("TTS language not supported: ${Locale.getDefault()}")
-                        // Still mark as ready - TTS will use fallback language
-                        isReady = true
-                    } else {
-                        isReady = true
-                        Timber.d("AndroidTtsEngine initialized successfully")
-                    }
-                    onInitialized?.invoke(true)
-                    
-                    // Set up utterance progress listener for callbacks
-                    engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            Timber.d("TTS start id=$utteranceId pending=${completionCallbacks.size}")
-                        }
-                        
-                        override fun onDone(utteranceId: String?) {
-                            Timber.d("TTS done id=$utteranceId")
-                            utteranceId?.let { id ->
-                                completionCallbacks.remove(id)?.invoke()
-                            }
-                        }
-                        
-                        override fun onError(utteranceId: String?) {
-                            Timber.e("TTS error id=$utteranceId")
-                            utteranceId?.let { id ->
-                                completionCallbacks.remove(id)?.invoke()
-                            }
-                        }
+        // PRIVACY: Android TextToSpeech is completely offline - no network calls.
+        // Samsung TTS blocks non-whitelisted packages, so we explicitly request
+        // Google TTS first. onTtsInit() falls back to the system default if Google
+        // TTS is not installed.
+        val googleTtsInstalled = try {
+            context.packageManager.getPackageInfo("com.google.android.tts", 0)
+            true
+        } catch (_: android.content.pm.PackageManager.NameNotFoundException) { false }
 
-                        // API 23+: fires when tts.stop() cuts speech mid-utterance
-                        override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                            Timber.w("TTS STOPPED id=$utteranceId interrupted=$interrupted remaining_callbacks=${completionCallbacks.size}")
-                            // Callback was already cleared by AndroidTtsEngine.stop();
-                            // log only — do not invoke callback here.
-                        }
+        val preferredEngine = if (googleTtsInstalled) "com.google.android.tts" else null
+        Timber.d("AndroidTtsEngine: starting TTS (preferredEngine=$preferredEngine)")
+        tts = if (preferredEngine != null)
+            TextToSpeech(context, { onTtsInit(it) }, preferredEngine)
+        else
+            TextToSpeech(context) { onTtsInit(it) }
+    }
 
-                        // API 26+: fires per word — use verbose to avoid logcat flood
-                        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                            Timber.v("TTS word id=$utteranceId pos=$start")
-                        }
-                    })
+    private fun onTtsInit(status: Int) {
+        Timber.d("AndroidTtsEngine: onInit status=$status engine=${tts?.defaultEngine}")
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.let { engine ->
+                val result = engine.setLanguage(Locale.getDefault())
+                if (result == TextToSpeech.LANG_MISSING_DATA ||
+                    result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Timber.w("TTS language not supported: ${Locale.getDefault()}")
                 }
-            } else {
-                Timber.e("AndroidTtsEngine initialization failed")
-                isReady = false
-                onInitialized?.invoke(false)
+                isReady = true
+                Timber.d("AndroidTtsEngine initialized successfully (engine=${engine.defaultEngine})")
+                onInitialized?.invoke(true)
+                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        Timber.d("TTS start id=$utteranceId pending=${completionCallbacks.size}")
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        Timber.d("TTS done id=$utteranceId")
+                        utteranceId?.let { id -> completionCallbacks.remove(id)?.invoke() }
+                    }
+                    override fun onError(utteranceId: String?) {
+                        Timber.e("TTS error id=$utteranceId")
+                        utteranceId?.let { id -> completionCallbacks.remove(id)?.invoke() }
+                    }
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                        Timber.w("TTS STOPPED id=$utteranceId interrupted=$interrupted remaining_callbacks=${completionCallbacks.size}")
+                    }
+                    override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                        Timber.v("TTS word id=$utteranceId pos=$start")
+                    }
+                })
             }
+        } else {
+            Timber.e("AndroidTtsEngine: TTS engine failed to initialize (engine=${tts?.defaultEngine})")
+            onInitialized?.invoke(false)
         }
     }
     

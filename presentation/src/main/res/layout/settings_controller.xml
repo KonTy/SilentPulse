@@ -94,6 +94,14 @@
             app:title="@string/settings_notifications_title" />
 
         <com.silentpulse.messenger.common.widget.PreferenceView
+            android:id="@+id/locationSharingPref"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_settings_black_24dp"
+            app:summary="@string/settings_location_sharing_summary"
+            app:title="@string/settings_location_sharing" />
+
+        <com.silentpulse.messenger.common.widget.PreferenceView
             android:id="@+id/autoEmoji"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
