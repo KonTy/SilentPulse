@@ -18,12 +18,51 @@
  */
 package com.silentpulse.messenger.common.util.extensions
 
+import androidx.core.view.doOnNextLayout
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.OrientationHelper
 import androidx.recyclerview.widget.RecyclerView
 
-fun RecyclerView.Adapter<*>.autoScrollToStart(recyclerView: RecyclerView) {
+fun RecyclerView.Adapter<*>.autoScrollToStart(
+    recyclerView: RecyclerView,
+    shouldScrollToEnd: () -> Boolean = { false }
+) {
+    var previousItemCount = itemCount
+    var scrollToEndPending = false
+
+    fun scrollToEnd(layoutManager: LinearLayoutManager) {
+        if (itemCount == 0) return
+
+        recyclerView.scrollToPosition(itemCount - 1)
+        if (scrollToEndPending) return
+        scrollToEndPending = true
+        recyclerView.doOnNextLayout {
+            scrollToEndPending = false
+            val lastView = layoutManager.findViewByPosition(itemCount - 1) ?: return@doOnNextLayout
+            val orientation = OrientationHelper.createVerticalHelper(layoutManager)
+            val distance = orientation.getDecoratedEnd(lastView) - orientation.endAfterPadding
+            // scrollToPosition only makes a row visible; a tall SMS can still be clipped below it.
+            if (distance > 0) recyclerView.scrollBy(0, distance)
+        }
+    }
+
     registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+        override fun onChanged() {
+            val oldItemCount = previousItemCount
+            previousItemCount = getItemCount()
+            val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+
+            // Realm delivers full refreshes, not just individual insertion callbacks.
+            if (layoutManager.stackFromEnd && getItemCount() > oldItemCount &&
+                    (oldItemCount == 0 || scrollToEndPending ||
+                            layoutManager.findLastVisibleItemPosition() >= oldItemCount - 1 ||
+                            shouldScrollToEnd())) {
+                scrollToEnd(layoutManager)
+            }
+        }
+
         override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+            previousItemCount = getItemCount()
             val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
 
             if (layoutManager.stackFromEnd) {
@@ -32,8 +71,10 @@ fun RecyclerView.Adapter<*>.autoScrollToStart(recyclerView: RecyclerView) {
                 }
 
                 val lastPosition = layoutManager.findLastVisibleItemPosition()
-                if (positionStart >= getItemCount() - 1 && lastPosition == positionStart - 1) {
-                    recyclerView.scrollToPosition(positionStart)
+                if (positionStart + itemCount == getItemCount() &&
+                        (positionStart == 0 || scrollToEndPending ||
+                                lastPosition >= positionStart - 1 || shouldScrollToEnd())) {
+                    scrollToEnd(layoutManager)
                 }
             } else {
                 val firstVisiblePosition = layoutManager.findFirstVisibleItemPosition()
@@ -41,6 +82,10 @@ fun RecyclerView.Adapter<*>.autoScrollToStart(recyclerView: RecyclerView) {
                     recyclerView.scrollToPosition(positionStart)
                 }
             }
+        }
+
+        override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
+            previousItemCount = getItemCount()
         }
 
         override fun onItemRangeChanged(positionStart: Int, itemCount: Int) {

@@ -179,7 +179,9 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
         chips.itemAnimator = null
         chips.layoutManager = FlexboxLayoutManager(this)
 
-        messageAdapter.autoScrollToStart(messageList)
+        messageAdapter.autoScrollToStart(messageList) {
+            messageAdapter.getItem(messageAdapter.itemCount - 1)?.isOutgoingMessage() == true
+        }
         messageAdapter.emptyView = messagesEmpty
 
         messageList.setHasFixedSize(true)
