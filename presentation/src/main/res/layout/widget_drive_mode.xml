@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  4×1 home-screen AppWidget — icons only, no text labels.
+  Single-row home-screen AppWidget with four icons, no text labels.
 
   Slot 1 (btn_notif_reader):   Notification Reader toggle
   Slot 2 (btn_next_notif):     Jump to next notification
@@ -14,7 +14,10 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="4dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp"
     android:background="@android:color/transparent">
 
     <!-- Slot 1: Notification Reader toggle -->
@@ -27,7 +30,8 @@
         android:background="@android:color/transparent"
         android:contentDescription="Toggle Notification Reader"
         android:scaleType="centerInside"
-        android:padding="10dp" />
+        android:minHeight="0dp"
+        android:padding="8dp" />
 
     <!-- Slot 2: Next notification -->
     <ImageButton
@@ -39,7 +43,8 @@
         android:background="@android:color/transparent"
         android:contentDescription="Next Notification"
         android:scaleType="centerInside"
-        android:padding="10dp" />
+        android:minHeight="0dp"
+        android:padding="8dp" />
 
     <!-- Slot 3: Voice Assistant toggle -->
     <ImageButton
@@ -51,7 +56,8 @@
         android:background="@android:color/transparent"
         android:contentDescription="Toggle Voice Assistant"
         android:scaleType="centerInside"
-        android:padding="10dp" />
+        android:minHeight="0dp"
+        android:padding="8dp" />
 
     <!-- Slot 4: Stop speaking — interrupt TTS immediately -->
     <ImageButton
@@ -63,6 +69,7 @@
         android:background="@android:color/transparent"
         android:contentDescription="Stop Speaking"
         android:scaleType="centerInside"
-        android:padding="10dp" />
+        android:minHeight="0dp"
+        android:padding="8dp" />
 
 </LinearLayout>

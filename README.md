@@ -113,6 +113,14 @@ Example: *"Computer, Microcore, log weight 220 pounds"* — SilentPulse routes "
 
 ---
 
+## Home-screen controls
+
+The four-icon control widget requests a **3-column, 1-row** footprint for the notification reader, next notification, voice assistant, and stop-speaking controls. It supports vertical resizing with a compact minimum height; actual grid sizing depends on your launcher.
+
+After updating, long-press an existing widget and drag its resize handle down to one row. If your launcher keeps the old size or does not show resize handles, remove and re-add the widget.
+
+---
+
 ## Building
 
 Requires Java 17 and NDK `28.2.13676358`.
