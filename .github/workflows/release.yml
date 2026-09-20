@@ -10,6 +10,7 @@ permissions:
   contents: write
 
 env:
+  REALM_DISABLE_ANALYTICS: "true"
   # Opt into Node.js 24 for all actions before the June 2026 forced cutover.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -55,6 +56,9 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :presentation:assembleNoAnalyticsDebug
 
+      - name: Check debug native library alignment
+        run: python3 scripts/check-apk-alignment.py presentation/build/outputs/apk/noAnalytics/debug/*.apk
+
       # Ensure the Android debug keystore exists at ~/.android/debug.keystore
       # before the release build. The debug APK step creates it automatically,
       # but an explicit keytool call makes the path predictable and avoids
@@ -90,6 +94,9 @@ jobs:
               -Pandroid.injected.signing.key.alias=androiddebugkey \
               -Pandroid.injected.signing.key.password=android
           fi
+
+      - name: Check release native library alignment
+        run: python3 scripts/check-apk-alignment.py presentation/build/outputs/apk/noAnalytics/release/*.apk
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

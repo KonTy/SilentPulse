@@ -125,6 +125,8 @@ After updating, long-press an existing widget and drag its resize handle down to
 
 Requires Java 17 and NDK `28.2.13676358`.
 
+The Gradle wrappers disable Realm's build-time analytics. Set `REALM_DISABLE_ANALYTICS=true` in the environment when building directly through an IDE or a system Gradle installation too.
+
 ```bash
 # Debug APK — sideload via ADB for testing
 ./gradlew :presentation:assembleNoAnalyticsDebug
@@ -135,9 +137,21 @@ Requires Java 17 and NDK `28.2.13676358`.
 
 ### Installing via ADB
 
+Before sideloading, check the built APK's 16 KB compatibility:
+
 ```bash
-adb install presentation/build/outputs/apk/noAnalytics/debug/presentation-noAnalytics-debug.apk
+python3 scripts/check-apk-alignment.py path/to/built.apk
 ```
+
+This checks every packaged `arm64-v8a` and `x86_64` library's ELF load segments and, for uncompressed libraries, its ZIP alignment. CI runs the same check on debug and release APKs before publishing, so incompatible prebuilt dependencies cannot silently ship. Rebuilding our own native code alone does not fix a misaligned third-party library.
+
+Realm `10.19.0` and Vosk `0.3.75` (with its transitive JNA `5.18.1` AAR) supply compatible native libraries. The Realm update from `10.18.0` retains database file format v23 and requires no app schema change.
+
+```bash
+adb install -r -t path/to/built.apk
+```
+
+Use the existing signing key for in-place updates. If Android reports a signature mismatch, stop rather than uninstalling or clearing app data.
 
 ---
 

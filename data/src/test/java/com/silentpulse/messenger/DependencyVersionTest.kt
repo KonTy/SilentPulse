@@ -95,6 +95,11 @@ class DependencyVersionTest {
     }
 
     @Test
+    fun `Realm version includes 16 KB native alignment`() {
+        assertMinVersion("realm_version", "10.19.0")
+    }
+
+    @Test
     fun `AGP version is at least 8_0`() {
         val buildGradle = File(projectRoot, "build.gradle")
         val content = buildGradle.readText()
