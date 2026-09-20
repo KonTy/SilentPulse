@@ -118,6 +118,17 @@ class ManifestValidationTest {
     }
 
     @Test
+    fun `SMS conversation resizes above the keyboard`() {
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifestFile)
+        val activities = document.getElementsByTagName("activity")
+        val compose = (0 until activities.length)
+            .map { activities.item(it) as Element }
+            .first { it.getAttribute("android:name") == ".feature.compose.ComposeActivity" }
+
+        assertEquals("adjustResize", compose.getAttribute("android:windowSoftInputMode"))
+    }
+
+    @Test
     fun `all receivers with intent-filters have exported attribute`() {
         assertExportedPresent("receiver")
     }
