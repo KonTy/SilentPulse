@@ -21,8 +21,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # Only Whisper is needed for Android builds. Legacy src/ gitlinks have no
+      # .gitmodules entries, so initializing every submodule fails checkout.
+      - name: Initialize speech dependency
+        run: git submodule update --init --recursive -- whisper_cpp
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
