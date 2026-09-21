@@ -44,7 +44,7 @@ class AndroidSttEngineTest {
         assertTrue(queue.delayed.isEmpty())
     }
 
-    @Test fun `Android 33 cannot listen before installed language verification`() {
+    @Test fun `Android 33 waits for an available installed language check`() {
         mockConstruction(Intent::class.java).use {
             val queue = MainQueue()
             val sr = mock(SpeechRecognizer::class.java)
@@ -83,23 +83,90 @@ class AndroidSttEngineTest {
         }
     }
 
-    @Test fun `unsupported model check and timeout both fail closed`() {
+    @Test fun `unsupported model check and timeout use the same on-device recognizer`() {
         mockConstruction(Intent::class.java).use {
             for (timeout in listOf(false, true)) {
+                val queue = MainQueue()
+                val sr = mock(SpeechRecognizer::class.java)
+                var creations = 0
+                val engine = AndroidSttEngine(queue.handler, 36) {
+                    creations++
+                    OnDeviceRecognition.Creation.Ready(sr)
+                }
+                val failures = mutableListOf<String>()
+                engine.startListening({ error("no transcript yet") }, failures::add)
+                val callback = ArgumentCaptor.forClass(RecognitionSupportCallback::class.java)
+                verify(sr).checkRecognitionSupport(any(Intent::class.java), any(Executor::class.java), callback.capture())
+                if (timeout) queue.delayed.single().run() else {
+                    callback.value.onError(SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT)
+                }
+                verify(sr).startListening(any(Intent::class.java))
+                verify(sr, never()).triggerModelDownload(any(Intent::class.java))
+                assertEquals(1, creations)
+                assertTrue(failures.isEmpty())
+                assertTrue(queue.delayed.isEmpty())
+
+                // Late support callbacks must not restart or cancel actual recognition.
+                callback.value.onError(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
+                callback.value.onSupportResult(mock(RecognitionSupport::class.java))
+                verify(sr, times(1)).startListening(any(Intent::class.java))
+                assertTrue(failures.isEmpty())
+            }
+        }
+    }
+
+    @Test fun `unimplemented model check still starts on-device recognition`() {
+        mockConstruction(Intent::class.java).use {
+            val queue = MainQueue()
+            val sr = mock(SpeechRecognizer::class.java)
+            doThrow(UnsupportedOperationException()).`when`(sr).checkRecognitionSupport(
+                any(Intent::class.java), any(Executor::class.java), any(RecognitionSupportCallback::class.java)
+            )
+            val engine = AndroidSttEngine(queue.handler, 33) { OnDeviceRecognition.Creation.Ready(sr) }
+            engine.startListening({ error("no transcript yet") }, { error("unexpected failure: $it") })
+            verify(sr).startListening(any(Intent::class.java))
+            verify(sr, never()).triggerModelDownload(any(Intent::class.java))
+            assertTrue(queue.delayed.isEmpty())
+        }
+    }
+
+    @Test fun `real model check failures never start recognition`() {
+        mockConstruction(Intent::class.java).use {
+            for (failureCode in listOf(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE,
+                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS, SpeechRecognizer.ERROR_SERVER)) {
                 val queue = MainQueue()
                 val sr = mock(SpeechRecognizer::class.java)
                 val engine = AndroidSttEngine(queue.handler, 33) { OnDeviceRecognition.Creation.Ready(sr) }
                 val failures = mutableListOf<String>()
                 engine.startListening({ error("must not succeed") }, failures::add)
-                if (timeout) queue.delayed.single().run() else {
-                    val callback = ArgumentCaptor.forClass(RecognitionSupportCallback::class.java)
-                    verify(sr).checkRecognitionSupport(any(Intent::class.java), any(Executor::class.java), callback.capture())
-                    callback.value.onError(SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT)
-                }
-                assertEquals(listOf("on_device_support_unavailable"), failures)
+                val callback = ArgumentCaptor.forClass(RecognitionSupportCallback::class.java)
+                verify(sr).checkRecognitionSupport(any(Intent::class.java), any(Executor::class.java), callback.capture())
+                callback.value.onError(failureCode)
+                assertEquals(listOf(OnDeviceRecognition.errorCode(failureCode)), failures)
                 verify(sr, never()).startListening(any(Intent::class.java))
                 assertTrue(queue.delayed.isEmpty())
             }
+        }
+    }
+
+    @Test fun `recognition still reports missing language after an unsupported preflight`() {
+        mockConstruction(Intent::class.java).use {
+            val queue = MainQueue()
+            val sr = mock(SpeechRecognizer::class.java)
+            val engine = AndroidSttEngine(queue.handler, 36) { OnDeviceRecognition.Creation.Ready(sr) }
+            val failures = mutableListOf<String>()
+            engine.startListening({ error("must not succeed") }, failures::add)
+            val support = ArgumentCaptor.forClass(RecognitionSupportCallback::class.java)
+            verify(sr).checkRecognitionSupport(any(Intent::class.java), any(Executor::class.java), support.capture())
+            support.value.onError(SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT)
+            val listener = ArgumentCaptor.forClass(RecognitionListener::class.java)
+            verify(sr).setRecognitionListener(listener.capture())
+            listener.value.onError(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
+            assertEquals(listOf("on_device_language_unavailable"), failures)
+            verify(sr, times(1)).startListening(any(Intent::class.java))
+            verify(sr, never()).triggerModelDownload(any(Intent::class.java))
+            assertTrue(queue.delayed.isEmpty())
         }
     }
 
@@ -130,7 +197,10 @@ class AndroidSttEngineTest {
             engine.startListening({ error("stopped") }, { error("stopped") })
             val callback = ArgumentCaptor.forClass(RecognitionSupportCallback::class.java)
             verify(sr).checkRecognitionSupport(any(Intent::class.java), any(Executor::class.java), callback.capture())
+            val timeout = queue.delayed.single()
             engine.stopListening()
+            timeout.run()
+            callback.value.onError(SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT)
             val support = mock(RecognitionSupport::class.java)
             `when`(support.installedOnDeviceLanguages).thenReturn(listOf("en-US"))
             callback.value.onSupportResult(support)

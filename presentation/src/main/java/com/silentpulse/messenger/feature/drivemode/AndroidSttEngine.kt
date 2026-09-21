@@ -16,7 +16,8 @@ import java.util.Locale
 
 /**
  * Uses only Android's on-device recognition service (API 31+), never the generic service.
- * On API 33+ the requested model must already be installed. No model downloads are requested.
+ * Uses model preflight on API 33+ when supported; otherwise the on-device service reports errors.
+ * No model downloads are requested.
  * This is an API boundary, not a firewall for the separate speech-provider process.
  */
 class AndroidSttEngine internal constructor(
@@ -79,9 +80,7 @@ class AndroidSttEngine internal constructor(
             startCycle(token)
             return
         }
-        val timeout = Runnable {
-            if (session == token && supportTimeout != null) fail("on_device_support_unavailable")
-        }
+        val timeout = Runnable { startWithoutModelPreflight(token) }
         supportTimeout = timeout
         mainHandler.postDelayed(timeout, 5_000L)
         try {
@@ -101,17 +100,29 @@ class AndroidSttEngine internal constructor(
 
                     override fun onError(error: Int) {
                         if (session != token || supportTimeout == null) return
-                        fail("on_device_support_unavailable")
+                        if (error == SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT) {
+                            startWithoutModelPreflight(token)
+                        } else {
+                            fail(OnDeviceRecognition.errorCode(error))
+                        }
                     }
                 }
             )
         } catch (_: UnsupportedOperationException) {
-            fail("on_device_support_unavailable")
+            startWithoutModelPreflight(token)
         } catch (_: IllegalStateException) {
-            fail("on_device_support_unavailable")
+            fail("on_device_service_error")
         } catch (_: SecurityException) {
             fail("permission_denied")
         }
+    }
+
+    private fun startWithoutModelPreflight(token: Int) {
+        if (session != token || supportTimeout == null) return
+        clearSupportTimeout()
+        // The optional capability query is not the offline boundary: recognizer was created on-device.
+        Timber.w("AndroidSTT: model check unavailable; using the on-device recognizer")
+        startCycle(token)
     }
 
     private fun startCycle(token: Int) {

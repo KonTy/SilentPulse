@@ -43,6 +43,8 @@ Phase 1 — **Vosk keyword spotter** runs continuously, constrained to the gramm
 
 Phase 2 — When Vosk hears the wake word, it releases the mic and hands off to the selected offline STT engine. Android recognition requires the **API 31+ on-device recognizer**, not merely `EXTRA_PREFER_OFFLINE`; unavailable offline recognition is reported rather than falling back to the generic/cloud-capable recognizer. Vosk and Whisper remain local alternatives.
 
+On Android 13+, SilentPulse checks the installed recognition language when the service supports that optional query. An unsupported or timed-out query does not disable a working on-device recognizer: the same offline recognizer is used, and its actual language or permission errors are reported. A check that explicitly reports a missing language still blocks recognition. SilentPulse never requests automatic model downloads or switches to the generic recognizer.
+
 The transcript then flows through a routing chain:
 
 | Handler | Backend |
