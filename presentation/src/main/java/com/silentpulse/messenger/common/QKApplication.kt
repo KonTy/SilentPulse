@@ -21,13 +21,9 @@ package com.silentpulse.messenger.common
 
 import android.app.Application
 import android.os.Build
-import androidx.core.provider.FontRequest
-import androidx.emoji2.text.EmojiCompat
-import androidx.emoji2.text.FontRequestEmojiCompatConfig
 import com.silentpulse.messenger.BuildConfig
-import com.silentpulse.messenger.R
-import com.silentpulse.messenger.common.util.CrashlyticsTree
 import com.silentpulse.messenger.common.util.FileLoggingTree
+import com.silentpulse.messenger.common.util.MetadataDebugTree
 import com.silentpulse.messenger.injection.AppComponentManager
 import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.manager.AnalyticsManager
@@ -43,6 +39,8 @@ import dagger.android.DispatchingAndroidInjector
 import dagger.android.HasAndroidInjector
 import io.realm.Realm
 import io.realm.RealmConfiguration
+import io.realm.log.LogLevel
+import io.realm.log.RealmLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -72,21 +70,14 @@ class QKApplication : Application(), HasAndroidInjector {
         AppComponentManager.init(this)
         appComponent.inject(this)
 
-        // Debug builds: full logcat output via DebugTree
-        // Release builds: only crash reporting + file logging (no logcat spam)
         if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree(), CrashlyticsTree(), fileLoggingTree)
-        } else {
-            Timber.plant(CrashlyticsTree(), fileLoggingTree)
+            Timber.plant(MetadataDebugTree(), fileLoggingTree)
+            setupUncaughtExceptionHandler()
+            Timber.i("app_started version=${BuildConfig.VERSION_NAME} sdk=${Build.VERSION.SDK_INT}")
         }
 
-        // Set up uncaught exception handler
-        setupUncaughtExceptionHandler()
-
-        // Log diagnostic startup information
-        Timber.i("SilentPulse started - version ${BuildConfig.VERSION_NAME}, SDK ${Build.VERSION.SDK_INT}, device ${Build.MODEL}")
-
         Realm.init(this)
+        if (!BuildConfig.DEBUG) RealmLog.setLevel(LogLevel.OFF)
         Realm.setDefaultConfiguration(RealmConfiguration.Builder()
                 .compactOnLaunch()
                 .migration(realmMigration)
@@ -103,37 +94,21 @@ class QKApplication : Application(), HasAndroidInjector {
 
         nightModeManager.updateCurrentTheme()
 
-        val fontRequest = FontRequest(
-                "com.google.android.gms.fonts",
-                "com.google.android.gms",
-                "Noto Color Emoji Compat",
-                R.array.com_google_android_gms_fonts_certs)
-
-        EmojiCompat.init(FontRequestEmojiCompatConfig(this, fontRequest))
-
-        RxDogTag.builder()
-                .configureWith(AutoDisposeConfigurer::configure)
-                .install()
+        if (BuildConfig.DEBUG) {
+            RxDogTag.builder()
+                    .configureWith(AutoDisposeConfigurer::configure)
+                    .install()
+        }
     }
 
-    /**
-     * Set up an uncaught exception handler that logs full stack traces before crashing
-     */
     private fun setupUncaughtExceptionHandler() {
+        if (!BuildConfig.DEBUG) return
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                // Log the crash to Timber (which will write to file and Crashlytics)
-                Timber.e(throwable, "FATAL EXCEPTION in thread ${thread.name}")
-                
-                // Give some time for logs to be written
-                Thread.sleep(500)
-            } catch (e: Exception) {
-                // If logging fails, at least try to print to logcat
-                android.util.Log.e("QKApplication", "Error in uncaught exception handler", e)
+                Timber.e("uncaught_exception type=${throwable.javaClass.simpleName}")
             } finally {
-                // Call the default handler to perform the actual crash
                 defaultHandler?.uncaughtException(thread, throwable)
             }
         }

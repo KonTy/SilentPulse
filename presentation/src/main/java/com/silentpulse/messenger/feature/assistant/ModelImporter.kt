@@ -72,12 +72,12 @@ object ModelImporter {
                         zip.closeEntry()
                         entry = zip.nextEntry
                     }
-                    Timber.d("ModelImporter: extracted $fileCount files to ${destDir.absolutePath}")
+                    Timber.d("model_imported files=$fileCount")
                 }
             }
             destDir.absolutePath
         } catch (e: Exception) {
-            Timber.e(e, "ModelImporter: failed to import zip from $zipUri")
+            Timber.e("model_import_failed type=${e.javaClass.simpleName}")
             destDir.deleteRecursively()
             null
         }

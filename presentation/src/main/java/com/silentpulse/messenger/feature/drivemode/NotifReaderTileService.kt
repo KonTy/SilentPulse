@@ -10,7 +10,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import com.silentpulse.messenger.R
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 
 /**
  * Quick Settings tile — Notification Reader on/off.

@@ -369,7 +369,7 @@
         <item>android</item>
         <item>whisper</item>
     </string-array>
-    <string name="settings_drive_mode_privacy">🔒 All audio stays on your device. Nothing is sent to the cloud.</string>
+    <string name="settings_drive_mode_privacy">Speech requires an on-device recognizer and installed offline voices. SilentPulse does not use a cloud speech fallback, but cannot firewall separate system/provider processes. Online questions and weather are intentional network requests.</string>
 
     <string-array name="drive_mode_tts_engines">
         <item>Android (Offline)</item>
@@ -615,4 +615,38 @@
     <string name="title_notification_reader">Notification Reader</string>
     <string name="tile_voice_ast">Voice Asst</string>
 
+    <string name="world_clock_widget_name">SilentPulse World Clock</string>
+    <string name="world_clock_widget_description">A transparent city clock with a weather icon. Add several 2 by 1 widgets to put two clocks on one row.</string>
+    <string name="world_clock_configure_title">World clock</string>
+    <string name="world_clock_setup_hint">Choose a city and text color. The background is transparent. Tap the time or city to edit; tap the weather icon to refresh. Weather sends only the selected city to Open-Meteo, never messages or device location.</string>
+    <string name="world_clock_choose_city">Choose a city</string>
+    <string name="world_clock_search_hint">Search cities or time zones</string>
+    <string name="world_clock_no_cities">No matching cities or time zones</string>
+    <string name="world_clock_selected_city">Selected: %1$s (%2$s)</string>
+    <string name="world_clock_selected_weather_city">%1$s\nWeather location: %2$s</string>
+    <string name="world_clock_white_text">White text</string>
+    <string name="world_clock_black_text">Black text</string>
+    <string name="world_clock_save">Save clock</string>
+    <string name="world_clock_invalid_widget">Add a SilentPulse World Clock from your home screen to choose its city.</string>
+    <string name="world_clock_weather_credit">Weather by <a href="https://open-meteo.com/">Open-Meteo</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>). Updates about hourly; Android may delay background refresh.</string>
+    <string name="world_clock_weather_refresh_hint">%1$s. Tap to refresh weather.</string>
+    <string name="world_clock_weather_condition_place">%1$s in %2$s</string>
+    <string name="world_clock_weather_loading">Updating weather</string>
+    <string name="world_clock_weather_unavailable">Weather unavailable</string>
+    <string name="world_clock_weather_clear">Sunny</string>
+    <string name="world_clock_weather_clear_night">Clear night</string>
+    <string name="world_clock_weather_partly_cloudy">Partly cloudy</string>
+    <string name="world_clock_weather_cloudy">Cloudy</string>
+    <string name="world_clock_weather_fog">Fog</string>
+    <string name="world_clock_weather_rain">Rain or drizzle</string>
+    <string name="world_clock_weather_sleet">Freezing rain or sleet</string>
+    <string name="world_clock_weather_snow">Snow</string>
+    <string name="world_clock_weather_storm">Thunderstorm</string>
+    <string name="speech_engine_android">On-device</string>
+    <string name="speech_android_tts_label">Android offline</string>
+    <string name="speech_kokoro_unavailable_label">Kokoro (blocked)</string>
+    <string name="speech_android_stt_privacy">Requires Android 12 or later and an available on-device recognition service. Only installed offline language support is accepted; there is no cloud fallback or automatic model download. Restart the assistant after changing engines.</string>
+    <string name="speech_android_tts_privacy">Only installed voices that do not require a network connection are used. Missing languages and network voices are rejected. Configure offline voices in Android Text-to-speech settings. SilentPulse cannot block unrelated network activity by a separate speech-provider app.</string>
+    <string name="speech_whisper_existing_model">Uses your previously configured local Whisper model. This selection is preserved rather than silently changed to Android. If the model is unavailable, select On-device or Vosk.</string>
+    <string name="speech_kokoro_privacy_block">This bundled Kokoro version can log spoken text on native errors, so synthesis is blocked. Your model and preferences are preserved. Select Android offline until a privacy-safe native build is available.</string>
 </resources>

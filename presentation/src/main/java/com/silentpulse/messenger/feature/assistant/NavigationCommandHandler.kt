@@ -78,7 +78,7 @@ class NavigationCommandHandler(private val context: Context) {
             }
             val importance = myProcess?.importance ?: -1
             val isMainThread = android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
-            "$stage: sdk=${Build.VERSION.SDK_INT}, thread=${Thread.currentThread().name}, mainThread=$isMainThread, processImportance=$importance, canDrawOverlays=${Settings.canDrawOverlays(context)}"
+            "$stage: sdk=${Build.VERSION.SDK_INT}, mainThread=$isMainThread, processImportance=$importance, canDrawOverlays=${Settings.canDrawOverlays(context)}"
         }
     }
 
@@ -89,7 +89,7 @@ class NavigationCommandHandler(private val context: Context) {
                 .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
                 .mapNotNull { it.activityInfo?.packageName }
                 .distinct()
-            "$stage intent=$intent, package=${intent.`package`}, data=${intent.data}, resolved=${resolved?.flattenToShortString()}, handlers=${handlers.size} $handlers"
+            "$stage resolved=${resolved != null}, handlers=${handlers.size}"
         }
     }
 
@@ -197,7 +197,7 @@ class NavigationCommandHandler(private val context: Context) {
                         pi.send(context, 0, null, null, null, null, opts.toBundle())
                         Log.d(TAG, "Relaunched $clearPkg to clear route")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Could not relaunch to clear route", e)
+                        Log.w(TAG, "navigation_clear_failed type=${e.javaClass.simpleName}")
                     }
                 }, 800)
             }
@@ -218,7 +218,7 @@ class NavigationCommandHandler(private val context: Context) {
                     ).send()
                     onSpeak("Opening navigation app — tap Stop to end the route.", null)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Could not open nav app", e)
+                    Log.e(TAG, "navigation_open_failed type=${e.javaClass.simpleName}")
                     onSpeak("Could not stop navigation.", null)
                 }
             } else {
@@ -257,7 +257,7 @@ class NavigationCommandHandler(private val context: Context) {
             onSpeak("No active navigation found. Start a route first.", null)
             return
         }
-        Log.d(TAG, "Nav ETA from ${eta.appName}: \"${eta.text}\"")
+        Log.d(TAG, "navigation_eta_available")
         onSpeak(buildEtaResponse(eta), null)
     }
 
@@ -314,7 +314,7 @@ class NavigationCommandHandler(private val context: Context) {
      * @param onSpeak Callback to speak feedback to the user.
      */
     fun handleNavigation(command: String, onSpeak: (String, (() -> Unit)?) -> Unit) {
-        debugLog { "handleNavigation rawCommand=\"$command\"" }
+        debugLog { "navigation_command_received" }
         logLaunchContext("handleNavigation")
         val wantsGoogle = command.lowercase().let {
             it.contains("google maps") || it.contains("using google") ||
@@ -328,8 +328,8 @@ class NavigationCommandHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Navigation destination: \"$destination\" (google=$wantsGoogle)")
-        debugLog { "handleNavigation destination=\"$destination\", lastNavPackage(before)=$lastNavPackage" }
+        Log.d(TAG, "navigation_requested google=$wantsGoogle")
+        debugLog { "navigation_previous_route=${lastNavPackage != null}" }
 
         if (wantsGoogle) {
             lastNavPackage = GOOGLE_MAPS_PKG
@@ -345,7 +345,7 @@ class NavigationCommandHandler(private val context: Context) {
         val googleInstalled = try { pm.getPackageInfo(GOOGLE_MAPS_PKG, 0); true }
             catch (_: PackageManager.NameNotFoundException) { false }
 
-        debugLog { "launchGoogleMaps destination=\"$destination\", installed=$googleInstalled" }
+        debugLog { "navigation_google_installed=$googleInstalled" }
         logLaunchContext("launchGoogleMaps:start")
 
         if (!googleInstalled) {
@@ -387,7 +387,7 @@ class NavigationCommandHandler(private val context: Context) {
             pending.send(context, 0, null, null, null, null, createSenderBalBundle("launchGoogleMaps:sendPI"))
             debugLog { "launchGoogleMaps PendingIntent sent (BAL creator+sender allowed)" }
         } catch (e: Exception) {
-            Log.e(TAG, "Google Maps PendingIntent failed", e)
+            Log.e(TAG, "navigation_pending_intent_failed type=${e.javaClass.simpleName}")
             // Fallback: bare geo: URI without package restriction (system chooser)
             try {
                 val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
@@ -403,21 +403,21 @@ class NavigationCommandHandler(private val context: Context) {
                 fallbackPi.send(context, 0, null, null, null, null, createSenderBalBundle("launchGoogleMaps:sendFallbackPI"))
                 debugLog { "launchGoogleMaps fallback geo PendingIntent sent" }
             } catch (e2: Exception) {
-                Log.e(TAG, "All Google Maps launch attempts failed", e2)
+                Log.e(TAG, "navigation_google_failed type=${e2.javaClass.simpleName}")
             }
         }
 
-        debugLog { "launchGoogleMaps speaking confirmation for destination=\"$destination\"" }
+        debugLog { "navigation_google_confirmation" }
         onSpeak("Starting navigation to $destination with Google Maps.", null)
     }
 
     private fun launchOpenSourceMaps(destination: String, onSpeak: (String, (() -> Unit)?) -> Unit) {
-        Log.d(TAG, "Open-source navigation to: \"$destination\"")
+        Log.d(TAG, "navigation_open_source_requested")
         val mapApp = findInstalledMapApp()
         val appName = mapApp?.let { getAppLabel(it) } ?: "Maps"
         val geoUri = Uri.parse("geo:0,0?q=${Uri.encode(destination)}")
 
-        debugLog { "launchOpenSourceMaps destination=\"$destination\", mapApp=$mapApp, appName=\"$appName\"" }
+        debugLog { "navigation_open_source_app_found=${mapApp != null}" }
         logLaunchContext("launchOpenSourceMaps:start")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !hasOverlayPermission()) {
@@ -446,7 +446,7 @@ class NavigationCommandHandler(private val context: Context) {
             )
             // Pass bundle during send to act as sender opt-in
             debugLog {
-                "launchOpenSourceMaps sending PI requestCode=$requestCode, creator=${pi.creatorPackage}, package=${i.`package`}, data=${i.data}"
+                "launchOpenSourceMaps sending PI requestCode=$requestCode"
             }
             pi.send(context, 0, null, null, null, null, createSenderBalBundle("launchOpenSourceMaps:sendPI#$requestCode"))
         }
@@ -456,7 +456,7 @@ class NavigationCommandHandler(private val context: Context) {
             sendViaPI(intent, 1)
             debugLog { "launchOpenSourceMaps primary PendingIntent sent for $mapApp" }
         } catch (e: Exception) {
-            Log.w(TAG, "Targeted launch failed ($mapApp), trying bare geo: URI", e)
+            Log.w(TAG, "navigation_target_failed type=${e.javaClass.simpleName}")
             // Retry without a specific package — system chooser will appear
             try {
                 val fallbackIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
@@ -466,13 +466,13 @@ class NavigationCommandHandler(private val context: Context) {
                 debugLog { "launchOpenSourceMaps trying fallback bare geo URI" }
                 sendViaPI(fallbackIntent, 2)
             } catch (e2: Exception) {
-                Log.e(TAG, "All navigation launch attempts failed", e2)
+                Log.e(TAG, "navigation_failed type=${e2.javaClass.simpleName}")
                 onSpeak("No map app found. Please install OsmAnd or Organic Maps.", null)
                 return
             }
         }
 
-        debugLog { "launchOpenSourceMaps speaking confirmation for destination=\"$destination\" with appName=\"$appName\"" }
+        debugLog { "navigation_open_source_confirmation" }
         onSpeak("Navigating to $destination with $appName.", null)
     }
 

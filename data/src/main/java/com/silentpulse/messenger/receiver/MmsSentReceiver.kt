@@ -75,7 +75,7 @@ class MmsSentReceiver : BroadcastReceiver() {
                             arrayOf(messageId.toString()))
 
                 } catch (e: MmsException) {
-                    e.printStackTrace()
+                    Timber.w("mms_sent_update_failed type=${e.javaClass.simpleName}")
                 }
             }
         }

@@ -2,320 +2,221 @@ package com.silentpulse.messenger.feature.drivemode
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.speech.RecognitionSupport
+import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import timber.log.Timber
-import com.silentpulse.messenger.BuildConfig
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
+import java.util.Locale
 
 /**
- * STT engine wrapping Android's built-in [SpeechRecognizer] (Google Soda on-device).
- *
- * **Architecture — single recognizer, reused across cycles:**
- *   A SpeechRecognizer binds to the recognition service on creation and
- *   initialises a Soda pipeline.  Destroying + recreating it every 5 seconds
- *   (on each no_match timeout) causes race conditions (error 11) and sometimes
- *   makes Soda return no_match even when speech *was* detected.
- *
- *   This engine creates the recognizer **once** and reuses it:
- *     cancel() → setRecognitionListener() → startListening()
- *
- *   It is only destroyed in [shutdown].
- *
- * **Audio feedback:**
- *   The SpeechRecognizer beep is intentionally left audible — it signals to
- *   the user that the system is ready for their command.
- *
- * **Privacy:**
- *   INTERNET permission is removed in the manifest via tools:node="remove".
- *   The kernel blocks all outbound sockets.  Audio stays on-device.
+ * Uses only Android's on-device recognition service (API 31+), never the generic service.
+ * On API 33+ the requested model must already be installed. No model downloads are requested.
+ * This is an API boundary, not a firewall for the separate speech-provider process.
  */
-class AndroidSttEngine(private val context: Context) : SttEngine {
-
-    private val mainHandler = Handler(Looper.getMainLooper())
+class AndroidSttEngine internal constructor(
+    private val mainHandler: Handler,
+    private val sdkInt: Int,
+    private val createRecognizer: () -> OnDeviceRecognition.Creation
+) : SttEngine {
+    constructor(context: Context) : this(
+        Handler(Looper.getMainLooper()), Build.VERSION.SDK_INT, { OnDeviceRecognition.create(context) }
+    )
     private var recognizer: SpeechRecognizer? = null
-    @Volatile private var listening = false
-
-    /** Tracks last start time to throttle rapid restarts. */
-    private var lastStartTime = 0L
-
-    /**
-     * Set to true immediately before calling recognizer.cancel() for a
-     * planned restart. Suppresses the resulting ERROR_CLIENT so it does not
-     * destroy the recognizer or propagate to the caller.
-     */
-    private var expectingCancel = false
-
-    /** Accumulated transcript across continuation windows. */
+    private var session = 0
+    private var cycle = 0
+    private var closed = false
     private var pendingTranscript: String? = null
-    /** Runnable that fires after silence to submit the accumulated result. */
     private var submitRunnable: Runnable? = null
-    /** Callbacks saved so continuation re-starts can reuse them. */
+    private var supportTimeout: Runnable? = null
     private var savedOnResult: ((String) -> Unit)? = null
     private var savedOnError: ((String) -> Unit)? = null
+    private val locale = Locale.US
 
-    private companion object {
-        /** Minimum gap between consecutive startListening calls. */
-        const val MIN_RESTART_GAP_MS = 600L
-        /**
-         * How long to wait after the last recognised speech before submitting.
-         * Gives the user time to pause mid-thought and continue speaking.
-         * 2 seconds = comfortable thinking pause.
-         */
-        const val CONTINUATION_WINDOW_MS = 2_000L
+    private val recognizerIntent get() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        // Defence in depth only: the on-device factory above is the privacy boundary.
+        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60_000L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 30_000L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 15_000L)
     }
-
-    /** Lazily build the recognizer intent (constant across calls). */
-    private val recognizerIntent by lazy {
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // PRIVACY: Force on-device (offline) recognition.
-            // SpeechRecognizer binds to com.google.android.as which is a
-            // SEPARATE SYSTEM PROCESS with its own network privileges.
-            // network_security_config.xml does NOT constrain it.
-            // EXTRA_PREFER_OFFLINE is the only reliable guard against cloud STT.
-            putExtra("android.speech.extra.PREFER_OFFLINE", true)
-
-            // ── Keep the session alive much longer ──────────────────────────
-            // By default Soda times out after ~5 seconds of silence, which
-            // forces a restart (with a new beep) every 5 s.
-            // These extras tell the recognizer to keep the mic open for up
-            // to 60 s of total silence before giving up.  This means ONE beep
-            // per minute instead of one every 5 seconds.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60_000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 30_000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 15_000L)
-        }
-    }
-
-    // ── Public API ────────────────────────────────────────────────────────────
 
     override fun startListening(onResult: (String) -> Unit, onError: (String) -> Unit) {
-        savedOnResult = onResult
-        savedOnError  = onError
-        pendingTranscript = null
-        cancelPendingSubmit()
+        mainHandler.post {
+            cancelSession()
+            savedOnResult = onResult
+            savedOnError = onError
+            if (closed) {
+                fail("on_device_init_failed")
+                return@post
+            }
+            if (recognizer == null) {
+                when (val creation = createRecognizer()) {
+                    is OnDeviceRecognition.Creation.Ready -> recognizer = creation.recognizer
+                    is OnDeviceRecognition.Creation.Unavailable -> {
+                        fail(creation.code)
+                        return@post
+                    }
+                }
+            }
+            verifyModelAndStart(session)
+        }
+    }
 
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Timber.e("AndroidSTT: SpeechRecognizer not available")
-            onError("speech_not_available")
+    private fun verifyModelAndStart(token: Int) {
+        val sr = recognizer ?: return
+        if (sdkInt < 33) {
+            // API 31–32 cannot preflight models. The on-device service reports language errors.
+            startCycle(token)
             return
         }
-
-        mainHandler.post {
-            try {
-                val now = System.currentTimeMillis()
-                val elapsed = now - lastStartTime
-                if (elapsed < MIN_RESTART_GAP_MS) {
-                    val delay = MIN_RESTART_GAP_MS - elapsed
-                    Timber.d("AndroidSTT: throttle — waiting ${delay}ms")
-                    mainHandler.postDelayed({ doStart(onResult, onError) }, delay)
-                    return@post
-                }
-                doStart(onResult, onError)
-            } catch (e: Exception) {
-                Timber.e(e, "AndroidSTT: startListening failed")
-                listening = false
-                onError("client_error")
-            }
+        val timeout = Runnable {
+            if (session == token && supportTimeout != null) fail("on_device_support_unavailable")
         }
+        supportTimeout = timeout
+        mainHandler.postDelayed(timeout, 5_000L)
+        try {
+            sr.checkRecognitionSupport(
+                recognizerIntent,
+                { command -> mainHandler.post(command) },
+                object : RecognitionSupportCallback {
+                    override fun onSupportResult(support: RecognitionSupport) {
+                        if (session != token || supportTimeout == null) return
+                        clearSupportTimeout()
+                        if (OnDeviceRecognition.isLanguageInstalled(support.installedOnDeviceLanguages, locale)) {
+                            startCycle(token)
+                        } else {
+                            fail("on_device_language_unavailable")
+                        }
+                    }
+
+                    override fun onError(error: Int) {
+                        if (session != token || supportTimeout == null) return
+                        fail("on_device_support_unavailable")
+                    }
+                }
+            )
+        } catch (_: UnsupportedOperationException) {
+            fail("on_device_support_unavailable")
+        } catch (_: IllegalStateException) {
+            fail("on_device_support_unavailable")
+        } catch (_: SecurityException) {
+            fail("permission_denied")
+        }
+    }
+
+    private fun startCycle(token: Int) {
+        if (session != token || savedOnResult == null) return
+        val sr = recognizer ?: return
+        val currentCycle = ++cycle
+        fun active() = token == session && currentCycle == cycle && savedOnResult != null
+        sr.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                if (active()) Timber.d("AndroidSTT: microphone ready")
+            }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+
+            override fun onError(error: Int) {
+                if (!active()) return
+                val code = OnDeviceRecognition.errorCode(error)
+                // Only ordinary end-of-speech errors may finish an already buffered result.
+                // Language/service failures discard it rather than returning false success.
+                if (pendingTranscript != null && (code == "no_match" || code == "speech_timeout")) return
+                fail(code)
+            }
+
+            override fun onResults(results: Bundle?) {
+                if (!active()) return
+                val best = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()?.trim().orEmpty()
+                if (best.isBlank()) {
+                    if (pendingTranscript == null) fail("no_match")
+                    return
+                }
+                pendingTranscript = listOfNotNull(pendingTranscript, best).joinToString(" ")
+                Timber.d("AndroidSTT: result buffered")
+                scheduleSubmit(token)
+                mainHandler.postDelayed({
+                    if (session == token && pendingTranscript != null) startCycle(token)
+                }, 600L)
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                if (active() && pendingTranscript != null &&
+                    !partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().isNullOrBlank()) {
+                    scheduleSubmit(token)
+                }
+            }
+        })
+        try {
+            sr.startListening(recognizerIntent)
+        } catch (_: SecurityException) {
+            fail("permission_denied")
+        } catch (_: IllegalStateException) {
+            fail("on_device_service_error")
+        } catch (_: UnsupportedOperationException) {
+            fail("on_device_service_error")
+        }
+    }
+
+    private fun scheduleSubmit(token: Int) {
+        submitRunnable?.let(mainHandler::removeCallbacks)
+        submitRunnable = Runnable {
+            if (session != token) return@Runnable
+            val transcript = pendingTranscript ?: return@Runnable
+            val callback = savedOnResult
+            cancelSession()
+            callback?.invoke(transcript)
+        }.also { mainHandler.postDelayed(it, 2_000L) }
+    }
+
+    private fun fail(code: String) {
+        val callback = savedOnError
+        cancelSession()
+        Timber.w("AndroidSTT: stopped (%s)", code)
+        callback?.invoke(code)
+    }
+
+    private fun clearSupportTimeout() {
+        supportTimeout?.let(mainHandler::removeCallbacks)
+        supportTimeout = null
+    }
+
+    private fun cancelSession() {
+        session++
+        savedOnResult = null
+        savedOnError = null
+        pendingTranscript = null
+        submitRunnable?.let(mainHandler::removeCallbacks)
+        submitRunnable = null
+        clearSupportTimeout()
+        recognizer?.cancel()
     }
 
     override fun stopListening() {
-        Timber.d("AndroidSTT: stopListening()")
-        savedOnResult = null
-        savedOnError  = null
-        mainHandler.post {
-            expectingCancel = false
-            cancelPendingSubmit()
-            pendingTranscript = null
-            try { recognizer?.cancel() } catch (_: Exception) {}
-            listening = false
-        }
+        mainHandler.post { cancelSession() }
     }
 
     override fun shutdown() {
-        Timber.d("AndroidSTT: shutdown()")
         mainHandler.post {
-            listening = false
-            cancelPendingSubmit()
-            try { recognizer?.cancel() } catch (_: Exception) {}
-            try { recognizer?.destroy() } catch (_: Exception) {}
+            closed = true
+            cancelSession()
+            recognizer?.destroy()
             recognizer = null
         }
-    }
-
-    // ── Core ──────────────────────────────────────────────────────────────────
-
-    private fun cancelPendingSubmit() {
-        submitRunnable?.let { mainHandler.removeCallbacks(it) }
-        submitRunnable = null
-    }
-
-    private fun doStart(onResult: (String) -> Unit, onError: (String) -> Unit) {
-        lastStartTime = System.currentTimeMillis()
-
-        // Mute STREAM_MUSIC for 600ms to suppress the SpeechRecognizer start beep.
-        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-        mainHandler.postDelayed({ am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0) }, 600)
-
-        // Cancel any in-flight recognition (safe even if idle).
-        try { recognizer?.cancel() } catch (_: Exception) {}
-
-        // Create the recognizer once and keep it alive.
-        if (recognizer == null) {
-            Timber.d("AndroidSTT: creating SpeechRecognizer (one-time)")
-            recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-        }
-        val sr = recognizer!!
-
-        listening = true
-
-        sr.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                Timber.d("AndroidSTT: [SP_STT] MIC HOT - ready for speech")
-            }
-            override fun onBeginningOfSpeech() {
-                Timber.d("AndroidSTT: speech started")
-            }
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {
-                Timber.d("AndroidSTT: speech ended")
-                listening = false
-            }
-            override fun onError(error: Int) {
-                listening = false
-                val code = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH -> "no_match"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "speech_timeout"
-                    SpeechRecognizer.ERROR_AUDIO -> "audio_error"
-                    SpeechRecognizer.ERROR_CLIENT -> "client_error"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "permission_denied"
-                    SpeechRecognizer.ERROR_NETWORK,
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network_error"
-                    SpeechRecognizer.ERROR_SERVER -> "server_error"
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "recognizer_busy"
-                    else -> "unknown_error_$error"
-                }
-                Timber.e("AndroidSTT: error $error → $code")
-
-                // If the recognizer died, null it so the next cycle creates a fresh one.
-                if (error == SpeechRecognizer.ERROR_CLIENT ||
-                    error == SpeechRecognizer.ERROR_AUDIO ||
-                    code.startsWith("unknown_error")) {
-                    Timber.w("AndroidSTT: destroying recognizer after fatal error $error")
-                    try { recognizer?.destroy() } catch (_: Exception) {}
-                    recognizer = null
-                }
-
-                // If we already have buffered speech, any error just means the
-                // mic closed — let the 2s submit timer fire naturally.
-                if (pendingTranscript != null) {
-                    Timber.d("AndroidSTT: error $code with pending transcript — 2s timer will submit")
-                    return
-                }
-
-                // ERROR_CLIENT from our own cancel() before a planned restart
-                // — safe to ignore entirely.
-                if (error == SpeechRecognizer.ERROR_CLIENT && expectingCancel) {
-                    expectingCancel = false
-                    Timber.d("AndroidSTT: expected ERROR_CLIENT from cancel — ignored")
-                    return
-                }
-                expectingCancel = false
-
-                // If the recognizer died, null it so the next cycle creates a fresh one.
-                if (error == SpeechRecognizer.ERROR_CLIENT ||
-                    error == SpeechRecognizer.ERROR_AUDIO ||
-                    code.startsWith("unknown_error")) {
-                    Timber.w("AndroidSTT: destroying recognizer after fatal error $error")
-                    try { recognizer?.destroy() } catch (_: Exception) {}
-                    recognizer = null
-                }
-
-                // Use savedOnError — if stopListening() already nulled it this
-                // is a cancel-induced callback and should be silently dropped.
-                savedOnError?.invoke(code) ?: Timber.d("AndroidSTT: error $code suppressed (session stopped)")
-            }
-            override fun onResults(results: Bundle?) {
-                listening = false
-                val matches = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val best = matches?.firstOrNull()?.trim() ?: ""
-                Timber.d("AndroidSTT: result=\"$best\" (${matches?.size ?: 0} alternatives)")
-                if (BuildConfig.DEBUG) {
-                    matches?.forEachIndexed { i, alt ->
-                        Timber.d("AndroidSTT:   alt[$i]=\"$alt\"")
-                    }
-                }
-
-                if (best.isNotBlank()) {
-                    // Buffer the result and restart the mic so the user can
-                    // keep talking. The 2s silence timer submits when no more
-                    // speech arrives.
-                    val accumulated = listOfNotNull(pendingTranscript, best).joinToString(" ")
-                    pendingTranscript = accumulated
-                    Timber.d("AndroidSTT: buffered=\"$accumulated\" — restarting mic for continuation")
-                    scheduleSubmit()
-                    mainHandler.postDelayed({
-                        val onRes = savedOnResult
-                        val onErr = savedOnError
-                        if (onRes != null && pendingTranscript != null) {
-                            expectingCancel = true
-                            doStart(onRes, onErr ?: {})
-                        }
-                    }, 150)
-                } else {
-                    // Blank result — if we already have buffered speech, the 2s
-                    // timer handles submission. Otherwise treat as no_match.
-                    if (pendingTranscript != null) {
-                        Timber.d("AndroidSTT: blank result with pending — 2s timer will submit")
-                    } else {
-                        savedOnError?.invoke("no_match") ?: Timber.d("AndroidSTT: no_match suppressed (session stopped)")
-                    }
-                }
-            }
-            override fun onPartialResults(partialResults: Bundle?) {
-                val partial = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                if (!partial.isNullOrBlank()) {
-                    Timber.d("AndroidSTT: partial=\"$partial\"")
-                    // Reset the continuation timer on every partial — user is still speaking.
-                    if (pendingTranscript != null) scheduleSubmit()
-                }
-            }
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-
-        Timber.d("AndroidSTT: starting listening")
-        sr.startListening(recognizerIntent)
-    }
-
-    private fun scheduleSubmit() {
-        cancelPendingSubmit()
-        val r = Runnable { submitNow() }
-        submitRunnable = r
-        mainHandler.postDelayed(r, CONTINUATION_WINDOW_MS)
-    }
-
-    private fun submitNow() {
-        cancelPendingSubmit()
-        val transcript = pendingTranscript ?: return
-        pendingTranscript = null
-        val cb = savedOnResult
-        savedOnResult = null
-        savedOnError  = null
-        Timber.d("AndroidSTT: submitting=\"$transcript\"")
-        cb?.invoke(transcript)
     }
 }

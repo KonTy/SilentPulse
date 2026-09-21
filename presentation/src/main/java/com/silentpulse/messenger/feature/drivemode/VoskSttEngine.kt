@@ -9,7 +9,7 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.io.File
 
 /**
@@ -41,7 +41,7 @@ class VoskSttEngine(
 
         val modelDir = File(modelPath)
         if (!modelDir.exists() || !modelDir.isDirectory) {
-            Timber.e("VoskSTT: model directory not found: $modelPath")
+            Timber.e("VoskSTT: model directory not found")
             onError("vosk_model_not_found")
             return
         }
@@ -49,12 +49,13 @@ class VoskSttEngine(
         // Load model if not loaded yet
         if (model == null) {
             try {
-                Timber.d("VoskSTT: loading model from $modelPath")
+                VoskPrivacy.disableNativeLogging()
+                Timber.d("VoskSTT: loading local model")
                 model = Model(modelPath)
                 Timber.d("VoskSTT: model loaded")
             } catch (t: Throwable) {
                 // UnsatisfiedLinkError (JNA incompatibility) extends Error, not Exception
-                Timber.e(t, "VoskSTT: failed to load model")
+                Timber.e("VoskSTT: failed to load model")
                 onError("vosk_model_load_failed")
                 return
             }
@@ -69,16 +70,7 @@ class VoskSttEngine(
             listening = true
 
             service.startListening(object : RecognitionListener {
-                override fun onPartialResult(hypothesis: String?) {
-                    if (hypothesis == null) return
-                    try {
-                        val json = JSONObject(hypothesis)
-                        val partial = json.optString("partial", "")
-                        if (partial.isNotBlank()) {
-                            Timber.d("VoskSTT: partial=\"$partial\"")
-                        }
-                    } catch (_: Exception) {}
-                }
+                override fun onPartialResult(hypothesis: String?) {}
 
                 override fun onResult(hypothesis: String?) {
                     if (!listening) return
@@ -90,14 +82,14 @@ class VoskSttEngine(
                     try {
                         val json = JSONObject(hypothesis)
                         val text = json.optString("text", "").trim()
-                        Timber.d("VoskSTT: result=\"$text\"")
+                        Timber.d("VoskSTT: result received")
                         if (text.isNotBlank()) {
                             mainHandler.post { onResult(text) }
                         } else {
                             mainHandler.post { onError("no_match") }
                         }
                     } catch (e: Exception) {
-                        Timber.e(e, "VoskSTT: failed to parse result")
+                        Timber.e("VoskSTT: failed to parse result")
                         mainHandler.post { onError("vosk_parse_error") }
                     }
                 }
@@ -112,21 +104,21 @@ class VoskSttEngine(
                     try {
                         val json = JSONObject(hypothesis)
                         val text = json.optString("text", "").trim()
-                        Timber.d("VoskSTT: final result=\"$text\"")
+                        Timber.d("VoskSTT: final result received")
                         if (text.isNotBlank()) {
                             mainHandler.post { onResult(text) }
                         } else {
                             mainHandler.post { onError("no_match") }
                         }
                     } catch (e: Exception) {
-                        Timber.e(e, "VoskSTT: failed to parse final result")
+                        Timber.e("VoskSTT: failed to parse final result")
                         mainHandler.post { onError("vosk_parse_error") }
                     }
                 }
 
                 override fun onError(exception: Exception?) {
                     listening = false
-                    Timber.e(exception, "VoskSTT: recognition error")
+                    Timber.e("VoskSTT: recognition error")
                     mainHandler.post { onError("vosk_error") }
                 }
 
@@ -139,7 +131,7 @@ class VoskSttEngine(
 
             Timber.d("VoskSTT: listening started")
         } catch (e: Exception) {
-            Timber.e(e, "VoskSTT: failed to start listening")
+            Timber.e("VoskSTT: failed to start listening")
             listening = false
             onError("vosk_error")
         }

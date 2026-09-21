@@ -184,7 +184,7 @@ class StockQueryHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Stock query: command=\"$command\" → ticker=$ticker")
+        Log.d(TAG, "stock_query_started")
 
         executor.execute {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -192,7 +192,7 @@ class StockQueryHandler(private val context: Context) {
                 val answer = queryYahooFinance(ticker)
                 mainHandler.post { onResult(answer) }
             } catch (e: Exception) {
-                Log.e(TAG, "Stock query failed for $ticker", e)
+                Log.e(TAG, "stock_query_failed type=${e.javaClass.simpleName}")
                 mainHandler.post { onResult("I couldn't fetch the price for $ticker right now. Try again later.") }
             }
         }
@@ -212,7 +212,7 @@ class StockQueryHandler(private val context: Context) {
             .replace(Regex("\\s{2,}"), " ")
             .trim()
 
-        Log.d(TAG, "extractTicker: cleaned=\"$cleaned\"")
+        Log.d(TAG, "stock_ticker_extracted")
 
         // Try longest match first (handles "jp morgan" before "morgan")
         val sortedKeys = TICKER_MAP.keys.sortedByDescending { it.length }
@@ -233,7 +233,7 @@ class StockQueryHandler(private val context: Context) {
 
     private fun queryYahooFinance(ticker: String): String {
         val url = "$BASE_URL/$ticker?interval=1d&range=1d"
-        Log.d(TAG, "Yahoo Finance URL: $url")
+        Log.d(TAG, "finance_request_started")
 
         val body = httpGet(url)
         val json = JSONObject(body)

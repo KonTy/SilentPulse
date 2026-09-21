@@ -17,6 +17,7 @@ import com.jakewharton.rxbinding2.widget.checkedChanges
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider
 import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
+import com.silentpulse.messenger.feature.drivemode.SpeechFailure
 import com.silentpulse.messenger.common.base.QkController
 import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.util.Preferences
@@ -41,6 +42,8 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
     private val voskImportRow: LinearLayout       get() = rootView!!.findViewById(R.id.voskImportRow)
     private val voskModelRow: LinearLayout        get() = rootView!!.findViewById(R.id.voskModelRow)
     private val voskModelSummary: TextView        get() = rootView!!.findViewById(R.id.voskModelSummary)
+    private val whisperSelection: TextView        get() = rootView!!.findViewById(R.id.whisperSelection)
+    private var renderingEngineSelection = false
 
     // ── Card 3 – TTS ─────────────────────────────────────────────────────────
     private val ttsCard: MaterialCardView         get() = rootView!!.findViewById(R.id.ttsCard)
@@ -122,14 +125,16 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
         // ── Card 2: STT engine toggle ─────────────────────────────────────────
 
         sttEngineToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
+            if (!isChecked || renderingEngineSelection) return@addOnButtonCheckedListener
             val engine = when (checkedId) {
                 R.id.sttBtnVosk -> "vosk"
+                R.id.sttBtnWhisper -> "whisper"
                 else             -> "android"
             }
             prefs.driveModeSttEngine.set(engine)
             googleSttSection.isVisible = (engine == "android")
             voskSection.isVisible      = (engine == "vosk")
+            whisperSelection.isVisible = (engine == "whisper")
         }
 
         voskDownloadRow.clicks()
@@ -150,10 +155,15 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
         // ── Card 3: TTS engine toggle ─────────────────────────────────────────
 
         ttsEngineToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
+            if (!isChecked || renderingEngineSelection) return@addOnButtonCheckedListener
             val engine = when (checkedId) {
                 R.id.ttsBtnKokoro -> "kokoro"
                 else              -> "android"
+            }
+            if (engine == "kokoro" && prefs.driveModeTtsEngine.get() != "kokoro") {
+                SpeechFailure.show(context, "kokoro_privacy_unavailable")
+                renderEngineChoice(ttsEngineToggle, R.id.ttsBtnAndroid)
+                return@addOnButtonCheckedListener
             }
             prefs.driveModeTtsEngine.set(engine)
             googleTtsSection.isVisible = (engine == "android")
@@ -183,6 +193,9 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
             .autoDispose(scope())
             .subscribe { showKokoroSpeedPicker(prefs.driveModeKokoroSpeed.get()) }
 
+        listOf(kokoroDownloadRow, kokoroImportRow, kokoroModelRow, kokoroSpeakerRow, kokoroSpeedRow)
+            .forEach { it.isVisible = false }
+
         // ── Card 4: Behavior ─────────────────────────────────────────────────
 
         voiceReplySwitch.checkedChanges()
@@ -207,6 +220,16 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
             .subscribe { showChangeKeywordDialog() }
     }
 
+    private fun renderEngineChoice(group: MaterialButtonToggleGroup, id: Int) {
+        if (group.checkedButtonId == id) return
+        renderingEngineSelection = true
+        try {
+            group.check(id)
+        } finally {
+            renderingEngineSelection = false
+        }
+    }
+
     override fun render(state: AssistantState) {
         val enabled = state.driveModeWakeWordEnabled
 
@@ -220,21 +243,23 @@ class AssistantController : QkController<AssistantView, AssistantState, Assistan
 
         if (enabled) {
             // STT engine
-            val sttIsVosk = state.sttEngine == "vosk"
-            val sttBtnToCheck = if (sttIsVosk) R.id.sttBtnVosk else R.id.sttBtnGoogle
-            if (sttEngineToggle.checkedButtonId != sttBtnToCheck) {
-                sttEngineToggle.check(sttBtnToCheck)
+            val sttBtnToCheck = when (state.sttEngine) {
+                "vosk" -> R.id.sttBtnVosk
+                "whisper" -> R.id.sttBtnWhisper
+                else -> R.id.sttBtnGoogle
             }
-            googleSttSection.isVisible = !sttIsVosk
-            voskSection.isVisible      = sttIsVosk
+            rootView!!.findViewById<View>(R.id.sttBtnWhisper).isEnabled =
+                state.sttEngine == "whisper" || File(prefs.driveModeWhisperModelPath.get()).isFile
+            renderEngineChoice(sttEngineToggle, sttBtnToCheck)
+            googleSttSection.isVisible = state.sttEngine == "android"
+            voskSection.isVisible      = state.sttEngine == "vosk"
+            whisperSelection.isVisible = state.sttEngine == "whisper"
             voskModelSummary.text = state.voskModelName
 
             // TTS engine
             val ttsIsKokoro = state.ttsEngine == "kokoro"
             val ttsBtnToCheck = if (ttsIsKokoro) R.id.ttsBtnKokoro else R.id.ttsBtnAndroid
-            if (ttsEngineToggle.checkedButtonId != ttsBtnToCheck) {
-                ttsEngineToggle.check(ttsBtnToCheck)
-            }
+            renderEngineChoice(ttsEngineToggle, ttsBtnToCheck)
             googleTtsSection.isVisible = !ttsIsKokoro
             kokoroSection.isVisible    = ttsIsKokoro
 

@@ -11,13 +11,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
+import com.silentpulse.messenger.feature.drivemode.SpeechLog as Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.util.Preferences
 import kotlinx.coroutines.*
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -64,7 +64,7 @@ class DriveModeService : NotificationListenerService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Timber.d("DriveModeService onStartCommand: ${intent?.action}")
+        Timber.d("DriveModeService: start command")
         
         when (intent?.action) {
             ACTION_VOICE_REPLY -> {
@@ -84,7 +84,7 @@ class DriveModeService : NotificationListenerService() {
     }
 
     fun handleIncomingNotification(app: String, sender: String, messageBody: String, notificationKey: String) {
-        Timber.d("Handling notification from $app - $sender: $messageBody")
+        Timber.d("Handling notification")
 
         // ── Guard: drive mode still on? ──────────────────────────────────────
         if (!isDriveModeEnabledFromPrefs()) {
@@ -129,6 +129,7 @@ class DriveModeService : NotificationListenerService() {
         // Speak the message
         ttsEngine?.speak(
             text = textToSpeak,
+            onError = ::handleTtsError,
             onDone = {
                 // Check drive mode is still on before starting STT
                 if (!isDriveModeEnabledFromPrefs()) {
@@ -218,8 +219,7 @@ class DriveModeService : NotificationListenerService() {
 
         engine.startListening(
             onResult = { recognizedText ->
-                Log.d("DriveModeService", "STT result: \"$recognizedText\"")
-                Timber.d("Recognized speech: $recognizedText")
+                Timber.d("STT result received")
                 activeSttEngine = null
 
                 val lower = recognizedText.lowercase()
@@ -249,6 +249,7 @@ class DriveModeService : NotificationListenerService() {
                             }
                             ttsEngine?.speak(
                                 text = replayText,
+                                onError = ::handleTtsError,
                                 onDone = {
                                     if (isDriveModeEnabledFromPrefs()) {
                                         startVoiceListening()
@@ -328,9 +329,18 @@ class DriveModeService : NotificationListenerService() {
                 "Speech recognition is not available. " +
                 "Make sure a speech recognition app is installed."
 
-            else -> "Speech recognition error. Please try again."
+            else -> SpeechFailure.message(code)
         }
+        updateNotification(msg)
+        SpeechFailure.show(this, code)
         ttsEngine?.speak(msg)
+    }
+
+    private fun handleTtsError(code: String) {
+        isProcessing = false
+        activeSttEngine?.stopListening()
+        updateNotification(SpeechFailure.message(code))
+        SpeechFailure.show(this, code)
     }
 
     private fun hasRecordAudioPermission(): Boolean {

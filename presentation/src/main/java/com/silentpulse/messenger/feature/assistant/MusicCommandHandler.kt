@@ -112,7 +112,7 @@ class MusicCommandHandler(private val context: Context) {
             onResult("Resuming media.")
             return
         }
-        Log.d(TAG, "Music search query: \"$query\"")
+        Log.d(TAG, "music_search_started")
 
         val track = searchMediaStore(query, audiobookOnly = false)
         if (track == null) {
@@ -120,7 +120,7 @@ class MusicCommandHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Found track: \"${track.title}\" by \"${track.artist}\" → ${track.uri}")
+        Log.d(TAG, "music_track_found")
         launchWithPendingIntent(track.uri, VLC_PACKAGE)
         val artistPart = if (track.artist.isNotEmpty()) " by ${track.artist}" else ""
         onResult("Playing ${track.title}$artistPart.")
@@ -162,12 +162,12 @@ class MusicCommandHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Book search query: \"$query\"")
+        Log.d(TAG, "audiobook_search_started")
         val track = searchMediaStore(query, audiobookOnly = true)
             ?: searchMediaStore(query, audiobookOnly = false)  // broader fallback
 
         if (track != null) {
-            Log.d(TAG, "Found book: \"${track.title}\" → ${track.uri}")
+            Log.d(TAG, "audiobook_found")
             launchWithPendingIntent(track.uri, VOICE_PACKAGE)
             onResult("Opening ${track.title} in Voice.")
         } else {
@@ -203,7 +203,7 @@ class MusicCommandHandler(private val context: Context) {
                     projection, selection, args,
                     "${MediaStore.Audio.Media.TITLE} ASC"
                 )
-            } catch (e: Exception) { Log.e(TAG, "MediaStore query error", e); null }
+            } catch (e: Exception) { Log.e(TAG, "media_query_failed type=${e.javaClass.simpleName}"); null }
                 ?: return null
             cursor.use { c ->
                 while (c.moveToNext()) {
@@ -261,7 +261,7 @@ class MusicCommandHandler(private val context: Context) {
             }
             pi.send(context, 0, null, null, null, null, opts.toBundle())
         } catch (e: Exception) {
-            Log.e(TAG, "launchWithPendingIntent failed for $targetPkg: ${e.message}", e)
+            Log.e(TAG, "media_pending_intent_failed type=${e.javaClass.simpleName}")
         }
     }
 
@@ -281,7 +281,7 @@ class MusicCommandHandler(private val context: Context) {
             }
             pi.send(context, 0, null, null, null, null, opts.toBundle())
         } catch (e: Exception) {
-            Log.e(TAG, "launchApp failed for $pkg: ${e.message}", e)
+            Log.e(TAG, "media_launch_failed type=${e.javaClass.simpleName}")
         }
     }
 }

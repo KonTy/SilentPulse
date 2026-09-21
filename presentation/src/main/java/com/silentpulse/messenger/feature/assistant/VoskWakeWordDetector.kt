@@ -1,7 +1,8 @@
 package com.silentpulse.messenger.feature.assistant
 
 import android.content.Context
-import android.util.Log
+import com.silentpulse.messenger.feature.drivemode.SpeechLog as Log
+import com.silentpulse.messenger.feature.drivemode.VoskPrivacy
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
@@ -106,6 +107,12 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
      * [onModelError] fires if unpacking or loading fails.
      */
     fun init(onModelReady: () -> Unit, onModelError: (String) -> Unit) {
+        try {
+            VoskPrivacy.disableNativeLogging()
+        } catch (_: LinkageError) {
+            onModelError("Local wake word library unavailable. Restart after installing a compatible app build.")
+            return
+        }
         Log.d(TAG, "Unpacking Vosk model from assets…")
         StorageService.unpack(context, "model-en-us", "model",
             { model ->
@@ -117,14 +124,14 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                     this.model = model
                     onModelReady()
                 } catch (t: Throwable) {
-                    val msg = "Vosk JNA incompatible with this device: ${t.message}"
-                    Log.e(TAG, msg, t)
+                    val msg = "Vosk JNA incompatible with this device"
+                    Log.e(TAG, msg)
                     onModelError(msg)
                 }
             },
             { exception ->
-                val msg = "Failed to load Vosk model: ${exception.message}"
-                Log.e(TAG, msg, exception)
+                val msg = "Failed to load installed Vosk model"
+                Log.e(TAG, msg)
                 onModelError(msg)
             }
         )
@@ -226,8 +233,8 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                 }
 
                 override fun onError(e: Exception?) {
-                    val msg = "Vosk error: ${e?.message}"
-                    Log.e(TAG, msg, e)
+                    val msg = "Vosk recognition failed"
+                    Log.e(TAG, msg)
                     onError?.invoke(msg)
                 }
 
@@ -238,11 +245,11 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                 }
             })
 
-            Log.d(TAG, "Vosk listening for wake word \"$wakeWord\" (grammar has ${grammar.count { it == ',' } + 1} tokens)")
+            Log.d(TAG, "Vosk wake word listening")
             onReady?.invoke()
         } catch (e: IOException) {
-            val msg = "Failed to start Vosk SpeechService: ${e.message}"
-            Log.e(TAG, msg, e)
+            val msg = "Failed to start Vosk SpeechService"
+            Log.e(TAG, msg)
             onError?.invoke(msg)
         }
     }
@@ -275,17 +282,17 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
                     if (consecutivePrimes >= MIN_CONSECUTIVE_PRIMES
                         && duration >= MIN_PRIME_DURATION_MS
                         && !wakeWordPrimed) {
-                        Log.d("SP_WAKE", "[PRIME] armed after $consecutivePrimes consecutive partials, ${duration}ms span")
+                        Log.d("SP_WAKE", "[PRIME] armed; count=$consecutivePrimes")
                         wakeWordPrimed = true
                     } else if (!wakeWordPrimed) {
-                        Log.d("SP_WAKE", "[PARTIAL] \"$text\" ($consecutivePrimes/${MIN_CONSECUTIVE_PRIMES} needed, ${duration}ms/${MIN_PRIME_DURATION_MS}ms)")
+                        Log.d("SP_WAKE", "[PARTIAL] count=$consecutivePrimes")
                     }
                 } else {
                     if (consecutivePrimes > 0) {
-                        Log.d("SP_WAKE", "[PARTIAL-RESET] noise partial=\"$text\" (had $consecutivePrimes primes)")
+                        Log.d("SP_WAKE", "[PARTIAL-RESET] count=$consecutivePrimes")
                     } else if (text.isNotEmpty() && !text.equals("[unk]", ignoreCase = true)) {
                         // Log distractor hits to verify noise distributes away from wake word
-                        Log.d("SP_WAKE", "[DISTRACTOR] \"$text\"")
+                        Log.d("SP_WAKE", "[DISTRACTOR]")
                     }
                     wakeWordPrimed = false
                     consecutivePrimes = 0
@@ -298,7 +305,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
 
             // Expire stale primes
             if (wakeWordPrimed && now - primedAtMs > 3_000L) {
-                Log.d("SP_WAKE", "[STALE-PRIME] discarded after ${now - primedAtMs}ms")
+                Log.d("SP_WAKE", "[STALE-PRIME] discarded")
                 wakeWordPrimed = false
                 consecutivePrimes = 0
             }
@@ -310,7 +317,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             // (some words only appear in partials; [unk] final + prime = trusted hit)
             if (!isWakeWord && !(isUnk && wakeWordPrimed)) {
                 if (text.isNotEmpty()) {
-                    Log.d("SP_WAKE", "[FINAL-MISS] text=\"$text\" primed=$wakeWordPrimed")
+                    Log.d("SP_WAKE", "[FINAL-MISS] primed=$wakeWordPrimed")
                 }
                 wakeWordPrimed = false
                 consecutivePrimes = 0
@@ -329,7 +336,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             // Require the prime window to still be fresh (< 3s) and log generously.
             if (isUnk && wakeWordPrimed) {
                 val primeDuration = primedAtMs - primeStartMs
-                Log.d("SP_WAKE", "[UNK-PRIMED] primes=$consecutivePrimes primeDuration=${primeDuration}ms finalJson=$hypothesis")
+                Log.d("SP_WAKE", "[UNK-PRIMED] count=$consecutivePrimes")
             }
 
             // In a 2-word grammar (wake word + [unk]), Vosk regularly
@@ -339,7 +346,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             // matching partials spanning ≥200ms before we'll act on it.
             // This eliminates all silence false triggers.
             if (!wakeWordPrimed) {
-                Log.d("SP_WAKE", "[COLD-REJECT] final=\"$text\" conf=${"%.2f".format(conf)} — not primed, ignoring")
+                Log.d("SP_WAKE", "[COLD-REJECT]")
                 consecutivePrimes = 0
                 return
             }
@@ -350,7 +357,7 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
 
             // Cooldown guard
             if (now - lastTriggerMs < COOLDOWN_MS) {
-                Log.d("SP_WAKE", "[COOLDOWN] suppressed ${now - lastTriggerMs}ms ago (min ${COOLDOWN_MS}ms)")
+                Log.d("SP_WAKE", "[COOLDOWN] suppressed")
                 wakeWordPrimed = false
                 consecutivePrimes = 0
                 return
@@ -360,12 +367,12 @@ class VoskWakeWordDetector(private val context: Context, private val wakeWord: S
             lastTriggerMs  = now
             wakeWordPrimed = false
             consecutivePrimes = 0
-            Log.d("SP_WAKE", ">>>[FIRE] conf=${"%.2f".format(conf)} primed=$wasPrimed msSincePrime=${now-primedAtMs}")
+            Log.d("SP_WAKE", "[FIRE] primed=$wasPrimed")
             isPaused = true
             stopInternalService()
             onWakeWord?.invoke()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse Vosk JSON: $hypothesis", e)
+            Log.w(TAG, "Failed to parse Vosk result")
         }
     }
 }

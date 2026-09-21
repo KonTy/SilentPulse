@@ -55,9 +55,9 @@ class DebugTestReceiver : BroadcastReceiver() {
         val reply = RemoteInput.getResultsFromIntent(intent)
             ?.getCharSequence(KEY_REPLY)?.toString()
 
-        Timber.i("DebugTest: REPLY RECEIVED: \"$reply\"")
+        Timber.i("debug_reply_received chars=${reply?.length ?: 0}")
         // Also log directly so it's visible without Timber tag filtering
-        android.util.Log.i("DebugTestReceiver", ">>> REPLY RECEIVED: \"$reply\" <<<")
+        android.util.Log.i("DebugTestReceiver", "debug_reply_received chars=${reply?.length ?: 0}")
     }
 
     private fun postTestNotification(context: Context, sender: String, message: String) {
@@ -105,7 +105,7 @@ class DebugTestReceiver : BroadcastReceiver() {
 
         nm.notify(notifId, notification)
 
-        android.util.Log.d("DebugTestReceiver", "Test notification posted (id=$notifId) — from: $sender, msg: $message")
-        Timber.d("DebugTest: posted test notification from $sender: $message")
+        android.util.Log.d("DebugTestReceiver", "debug_notification_posted")
+        Timber.d("debug_notification_posted")
     }
 }

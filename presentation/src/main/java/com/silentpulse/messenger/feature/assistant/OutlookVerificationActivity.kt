@@ -125,7 +125,7 @@ class OutlookVerificationActivity : Activity() {
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             // Handle popups: load popup URLs in the same WebView (MFA flows use window.open)
-            webChromeClient = object : android.webkit.WebChromeClient() {
+            webChromeClient = object : DiagnosticFreeWebChromeClient() {
                 override fun onCreateWindow(
                     view: WebView?, isDialog: Boolean, isUserGesture: Boolean,
                     resultMsg: android.os.Message?
@@ -135,11 +135,12 @@ class OutlookVerificationActivity : Activity() {
                     if (transport != null) {
                         // Create a temporary WebView to capture the URL, then redirect to main
                         val popupView = WebView(this@OutlookVerificationActivity).apply {
+                            webChromeClient = DiagnosticFreeWebChromeClient()
                             settings.javaScriptEnabled = true
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                     val url = request?.url?.toString() ?: return false
-                                    Log.d(TAG, "Popup redirect → loading in main WebView: $url")
+                                    Log.d(TAG, "popup_redirect")
                                     webView.loadUrl(url)
                                     return true
                                 }
@@ -154,17 +155,15 @@ class OutlookVerificationActivity : Activity() {
             }
             webViewClient = object : WebViewClient() {
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    val host = request?.url?.host ?: "?"
                     val code = error?.errorCode ?: -1
-                    Log.e(TAG, "ERR [$code] host=$host url=${request?.url}")
+                    Log.e(TAG, "web_error code=$code")
                 }
                 override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                    val host = android.net.Uri.parse(error?.url ?: "").host ?: "?"
-                    Log.e(TAG, "SSL BLOCKED host=$host  url=${error?.url}")
-                    // Do NOT proceed — let it fail so blocked domains are visible in logcat
+                    Log.e(TAG, "ssl_blocked code=${error?.primaryError}")
+                    // Never bypass certificate validation.
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    Log.d(TAG, "Page finished: $url")
+                    Log.d(TAG, "page_finished")
                     url?.let { urlBar.setText(it) }
                 }
             }

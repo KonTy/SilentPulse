@@ -73,8 +73,38 @@ class DriveModeWidgetLayoutTest {
             val icon = resource("drawable/${button.android("src").removePrefix("@drawable/")}.xml")
             assertTrue(
                 "$id must fit at full icon size in a single row",
-                icon.dp("height") + 2 * button.dp("padding") <= availableHeight
+                icon.dp("height") + button.dp("paddingTop") + button.dp("paddingBottom") <= availableHeight
             )
+        }
+    }
+
+    @Test
+    fun `all four icons fit at two three and four columns without shrinking`() {
+        val provider = resource("xml/widget_drive_mode_info.xml")
+        val layout = resource("layout/widget_drive_mode.xml")
+        val buttons = layout.getElementsByTagName("ImageButton")
+
+        assertEquals("2", provider.android("targetCellWidth"))
+        assertTrue(provider.dp("minWidth") in 1..110)
+        assertTrue(provider.dp("minResizeWidth") in 1..110)
+        assertTrue("horizontal" in provider.android("resizeMode").split("|"))
+        assertEquals(4, buttons.length)
+
+        // Legacy launcher size hints are 70 * columns - 30 dp.
+        for (columns in 2..4) {
+            val width = 70 * columns - 30
+            val slotWidth = (width - layout.dp("paddingStart") - layout.dp("paddingEnd")) / 4
+            for (index in 0 until buttons.length) {
+                val button = buttons.item(index) as Element
+                val icon = resource("drawable/${button.android("src").removePrefix("@drawable/")}.xml")
+                assertEquals("0dp", button.android("layout_width"))
+                assertEquals("1", button.android("layout_weight"))
+                assertTrue(button.dp("minWidth") <= slotWidth)
+                assertTrue(
+                    "${button.android("id")} must fit at $columns columns without shrinking its icon",
+                    icon.dp("width") + button.dp("paddingStart") + button.dp("paddingEnd") <= slotWidth
+                )
+            }
         }
     }
 }

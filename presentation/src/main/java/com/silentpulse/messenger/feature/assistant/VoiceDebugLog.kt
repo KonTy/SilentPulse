@@ -10,6 +10,8 @@ import com.silentpulse.messenger.BuildConfig
  * Every function is `inline` and the body is wrapped in `if (BuildConfig.DEBUG)`.
  * R8/ProGuard eliminates the entire call site — including string concatenation —
  * in release builds.  Zero overhead in production.
+ * Callers must supply event codes/counts only, never transcripts, contacts,
+ * message bodies, URLs, or exception messages. This logger never writes files.
  *
  * ## Logcat filter for the full voice pipeline (paste into Android Studio logcat):
  * ```
@@ -101,14 +103,11 @@ object VoiceDebugLog {
     // ── Convenience: dump a list of match candidates ─────────────────────────
 
     @JvmStatic
-    inline fun launchCandidates(tag: String, candidates: List<Triple<String, String, Int>>) {
+    inline fun launchCandidates(@Suppress("UNUSED_PARAMETER") tag: String, candidates: List<Triple<String, String, Int>>) {
         if (BuildConfig.DEBUG) {
-            if (candidates.isEmpty()) {
-                Log.d(LAUNCH, "[$tag] no candidates matched")
-            } else {
-                candidates.take(5).forEachIndexed { i, (label, pkg, dist) ->
-                    Log.d(LAUNCH, "[$tag] candidate[$i] label=\"$label\" pkg=$pkg dist=$dist")
-                }
+            Log.d(LAUNCH, "launch_candidates count=${candidates.size}")
+            candidates.take(5).forEachIndexed { i, (_, _, dist) ->
+                Log.d(LAUNCH, "launch_candidate index=$i distance=$dist")
             }
         }
     }

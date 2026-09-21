@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.io.Closeable
 import java.util.concurrent.Executors
 
@@ -78,7 +78,7 @@ class WhisperContext(private val modelPath: String) : Closeable {
         language: String? = null,
         translate: Boolean = false
     ): String = withContext(inferenceDispatcher) {
-        Timber.d("Whisper: transcribing ${samples.size} samples, lang=$language")
+        Timber.d("Whisper: transcribing ${samples.size} samples")
         WhisperLib.fullTranscribe(nativePtr, samples, language, translate)
         val count = WhisperLib.getTextSegmentCount(nativePtr)
         buildString {

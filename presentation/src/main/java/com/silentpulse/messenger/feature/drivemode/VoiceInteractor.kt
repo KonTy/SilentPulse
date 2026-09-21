@@ -3,7 +3,9 @@ package com.silentpulse.messenger.feature.drivemode
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import timber.log.Timber
+import android.speech.tts.TextToSpeech
+import com.silentpulse.messenger.injection.appComponent
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.util.Locale
 
 /**
@@ -13,8 +15,7 @@ import java.util.Locale
  * [SilentPulseNotificationListener] and [VoiceAssistantService]:
  *
  *  1. **`speak(text, onDone)`** — auto-detects the Unicode script of [text]
- *     and sets the TTS locale before each utterance, then restores the
- *     default locale in the onDone callback.
+ *     and validates the TTS locale before each utterance.
  *
  *  2. **`interrupt(onResume)`** — the ONE canonical "stop TTS and resume":
  *     `AndroidTtsEngine.stop()` drops all pending `onDone` callbacks;
@@ -32,16 +33,47 @@ import java.util.Locale
  * @param onReady  called on the main thread once TTS init succeeds.
  *                 Wire `maybeStartListening()` here in [VoiceAssistantService].
  */
-class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
+class VoiceInteractor internal constructor(
+    private val context: Context,
+    private val onFailure: (String) -> Unit,
+    onReady: (() -> Unit)?,
+    createPlatformEngine: ((TextToSpeech.OnInitListener) -> TextToSpeech)?
+) {
+    constructor(
+        context: Context,
+        onFailure: (String) -> Unit = {},
+        onReady: (() -> Unit)? = null
+    ) : this(context, onFailure, onReady, null)
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    internal val ttsEngine: AndroidTtsEngine = AndroidTtsEngine(context) { ready ->
-        if (ready) mainHandler.post { onReady?.invoke() }
-    }
+    internal val ttsEngine: TtsEngine = appComponent.ttsEngineFactory().createEngine(
+        onInitialized = { ready ->
+            mainHandler.post {
+                if (ready) onReady?.invoke()
+                else reportFailure(ttsEngine.failureReason ?: "tts_init_failed")
+            }
+        },
+        createPlatformEngine = createPlatformEngine
+    )
 
-    /** True once the underlying [AndroidTtsEngine] has finished initialising. */
+    /** True once the selected offline engine is ready. */
     val isReady: Boolean get() = ttsEngine.isReady
+    val failureReason: String? get() = ttsEngine.failureReason
+    private var generation = 0
+    private var closed = false
+    private data class Utterance(val text: String, val onDone: () -> Unit)
+    private val pending = java.util.ArrayDeque<Utterance>()
+    private var speaking = false
+
+    private fun reportFailure(code: String) {
+        generation++
+        pending.clear()
+        speaking = false
+        ttsEngine.stop()
+        SpeechFailure.show(context, code)
+        onFailure(code)
+    }
 
     // ── TTS ───────────────────────────────────────────────────────────────────
 
@@ -49,25 +81,41 @@ class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
      * Speak [text] and fire [onDone] when the utterance completes.
      *
      * Language auto-detection: if [text] contains ≥ 30% non-Latin letters the
-     * TTS locale is switched for this utterance and restored to [Locale.getDefault]
-     * in [onDone].
+     * TTS locale is selected for this utterance; Latin text uses [Locale.getDefault].
+     * A selection or synthesis failure aborts the queue through [onFailure], not [onDone].
      *
      * **Important:** if [interrupt] is called before [onDone] fires, [onDone]
      * is silently discarded (the callbacks map is cleared by `stop()`).
      * Pass recovery logic to [interrupt] instead of relying on [onDone].
      */
     fun speak(text: String, onDone: () -> Unit = {}) {
-        val detected = detectLocaleByScript(text)
-        if (detected != null) {
-            ttsEngine.setLocale(detected)
-            Timber.d("VoiceInteractor TTS [${detected.language}] (${text.length} chars): $text")
-        } else {
-            ttsEngine.setLocale(Locale.getDefault())
-            Timber.d("VoiceInteractor TTS (${text.length} chars): $text")
+        val token = generation
+        mainHandler.post {
+            if (closed || token != generation) return@post
+            pending.addLast(Utterance(text, onDone))
+            speakNext()
         }
-        ttsEngine.speak(text) {
-            if (detected != null) ttsEngine.setLocale(Locale.getDefault())
-            onDone()
+    }
+
+    private fun speakNext() {
+        if (closed || speaking || pending.isEmpty()) return
+        val utterance = pending.removeFirst()
+        val token = generation
+        if (!ttsEngine.setLocale(detectLocaleByScript(utterance.text) ?: Locale.getDefault())) {
+            reportFailure(ttsEngine.failureReason ?: "tts_offline_voice_unavailable")
+            return
+        }
+        speaking = true
+        Timber.d("VoiceInteractor: submitting offline speech")
+        ttsEngine.speak(utterance.text, onError = { code ->
+            mainHandler.post { if (token == generation) reportFailure(code) }
+        }) {
+            mainHandler.post {
+                if (token != generation) return@post
+                speaking = false
+                utterance.onDone()
+                speakNext()
+            }
         }
     }
 
@@ -82,6 +130,9 @@ class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
      * so fixing this method fixes the behaviour everywhere.
      */
     fun interrupt(onResume: (() -> Unit)? = null) {
+        generation++
+        pending.clear()
+        speaking = false
         ttsEngine.stop()                         // clears completionCallbacks — intentional
         mainHandler.post { onResume?.invoke() }
     }
@@ -89,6 +140,9 @@ class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     fun destroy() {
+        generation++
+        closed = true
+        pending.clear()
         ttsEngine.shutdown()
     }
 
@@ -99,7 +153,7 @@ class VoiceInteractor(context: Context, onReady: (() -> Unit)? = null) {
      *
      * Returns a [Locale] for the dominant non-Latin script when ≥ 30% of
      * letter characters belong to that script, or **null** for Latin/ASCII text
-     * (TTS stays on whatever locale the engine currently has).
+     * (the configured default locale is used).
      *
      * Zero external dependencies — fully offline.  Previously copy-pasted
      * verbatim in both [SilentPulseNotificationListener] and [VoiceAssistantService].

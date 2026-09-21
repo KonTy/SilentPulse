@@ -171,7 +171,7 @@ public class EncodedStringValue implements Cloneable {
                 newTextString.write(textString);
             } catch (IOException e) {
                 Timber.e(e, "logging error");
-                e.printStackTrace();
+                timber.log.Timber.w("message_encoding_failed type=%s", e.getClass().getSimpleName());
                 throw new NullPointerException(
                         "appendTextString: failed when write a new Text-string");
             }
@@ -195,7 +195,7 @@ public class EncodedStringValue implements Cloneable {
             return new EncodedStringValue(mCharacterSet, dstBytes);
         } catch (Exception e) {
             Timber.e(e, "logging error");
-            e.printStackTrace();
+            timber.log.Timber.w("message_encoding_failed type=%s", e.getClass().getSimpleName());
             throw new CloneNotSupportedException(e.getMessage());
         }
     }

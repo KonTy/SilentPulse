@@ -62,6 +62,9 @@ interface AppComponent {
     fun conversationInfoBuilder(): ConversationInfoComponent.Builder
     fun themePickerBuilder(): ThemePickerComponent.Builder
 
+    fun sttEngineFactory(): com.silentpulse.messenger.feature.drivemode.SttEngineFactory
+    fun ttsEngineFactory(): com.silentpulse.messenger.feature.drivemode.TtsEngineFactory
+
     fun inject(application: QKApplication)
 
     fun inject(controller: AboutController)

@@ -45,7 +45,7 @@ class BraveSearchHandler(private val context: Context) {
         fun saveApiKey(context: Context, key: String) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putString(KEY_API_KEY, key.trim()).apply()
-            Log.i(TAG, "Brave API key saved (${key.length} chars)")
+            Log.i(TAG, "brave_api_key_saved")
         }
 
         fun clearApiKey(context: Context) {
@@ -74,7 +74,7 @@ class BraveSearchHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Brave query: \"$query\"")
+        Log.d(TAG, "brave_query_started")
 
         executor.execute {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -82,7 +82,7 @@ class BraveSearchHandler(private val context: Context) {
                 val answer = doSearch(query)
                 mainHandler.post { onResult(answer) }
             } catch (e: Exception) {
-                Log.e(TAG, "Brave search failed", e)
+                Log.e(TAG, "brave_query_failed type=${e.javaClass.simpleName}")
                 mainHandler.post {
                     onResult("Search failed. Try again or rephrase your question.")
                 }
@@ -119,11 +119,11 @@ class BraveSearchHandler(private val context: Context) {
                 val summaryJson = JSONObject(summaryBody)
                 val summary = extractSummary(summaryJson)
                 if (!summary.isNullOrBlank()) {
-                    Log.d(TAG, "AI summary: $summary")
+                    Log.d(TAG, "brave_summary_received chars=${summary.length}")
                     return summary
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Summarizer call failed, falling back to snippets", e)
+                Log.w(TAG, "brave_summary_failed type=${e.javaClass.simpleName}")
             }
         }
 

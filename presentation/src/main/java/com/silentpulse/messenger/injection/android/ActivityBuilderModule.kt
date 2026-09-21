@@ -42,6 +42,7 @@ import com.silentpulse.messenger.feature.qkreply.QkReplyActivityModule
 import com.silentpulse.messenger.feature.scheduled.ScheduledActivity
 import com.silentpulse.messenger.feature.scheduled.ScheduledActivityModule
 import com.silentpulse.messenger.feature.settings.SettingsActivity
+import com.silentpulse.messenger.feature.worldclock.WorldClockConfigureActivity
 import com.silentpulse.messenger.injection.scope.ActivityScope
 import dagger.Module
 import dagger.android.ContributesAndroidInjector
@@ -100,6 +101,10 @@ abstract class ActivityBuilderModule {
     @ActivityScope
     @ContributesAndroidInjector(modules = [])
     abstract fun bindSettingsActivity(): SettingsActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindWorldClockConfigureActivity(): WorldClockConfigureActivity
 
     @ActivityScope
     @ContributesAndroidInjector(modules = [])

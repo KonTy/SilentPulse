@@ -3,8 +3,10 @@ package com.silentpulse.messenger.feature.assistant
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import timber.log.Timber
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Discovers assistant-capable apps and routes voice commands to them via broadcast.
@@ -24,7 +26,10 @@ import java.util.Locale
  *
  * SilentPulse does NOT know what each app does. It's just the ears and mouth.
  */
-class CommandRouter(private val context: Context) {
+class CommandRouter(
+    private val context: Context,
+    elapsedTime: () -> Long = SystemClock::elapsedRealtime
+) {
 
     data class DiscoveredApp(
         val packageName: String,
@@ -37,6 +42,7 @@ class CommandRouter(private val context: Context) {
 
     /** Cached list of assistant-capable apps. Refreshed on demand. */
     private var discoveredApps: List<DiscoveredApp> = emptyList()
+    private val replySessions = AssistantReplySessions(elapsedTime)
 
     /** Words stripped from the command before forwarding to the target app */
     private val ROUTING_BOILERPLATE = listOf(
@@ -53,30 +59,32 @@ class CommandRouter(private val context: Context) {
         val intent = Intent(ACTION_ASSISTANT_CAPABLE)
         val resolved = context.packageManager.queryBroadcastReceivers(
             intent,
-            PackageManager.GET_META_DATA or PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
+            PackageManager.GET_META_DATA
         )
 
-        val ownPackage = context.packageName
         discoveredApps = resolved.mapNotNull { info ->
-            val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
-            // Skip our own package — debug mock receivers must not shadow real external apps
-            if (pkg == ownPackage) return@mapNotNull null
-            val label = info.activityInfo?.loadLabel(context.packageManager)?.toString() ?: pkg
-            val prefixes = info.activityInfo?.metaData
+            val receiver = info.activityInfo ?: return@mapNotNull null
+            val pkg = receiver.packageName
+            if (!receiver.enabled || !receiver.exported || !hasApprovedSignature(pkg) ||
+                pkg == MICROCORE_PACKAGE && receiver.metaData?.getInt(PROTOCOL_VERSION, 0) != 2) {
+                return@mapNotNull null
+            }
+            val label = APPROVED_APPS.getValue(pkg)
+            val prefixes = receiver.metaData
                 ?.getString("com.silentpulse.command_prefixes")
                 ?.split(",")
-                ?.map { it.trim().lowercase(Locale.getDefault()) }
+                ?.map { it.trim().lowercase(Locale.ROOT) }
                 ?.filter { it.isNotEmpty() }
                 ?: emptyList()
             DiscoveredApp(
                 packageName = pkg,
                 label = label,
-                labelLower = label.lowercase(Locale.getDefault()),
+                labelLower = label.lowercase(Locale.ROOT),
                 commandPrefixes = prefixes
             )
         }.distinctBy { it.packageName }
 
-        Timber.d("CommandRouter: discovered ${discoveredApps.size} assistant-capable apps (excluded self=$ownPackage): ${discoveredApps.map { it.label }}")
+        Timber.d("CommandRouter: discovered %d approved companion apps", discoveredApps.size)
     }
 
     /**
@@ -106,9 +114,9 @@ class CommandRouter(private val context: Context) {
      * - "ask Microcore what is my weight"   →  app=Microcore, cmd="what is my weight"
      */
     fun route(command: String): RouteResult? {
-        if (discoveredApps.isEmpty()) refreshApps()
+        refreshApps()
 
-        val lower = command.lowercase(Locale.getDefault())
+        val lower = command.lowercase(Locale.ROOT)
 
         // Find which app is mentioned (fuzzy match on label or prefix match)
         val matchedApp = findApp(lower) ?: return null
@@ -129,7 +137,7 @@ class CommandRouter(private val context: Context) {
 
         if (rawCommand.isBlank()) return null
 
-        Timber.d("CommandRouter: route(\"$command\") → app=${matchedApp.label}, raw=\"$rawCommand\" prefix=$matchedViaPrefix")
+        Timber.d("CommandRouter: approved route selected (prefix=%s)", matchedViaPrefix)
         return RouteResult(
             targetPackage = matchedApp.packageName,
             appLabel = matchedApp.label,
@@ -140,26 +148,140 @@ class CommandRouter(private val context: Context) {
     /**
      * Sends the command to the target app via broadcast.
      */
-    fun dispatch(routeResult: RouteResult, sessionId: String) {
+    fun dispatch(routeResult: RouteResult, sessionId: String): Boolean {
+        if (!isTrustedTarget(routeResult.targetPackage)) {
+            Timber.w("CommandRouter: rejected an unapproved or incorrectly signed target")
+            return false
+        }
+        val uid = targetUid(routeResult.targetPackage)
+        val nonce = newSessionId()
+        val separateNonce = routeResult.targetPackage == MICROCORE_PACKAGE
+        val wireSessionId = if (separateNonce) sessionId else nonce
+        replySessions.clear()
+        if (uid == null || !replySessions.expect(
+                nonce, routeResult.targetPackage, uid, sessionId, wireSessionId, separateNonce
+            )) {
+            Timber.w("CommandRouter: rejected an invalid or conflicting request capability")
+            return false
+        }
         val intent = Intent(ACTION_EXECUTE_COMMAND).apply {
             setPackage(routeResult.targetPackage)
             putExtra(EXTRA_TRANSCRIPT, routeResult.rawCommand)
-            putExtra(EXTRA_SESSION_ID, sessionId)
+            putExtra(EXTRA_SESSION_ID, wireSessionId)
+            putExtra(EXTRA_REPLY_NONCE, nonce)
             addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
-        context.sendBroadcast(intent)
-        Timber.d("CommandRouter: dispatched to ${routeResult.targetPackage}: \"${routeResult.rawCommand}\" session=$sessionId")
+        return try {
+            context.sendBroadcast(intent)
+            Timber.d("CommandRouter: command dispatched to an approved companion")
+            true
+        } catch (_: SecurityException) {
+            replySessions.cancel(nonce)
+            Timber.w("CommandRouter: companion rejected command delivery")
+            false
+        }
     }
 
     /**
      * Requests the schema (available commands) from a target app.
      */
-    fun requestSchema(targetPackage: String) {
+    fun requestSchema(targetPackage: String): Boolean {
+        if (targetPackage != MICROCORE_PACKAGE || !isTrustedTarget(targetPackage)) {
+            Timber.w("CommandRouter: authenticated schema transport is unavailable")
+            return false
+        }
+        val uid = targetUid(targetPackage)
+        if (uid == null) {
+            Timber.w("CommandRouter: approved companion is unavailable")
+            return false
+        }
+        val sessionId = newSessionId()
+        val nonce = newSessionId()
+        replySessions.clear()
+        if (!replySessions.expect(
+                nonce, targetPackage, uid, sessionId, sessionId, true, AssistantReplySessions.Kind.SCHEMA
+            )) {
+            Timber.w("CommandRouter: could not authorize schema response")
+            return false
+        }
         val intent = Intent(ACTION_REQUEST_SCHEMA).apply {
             setPackage(targetPackage)
+            putExtra(EXTRA_SESSION_ID, sessionId)
+            putExtra(EXTRA_REPLY_NONCE, nonce)
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
-        context.sendBroadcast(intent)
-        Timber.d("CommandRouter: schema requested from $targetPackage")
+        return try {
+            context.sendBroadcast(intent)
+            Timber.d("CommandRouter: requested authenticated companion schema")
+            true
+        } catch (_: SecurityException) {
+            replySessions.cancel(nonce)
+            Timber.w("CommandRouter: companion rejected schema delivery")
+            false
+        }
+    }
+
+    private fun hasApprovedSignature(packageName: String): Boolean =
+        packageName in APPROVED_APPS &&
+            context.packageManager.checkSignatures(context.packageName, packageName) == PackageManager.SIGNATURE_MATCH
+
+    fun isTrustedTarget(packageName: String): Boolean {
+        if (!hasApprovedSignature(packageName)) return false
+        if (packageName != MICROCORE_PACKAGE) return true
+        val intent = Intent(ACTION_ASSISTANT_CAPABLE).apply { setPackage(packageName) }
+        return context.packageManager.queryBroadcastReceivers(intent, PackageManager.GET_META_DATA).any {
+            val receiver = it.activityInfo
+            receiver?.packageName == packageName && receiver.enabled && receiver.exported &&
+                receiver.metaData?.getInt(PROTOCOL_VERSION, 0) == 2
+        }
+    }
+
+    data class AuthorizedReply(val sessionId: String, val packageName: String)
+
+    fun acceptReply(sessionId: String?, replyNonce: String? = null, senderUid: Int? = null): AuthorizedReply? =
+        acceptResponse(sessionId, replyNonce, senderUid, AssistantReplySessions.Kind.COMMAND)
+
+    fun acceptSchemaReply(sessionId: String?, replyNonce: String?, senderUid: Int?): AuthorizedReply? =
+        acceptResponse(sessionId, replyNonce, senderUid, AssistantReplySessions.Kind.SCHEMA)
+
+    private fun acceptResponse(
+        sessionId: String?,
+        replyNonce: String?,
+        senderUid: Int?,
+        kind: AssistantReplySessions.Kind
+    ): AuthorizedReply? {
+        val reply = replySessions.consume(replyNonce ?: sessionId)
+        if (reply == null || !isTrustedTarget(reply.packageName) ||
+            targetUid(reply.packageName) != reply.uid || senderUid != null && senderUid != reply.uid ||
+            reply.kind != kind || reply.wireSessionId != sessionId ||
+            reply.requiresReplyNonce && replyNonce == null) {
+            Timber.w("CommandRouter: ignored an unsolicited, expired or untrusted reply")
+            return null
+        }
+        return AuthorizedReply(reply.sessionId, reply.packageName)
+    }
+
+    fun clearPendingReplies() = replySessions.clear()
+
+    fun declaredCommandPrefixes(packageName: String): List<String> {
+        refreshApps()
+        return discoveredApps.firstOrNull { it.packageName == packageName }?.commandPrefixes.orEmpty()
+    }
+
+    /** App-directed private commands must not fall through into online question handling. */
+    fun isCompanionCommand(command: String): Boolean {
+        val apps = APPROVED_APPS.map { (pkg, label) ->
+            val currentPrefixes = discoveredApps.firstOrNull { it.packageName == pkg }?.commandPrefixes.orEmpty()
+            DiscoveredApp(pkg, label, label.lowercase(Locale.ROOT), PRIVATE_PREFIXES + currentPrefixes)
+        }
+        return findApp(command.lowercase(Locale.ROOT), apps) != null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun targetUid(packageName: String): Int? = try {
+        context.packageManager.getApplicationInfo(packageName, 0).takeIf { it.enabled }?.uid
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
     }
 
     // ── Fuzzy app name matching ───────────────────────────────────────────────
@@ -169,13 +291,13 @@ class CommandRouter(private val context: Context) {
      * Returns the matched app or null.
      */
     fun findAppByName(lowerCommand: String): DiscoveredApp? {
-        if (discoveredApps.isEmpty()) refreshApps()
+        refreshApps()
         return findApp(lowerCommand)
     }
 
-    private fun findApp(lowerCommand: String): DiscoveredApp? {
+    private fun findApp(lowerCommand: String, apps: List<DiscoveredApp> = discoveredApps): DiscoveredApp? {
         // Check command prefix matches first (e.g. "journal" → Grafium)
-        for (app in discoveredApps) {
+        for (app in apps) {
             for (prefix in app.commandPrefixes) {
                 if (lowerCommand.startsWith("$prefix ") || lowerCommand == prefix) {
                     return app
@@ -183,19 +305,20 @@ class CommandRouter(private val context: Context) {
             }
         }
         // Exact substring match on app label
-        for (app in discoveredApps) {
+        for (app in apps) {
             if (lowerCommand.contains(app.labelLower)) return app
         }
         // Fuzzy: handle spaces/split words ("micro core" → "microcore")
         val words = lowerCommand.split("\\s+".toRegex())
-        for (app in discoveredApps) {
+        for (app in apps) {
             // Check if consecutive words fuzzy-match the app label
             val appWords = app.labelLower.split("\\s+".toRegex())
             for (i in words.indices) {
-                if (i + appWords.size <= words.size) {
-                    val slice = words.subList(i, i + appWords.size).joinToString("")
+                for (length in 1..appWords.size + 1) {
+                    if (i + length > words.size) continue
+                    val slice = words.subList(i, i + length).joinToString("")
                     val target = appWords.joinToString("")
-                    if (levenshtein(slice, target) <= 2) return app
+                    if (slice.length >= 4 && levenshtein(slice, target) <= 2) return app
                 }
             }
             // Single-word fuzzy match
@@ -216,7 +339,7 @@ class CommandRouter(private val context: Context) {
         val appWords = appLabelLower.split("\\s+".toRegex())
         val target = appWords.joinToString("")
         for (i in words.indices) {
-            for (len in appWords.size downTo 1) {
+            for (len in appWords.size + 1 downTo 1) {
                 if (i + len > words.size) continue
                 val slice = words.subList(i, i + len).joinToString("")
                 if (levenshtein(slice, target) <= 2) {
@@ -256,6 +379,23 @@ class CommandRouter(private val context: Context) {
     }
 
     companion object {
+        private const val MICROCORE_PACKAGE = "com.microcore.microcore"
+        private const val PROTOCOL_VERSION = "com.silentpulse.voice_protocol_version"
+        const val VOICE_COMMAND_PERMISSION = "com.silentpulse.messenger.permission.VOICE_COMMAND"
+        private val APPROVED_APPS = mapOf(
+            "com.grafium.app" to "Grafium",
+            MICROCORE_PACKAGE to "Microcore"
+        )
+        private val PRIVATE_PREFIXES = listOf(
+            "journal", "add journal", "note", "add note", "note to self",
+            "todo", "to-do", "to do", "task", "add todo", "add task",
+            "read my journal", "read journal", "read my todos", "read my tasks",
+            "what are my todos", "what are my tasks", "log weight", "log my weight",
+            "log food", "log meal", "log water"
+        )
+
+        fun newSessionId(): String = UUID.randomUUID().toString()
+
         const val ACTION_ASSISTANT_CAPABLE = "com.silentpulse.action.ASSISTANT_CAPABLE"
         const val ACTION_EXECUTE_COMMAND = "com.silentpulse.action.EXECUTE_COMMAND"
         const val ACTION_TTS_REPLY = "com.silentpulse.action.TTS_REPLY"
@@ -264,6 +404,7 @@ class CommandRouter(private val context: Context) {
 
         const val EXTRA_TRANSCRIPT = "EXTRA_TRANSCRIPT"
         const val EXTRA_SESSION_ID = "EXTRA_SESSION_ID"
+        const val EXTRA_REPLY_NONCE = "EXTRA_REPLY_NONCE"
         const val EXTRA_SPOKEN_TEXT = "EXTRA_SPOKEN_TEXT"
         const val EXTRA_REQUIRE_FOLLOWUP = "EXTRA_REQUIRE_FOLLOWUP"
         const val EXTRA_SCHEMA_JSON = "EXTRA_SCHEMA_JSON"

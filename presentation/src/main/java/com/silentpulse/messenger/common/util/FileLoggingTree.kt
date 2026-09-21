@@ -20,6 +20,7 @@ package com.silentpulse.messenger.common.util
 
 import android.content.Context
 import android.util.Log
+import com.silentpulse.messenger.BuildConfig
 import com.silentpulse.messenger.util.Preferences
 import io.reactivex.schedulers.Schedulers
 import timber.log.Timber
@@ -45,14 +46,15 @@ class FileLoggingTree @Inject constructor(
     private val timestampFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS", Locale.getDefault())
 
     init {
-        // Clean up old log files on initialization
-        cleanupOldLogs()
+        if (BuildConfig.DEBUG) cleanupOldLogs()
     }
 
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        if (!prefs.logging.get()) return
+        if (!BuildConfig.DEBUG || !prefs.logging.get()) return
 
-        val timestamp = timestampFormat.format(System.currentTimeMillis())
+        // Timber formats exceptions into message too. Neither it nor arbitrary tags
+        // are safe to persist, even when a caller forgets to redact its payload.
+        val metadata = DiagnosticMetadata.describe(t)
         val priorityString = when (priority) {
             Log.VERBOSE -> "V"
             Log.DEBUG -> "D"
@@ -64,14 +66,15 @@ class FileLoggingTree @Inject constructor(
 
         // Log to file asynchronously
         Schedulers.io().scheduleDirect {
-            // Format the log to be written to the file
-            val log = "$timestamp $priorityString/$tag: $message ${Log.getStackTraceString(t)}\n".toByteArray()
+            if (!BuildConfig.DEBUG) return@scheduleDirect
 
             // Ensure that only one thread is writing to the file at a time
             synchronized(fileLock) {
                 try {
+                    val timestamp = timestampFormat.format(System.currentTimeMillis())
+                    val log = "$timestamp $priorityString $metadata\n".toByteArray()
                     // Create the directory
-                    val dir = File(context.getExternalFilesDir(null), "Logs").apply { mkdirs() }
+                    val dir = File(context.filesDir, "Logs").apply { mkdirs() }
 
                     // Create the file with today's date
                     val file = File(dir, "${dateFormat.format(System.currentTimeMillis())}.log")
@@ -81,7 +84,7 @@ class FileLoggingTree @Inject constructor(
                         fileOutputStream.write(log) 
                     }
                 } catch (e: Exception) {
-                    Log.e("FileLoggingTree", "Error while logging into file", e)
+                    Log.e("FileLoggingTree", "log_write_failed type=${e.javaClass.simpleName}")
                 }
             }
         }
@@ -91,9 +94,11 @@ class FileLoggingTree @Inject constructor(
      * Delete log files older than 7 days
      */
     private fun cleanupOldLogs() {
+        if (!BuildConfig.DEBUG) return
         Schedulers.io().scheduleDirect {
+            if (!BuildConfig.DEBUG) return@scheduleDirect
             try {
-                val dir = File(context.getExternalFilesDir(null), "Logs")
+                val dir = File(context.filesDir, "Logs")
                 if (!dir.exists()) return@scheduleDirect
 
                 val sevenDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
@@ -102,12 +107,12 @@ class FileLoggingTree @Inject constructor(
                     if (file.isFile && file.lastModified() < sevenDaysAgo) {
                         val deleted = file.delete()
                         if (deleted) {
-                            Log.d("FileLoggingTree", "Deleted old log file: ${file.name}")
+                            Log.d("FileLoggingTree", "expired_log_removed")
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e("FileLoggingTree", "Error cleaning up old logs", e)
+                Log.e("FileLoggingTree", "log_cleanup_failed type=${e.javaClass.simpleName}")
             }
         }
     }

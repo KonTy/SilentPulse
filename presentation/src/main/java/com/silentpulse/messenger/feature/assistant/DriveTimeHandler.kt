@@ -66,7 +66,7 @@ class DriveTimeHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Drive time destination: \"$destination\"")
+        Log.d(TAG, "drive_time_started")
 
         executor.execute {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -94,7 +94,7 @@ class DriveTimeHandler(private val context: Context) {
                 val result = osrmRoute(origin.first, origin.second, destCoords.first, destCoords.second, destination)
                 mainHandler.post { onResult(result) }
             } catch (e: Exception) {
-                Log.e(TAG, "Drive time fetch failed", e)
+                Log.e(TAG, "drive_time_failed type=${e.javaClass.simpleName}")
                 mainHandler.post { onResult("I couldn't calculate the drive time right now. Try again later.") }
             }
         }
@@ -146,7 +146,7 @@ class DriveTimeHandler(private val context: Context) {
     private fun nominatimGeocode(place: String): Pair<Double, Double>? {
         val url = "https://nominatim.openstreetmap.org/search" +
                 "?q=${URLEncoder.encode(place, "UTF-8")}&format=json&limit=1"
-        Log.d(TAG, "Nominatim: $url")
+        Log.d(TAG, "geocoding_started")
         val body = httpGet(url)
         val arr = JSONArray(body)
         if (arr.length() == 0) return null
@@ -162,7 +162,7 @@ class DriveTimeHandler(private val context: Context) {
         // OSRM expects lon,lat order
         val url = "https://router.project-osrm.org/route/v1/driving/" +
                 "$originLon,$originLat;$destLon,$destLat?overview=false"
-        Log.d(TAG, "OSRM: $url")
+        Log.d(TAG, "routing_started")
         val json = JSONObject(httpGet(url))
         val code = json.optString("code", "")
         if (code != "Ok") return "No route found to $destName."
@@ -203,11 +203,11 @@ class DriveTimeHandler(private val context: Context) {
             try {
                 val loc = lm.getLastKnownLocation(provider)
                 if (loc != null) {
-                    Log.d(TAG, "Location from $provider: ${loc.latitude}, ${loc.longitude}")
+                    Log.d(TAG, "last_location_available")
                     return Pair(loc.latitude, loc.longitude)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Provider $provider unavailable", e)
+                Log.w(TAG, "location_provider_unavailable type=${e.javaClass.simpleName}")
             }
         }
         Log.w(TAG, "No last known location available")

@@ -8,11 +8,11 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
+import com.silentpulse.messenger.feature.drivemode.SpeechLog as Log
 import androidx.core.app.NotificationCompat
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.injection.appComponent
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import javax.inject.Inject
 
 /**
@@ -57,7 +57,7 @@ class DriveModeMicService : Service() {
                 }
                 Log.d(TAG, "start() called")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to start DriveModeMicService")
+                Timber.e("Failed to start DriveModeMicService")
             }
         }
 
@@ -66,7 +66,7 @@ class DriveModeMicService : Service() {
                 context.stopService(Intent(context, DriveModeMicService::class.java))
                 Log.d(TAG, "stop() called")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to stop DriveModeMicService")
+                Timber.e("Failed to stop DriveModeMicService")
             }
         }
     }
@@ -121,7 +121,7 @@ class DriveModeMicService : Service() {
             }
             Log.d(TAG, "Foreground with MICROPHONE type started")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to start foreground — mic may be silenced")
+            Timber.e("Failed to start foreground — mic may be silenced")
         }
     }
 

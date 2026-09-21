@@ -10,15 +10,18 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.feature.assistant.VoiceAssistantService
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
+import java.util.Locale
 
 /**
- * 3×1 home-screen AppWidget — icons only, no text labels.
+ * Single-row home-screen AppWidget, resizable from 2 columns — icons only.
  *
  *  Slot 1  [btn_notif_reader]  Toggle Notification Reader on/off.
  *                              Icon: ic_notifications_black_24dp (on)
@@ -31,6 +34,8 @@ import timber.log.Timber
  *  Slot 3  [btn_voice_ast]     Toggle Voice Assistant on/off.
  *                              Icon: ic_mic_black_24dp (on)
  *                                  / ic_mic_off_black_24dp (off)
+ *
+ *  Slot 4  [btn_stop_speaking] Stop the current speech immediately.
  *
  * State is stored via [WidgetPrefs].  After every tap the widget broadcasts
  * [WidgetPrefs.ACTION_STATE_CHANGED] so Quick Settings tiles refresh too.
@@ -76,7 +81,7 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        Timber.d("DriveModeWidget onReceive: ${intent.action}")
+        Timber.d("DriveModeWidget: broadcast received")
         when (intent.action) {
             ACTION_TOGGLE_NOTIF_READER       -> handleToggleNotifReader(context)
             ACTION_NEXT_NOTIF                -> handleNextNotif(context)
@@ -240,15 +245,35 @@ class DriveModeWidgetProvider : AppWidgetProvider() {
     private fun speakOnce(context: Context, text: String) {
         var engine: TextToSpeech? = null
         engine = TextToSpeech(context.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
+            Handler(Looper.getMainLooper()).post {
+                val initialized = engine ?: return@post
+                if (status != TextToSpeech.SUCCESS) {
+                    SpeechFailure.show(context, "tts_init_failed")
+                    initialized.shutdown()
+                    return@post
+                }
                 val id = "widget_feedback"
-                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                val listenerStatus = initialized.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) {}
                     override fun onDone(id: String?) { engine?.shutdown() }
                     @Deprecated("Deprecated in Java")
-                    override fun onError(id: String?) { engine?.shutdown() }
+                    override fun onError(id: String?) {
+                        SpeechFailure.show(context, "tts_synthesis_failed")
+                        engine?.shutdown()
+                    }
                 })
-                engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+                if (listenerStatus != TextToSpeech.SUCCESS) {
+                    SpeechFailure.show(context, "tts_init_failed")
+                    initialized.shutdown()
+                    return@post
+                }
+                val failure = OfflineTts.speak(
+                    initialized, Locale.getDefault(), text, TextToSpeech.QUEUE_FLUSH, null, id
+                )
+                if (failure != null) {
+                    SpeechFailure.show(context, failure)
+                    initialized.shutdown()
+                }
             }
         }
     }

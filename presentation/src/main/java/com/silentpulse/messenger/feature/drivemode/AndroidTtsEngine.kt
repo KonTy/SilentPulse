@@ -1,125 +1,173 @@
 package com.silentpulse.messenger.feature.drivemode
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.util.Locale
 
-class AndroidTtsEngine(
-    private val context: Context,
-    /** Optional callback fired on the TTS init thread when the engine is ready. */
-    private val onInitialized: ((Boolean) -> Unit)? = null
+class AndroidTtsEngine internal constructor(
+    private val mainHandler: Handler,
+    private val onInitialized: ((Boolean) -> Unit)?,
+    private val reportFailure: (String) -> Unit,
+    createEngine: (TextToSpeech.OnInitListener) -> TextToSpeech
 ) : TtsEngine {
-    
-    private var tts: TextToSpeech? = null
-    private val completionCallbacks = mutableMapOf<String, () -> Unit>()
-    private var utteranceId = 0
-    
-    override var isReady: Boolean = false
-        private set
-    
-    init {
-        // PRIVACY: Android TextToSpeech is completely offline - no network calls.
-        // Samsung TTS blocks non-whitelisted packages, so we explicitly request
-        // Google TTS first. onTtsInit() falls back to the system default if Google
-        // TTS is not installed.
-        val googleTtsInstalled = try {
-            context.packageManager.getPackageInfo("com.google.android.tts", 0)
-            true
-        } catch (_: android.content.pm.PackageManager.NameNotFoundException) { false }
+    constructor(context: Context, onInitialized: ((Boolean) -> Unit)? = null) : this(
+        Handler(Looper.getMainLooper()), onInitialized, { SpeechFailure.show(context, it) },
+        { listener -> createPlatformEngine(context, listener) }
+    )
 
-        val preferredEngine = if (googleTtsInstalled) "com.google.android.tts" else null
-        Timber.d("AndroidTtsEngine: starting TTS (preferredEngine=$preferredEngine)")
-        tts = if (preferredEngine != null)
-            TextToSpeech(context, { onTtsInit(it) }, preferredEngine)
-        else
-            TextToSpeech(context) { onTtsInit(it) }
+    internal constructor(
+        context: Context,
+        onInitialized: ((Boolean) -> Unit)?,
+        createEngine: (TextToSpeech.OnInitListener) -> TextToSpeech
+    ) : this(Handler(Looper.getMainLooper()), onInitialized, { SpeechFailure.show(context, it) }, createEngine)
+
+    companion object {
+        internal fun preferredEnginePackage(context: Context): String? {
+            val googleInstalled = try {
+                context.packageManager.getPackageInfo("com.google.android.tts", 0)
+                true
+            } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                false
+            }
+            return if (googleInstalled) "com.google.android.tts" else null
+        }
+
+        private fun createPlatformEngine(context: Context, listener: TextToSpeech.OnInitListener): TextToSpeech {
+            val preferred = preferredEnginePackage(context)
+            return if (preferred != null) TextToSpeech(context, listener, preferred)
+            else TextToSpeech(context, listener)
+        }
+    }
+    private var tts: TextToSpeech? = null
+    private data class Completion(val done: () -> Unit, val error: (String) -> Unit)
+    private val completionCallbacks = mutableMapOf<String, Completion>()
+    private var utteranceId = 0
+    private var initialized = false
+    private var closed = false
+    private var generation = 0
+    private var requestedLocale = Locale.getDefault()
+    private val initTimeout = Runnable {
+        if (!closed && !initialized) {
+            shutdown()
+            failureReason = "tts_init_failed"
+            onInitialized?.invoke(false)
+            reportFailure("tts_init_failed")
+        }
+    }
+
+    override var isReady = false
+        private set
+    override var failureReason: String? = "tts_not_ready"
+        private set
+
+    init {
+        val listener = TextToSpeech.OnInitListener { status ->
+            // The callback can precede assignment of tts; serialize all state on the main thread.
+            mainHandler.post { onTtsInit(status) }
+        }
+        tts = createEngine(listener)
+        mainHandler.postDelayed(initTimeout, 10_000L)
     }
 
     private fun onTtsInit(status: Int) {
-        Timber.d("AndroidTtsEngine: onInit status=$status engine=${tts?.defaultEngine}")
-        if (status == TextToSpeech.SUCCESS) {
-            tts?.let { engine ->
-                val result = engine.setLanguage(Locale.getDefault())
-                if (result == TextToSpeech.LANG_MISSING_DATA ||
-                    result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Timber.w("TTS language not supported: ${Locale.getDefault()}")
-                }
-                isReady = true
-                Timber.d("AndroidTtsEngine initialized successfully (engine=${engine.defaultEngine})")
-                onInitialized?.invoke(true)
-                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        Timber.d("TTS start id=$utteranceId pending=${completionCallbacks.size}")
-                    }
-                    override fun onDone(utteranceId: String?) {
-                        Timber.d("TTS done id=$utteranceId")
-                        utteranceId?.let { id -> completionCallbacks.remove(id)?.invoke() }
-                    }
-                    override fun onError(utteranceId: String?) {
-                        Timber.e("TTS error id=$utteranceId")
-                        utteranceId?.let { id -> completionCallbacks.remove(id)?.invoke() }
-                    }
-                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                        Timber.w("TTS STOPPED id=$utteranceId interrupted=$interrupted remaining_callbacks=${completionCallbacks.size}")
-                    }
-                    override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                        Timber.v("TTS word id=$utteranceId pos=$start")
-                    }
-                })
-            }
-        } else {
-            Timber.e("AndroidTtsEngine: TTS engine failed to initialize (engine=${tts?.defaultEngine})")
+        if (closed) return
+        mainHandler.removeCallbacks(initTimeout)
+        val engine = tts
+        if (status != TextToSpeech.SUCCESS || engine == null) {
+            failureReason = "tts_init_failed"
             onInitialized?.invoke(false)
+            reportFailure("tts_init_failed")
+            return
         }
+        initialized = true
+        val listenerStatus = engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                mainHandler.post { completionCallbacks.remove(utteranceId)?.done?.invoke() }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) = reportUtteranceError(utteranceId)
+            override fun onError(utteranceId: String?, errorCode: Int) = reportUtteranceError(utteranceId)
+            override fun onStop(utteranceId: String?, interrupted: Boolean) = reportUtteranceError(utteranceId)
+        })
+        if (listenerStatus != TextToSpeech.SUCCESS) {
+            initialized = false
+            failureReason = "tts_init_failed"
+            onInitialized?.invoke(false)
+            reportFailure("tts_init_failed")
+            return
+        }
+        setLocale(requestedLocale)
+        onInitialized?.invoke(isReady)
+        failureReason?.let(reportFailure)
     }
-    
-    /**
-     * Change the TTS output language. Safe to call at any time; takes effect on the next speak().
-     */
-    fun setLocale(locale: java.util.Locale) {
-        tts?.let { engine ->
-            val result = engine.setLanguage(locale)
-            Timber.d("AndroidTtsEngine: setLocale $locale -> result $result")
+
+    private fun reportUtteranceError(id: String?) {
+        mainHandler.post {
+            val callback = completionCallbacks.remove(id) ?: return@post
+            failureReason = "tts_synthesis_failed"
+            isReady = false
+            Timber.w("AndroidTTS: synthesis failed")
+            reportFailure("tts_synthesis_failed")
+            callback.error("tts_synthesis_failed")
         }
     }
 
-    override fun speak(text: String, onDone: () -> Unit) {
-        if (!isReady) {
-            Timber.w("TTS not ready, skipping speech")
-            onDone()
-            return
-        }
-        
-        tts?.let { engine ->
-            val id = "utterance_${utteranceId++}"
-            completionCallbacks[id] = onDone
-            
-            // IMPORTANT: Use QUEUE_ADD to queue speech segments
-            // This is completely offline - no network involved
-            val result = engine.speak(text, TextToSpeech.QUEUE_ADD, null, id)
-            
-            if (result == TextToSpeech.ERROR) {
-                Timber.e("TTS speak failed")
-                completionCallbacks.remove(id)
-                onDone()
+    override fun setLocale(locale: Locale): Boolean {
+        requestedLocale = locale
+        // Invalidate first so a failed locale switch cannot reuse the previous voice.
+        isReady = false
+        val engine = tts
+        failureReason = if (!initialized || engine == null) "tts_not_ready"
+        else OfflineTts.prepare(engine, locale)
+        isReady = failureReason == null
+        return isReady
+    }
+
+    override fun speak(text: String, onError: (String) -> Unit, onDone: () -> Unit) {
+        val locale = requestedLocale
+        val token = generation
+        mainHandler.post {
+            if (token != generation) return@post
+            val engine = tts
+            if (!initialized || engine == null || closed) {
+                val code = failureReason ?: "tts_not_ready"
+                reportFailure(code)
+                onError(code)
+                return@post
             }
-        } ?: run {
-            Timber.w("TTS engine is null")
-            onDone()
+            val id = "utterance_${utteranceId++}"
+            completionCallbacks[id] = Completion(onDone, onError)
+            val failure = OfflineTts.speak(engine, locale, text, TextToSpeech.QUEUE_ADD, null, id)
+            failureReason = failure
+            isReady = failure == null
+            if (failure != null) {
+                Timber.w("AndroidTTS: speech blocked (%s)", failure)
+                reportFailure(failure)
+                completionCallbacks.remove(id)?.error?.invoke(failure)
+            }
         }
     }
-    
+
     override fun stop() {
-        tts?.stop()
+        // Explicit interruption discards callbacks; VoiceInteractor owns recovery.
+        generation++
         completionCallbacks.clear()
+        tts?.stop()
     }
-    
+
     override fun shutdown() {
+        closed = true
+        mainHandler.removeCallbacks(initTimeout)
         stop()
         tts?.shutdown()
         tts = null
+        initialized = false
         isReady = false
+        failureReason = "tts_not_ready"
     }
 }

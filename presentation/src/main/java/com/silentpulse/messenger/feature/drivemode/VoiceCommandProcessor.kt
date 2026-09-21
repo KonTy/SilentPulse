@@ -4,7 +4,7 @@ import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import com.silentpulse.messenger.manager.PermissionManager
 import com.silentpulse.messenger.repository.MessageRepository
 import javax.inject.Inject
@@ -32,14 +32,14 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     fun setCurrentContext(context: NotificationContext) {
-        Timber.d("VCP: setCurrentContext(${context.app}/${context.sender})")
+        Timber.d("VCP: notification context selected")
         currentContext = context
     }
 
     fun getCurrentContext(): NotificationContext? = currentContext
 
     fun processCommand(command: String, notificationContext: NotificationContext?) {
-        Timber.d("processCommand(\"$command\") context=${notificationContext?.app}/${notificationContext?.sender}")
+        Timber.d("VCP: processing command")
         when {
             command.contains("read", ignoreCase = true) -> {
                 Timber.d("VCP: READ command")
@@ -123,7 +123,7 @@ class VoiceCommandProcessor @Inject constructor(
             speak("Sending SMS to ${context.sender}: $replyText")
             // TODO: Implement actual SMS sending via messageRepository
         } catch (e: Exception) {
-            Timber.e(e, "Failed to send SMS")
+            Timber.e("Failed to send SMS")
             speak("Sorry, I couldn't send the message.")
         }
     }
@@ -159,7 +159,7 @@ class VoiceCommandProcessor @Inject constructor(
             Timber.d("Inline reply sent successfully")
             return true
         } catch (e: Exception) {
-            Timber.e(e, "Failed to send inline reply")
+            Timber.e("Failed to send inline reply")
             return false
         }
     }
@@ -173,7 +173,7 @@ class VoiceCommandProcessor @Inject constructor(
             notification?.notification?.contentIntent?.send()
             speak("Opening ${context.app}")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to open app")
+            Timber.e("Failed to open app")
             speak("Sorry, I couldn't open ${context.app}")
         }
     }
@@ -187,8 +187,12 @@ class VoiceCommandProcessor @Inject constructor(
     }
 
     private fun speak(text: String) {
-        Timber.d("VCP TTS: \"${if (text.length > 60) text.take(60) + "…" else text}\"")
-        ttsEngine?.speak(text)
+        Timber.d("VCP: TTS requested")
+        ttsEngine?.speak(text, onError = { code ->
+            pendingReplyContext = null
+            pendingOpenAppContext = null
+            SpeechFailure.show(context, code)
+        })
     }
 
     fun shutdown() {

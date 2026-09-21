@@ -34,6 +34,6 @@ class ApiKeyReceiver : BroadcastReceiver() {
             return
         }
         BraveSearchHandler.saveApiKey(context, key)
-        Log.i(TAG, "Brave API key updated (${key.length} chars)")
+        Log.i(TAG, "brave_api_key_updated")
     }
 }

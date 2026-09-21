@@ -39,7 +39,6 @@ android {
         targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField "String", "AMPLITUDE_API_KEY", "\"${System.getenv("AMPLITUDE_API_KEY")}\""
     }
 
     buildFeatures {
@@ -104,8 +103,6 @@ dependencies {
     implementation project(':common')
     implementation project(':domain')
 
-    withAnalyticsImplementation 'com.android.installreferrer:installreferrer:2.2'
-    withAnalyticsImplementation "com.amplitude:android-sdk:2.39.8"
 }
 
 repositories {

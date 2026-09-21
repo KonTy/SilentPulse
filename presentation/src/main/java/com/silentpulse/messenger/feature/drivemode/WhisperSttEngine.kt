@@ -11,7 +11,7 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.coroutineContext
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import kotlin.math.sqrt
 
 /**
@@ -117,13 +117,13 @@ class WhisperSttEngine(
             // Double-check inside lock
             whisperCtx?.let { return it }
             return try {
-                Timber.d("WhisperSTT: loading model from $modelPath")
+                Timber.d("WhisperSTT: loading local model")
                 val ctx = WhisperContext(modelPath)
-                Timber.d("WhisperSTT: model loaded. System info: ${ctx.systemInfo}")
+                Timber.d("WhisperSTT: model loaded")
                 whisperCtx = ctx
                 ctx
             } catch (e: Throwable) {
-                Timber.e(e, "WhisperSTT: failed to load model (${e.javaClass.simpleName})")
+                Timber.e("WhisperSTT: failed to load model")
                 null
             }
         }
@@ -178,7 +178,7 @@ class WhisperSttEngine(
             Thread.sleep(200) // let the beep finish before recording
             toneGen.release()
         } catch (e: Exception) {
-            Timber.w(e, "WhisperSTT: beep failed (non-fatal)")
+            Timber.w("WhisperSTT: beep failed (non-fatal)")
         }
 
         Timber.d("WhisperSTT: recording started")
@@ -207,7 +207,7 @@ class WhisperSttEngine(
                 if (rms < SILENCE_RMS_THRESH) {
                     silentChunks++
                     if (silentChunks >= SILENCE_CHUNKS) {
-                        Timber.d("WhisperSTT: end of speech detected (${allSamples.size} samples, peakRms=%.5f, speechChunks=$speechChunks)".format(peakRms))
+                        Timber.d("WhisperSTT: end of speech detected; samples=${allSamples.size}")
                         break
                     }
                 } else {
@@ -239,11 +239,11 @@ class WhisperSttEngine(
         var energySum = 0.0
         for (f in floats) energySum += f * f
         val avgRms = sqrt(energySum / floats.size).toFloat()
-        Timber.d("WhisperSTT: recording avgRms=%.5f peakRms=%.5f speechChunks=%d (threshold=%.5f) samples=%d".format(avgRms, peakRms, speechChunks, MIN_SPEECH_ENERGY, allSamples.size))
+        Timber.d("WhisperSTT: captured ${allSamples.size} samples")
         if (avgRms < MIN_SPEECH_ENERGY) {
             // avgRms == 0.0 usually means Android silenced the mic (background service)
             val errorCode = if (avgRms == 0.0f) "mic_silenced" else "no_match"
-            Timber.d("WhisperSTT: recording is silence (avgRms=$avgRms), skipping transcription (errorCode=$errorCode)")
+            Timber.d("WhisperSTT: skipping silent recording; code=$errorCode")
             mainHandler.post { onError(errorCode) }
             return
         }
@@ -266,24 +266,26 @@ class WhisperSttEngine(
             }
         }
         val trimmedFloats = if (trimStart > 0) {
-            Timber.d("WhisperSTT: trimmed %d samples (%.1fs) of leading silence".format(trimStart, trimStart.toFloat() / SAMPLE_RATE))
+            Timber.d("WhisperSTT: trimmed $trimStart silence samples")
             floats.copyOfRange(trimStart, floats.size)
         } else {
             floats
         }
 
         // ── 5. Transcribe ────────────────────────────────────────────────────
-        Timber.d("WhisperSTT: transcribing ${trimmedFloats.size} samples (avgRms=$avgRms, trimmed from ${floats.size})…")
+        Timber.d("WhisperSTT: transcribing ${trimmedFloats.size} samples")
 
         val text = try {
             ctx.transcribe(trimmedFloats, language)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
-            Timber.e(e, "WhisperSTT: transcription failed (${e.javaClass.simpleName})")
-            mainHandler.post { onError("whisper_error:${e.message}") }
+            Timber.e("WhisperSTT: transcription failed")
+            mainHandler.post { onError("whisper_error") }
             return
         }
 
-        Timber.d("WhisperSTT: result=\"$text\" lang=${ctx.detectedLanguage}")
+        Timber.d("WhisperSTT: transcription complete")
 
         if (text.isBlank()) {
             mainHandler.post { onError("no_match") }

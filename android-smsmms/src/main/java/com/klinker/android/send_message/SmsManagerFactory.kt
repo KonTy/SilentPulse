@@ -13,7 +13,7 @@ object SmsManagerFactory {
             try {
                 manager = SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
             } catch (e: Exception) {
-                e.printStackTrace()
+                timber.log.Timber.w("sms_manager_failed type=${e.javaClass.simpleName}")
             }
         }
 

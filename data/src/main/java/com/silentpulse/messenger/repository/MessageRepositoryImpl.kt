@@ -189,9 +189,9 @@ class MessageRepositoryImpl @Inject constructor(
                 }
             }
         } catch (e: FileNotFoundException) {
-            e.printStackTrace()
+            Timber.w("message_operation_failed type=${e.javaClass.simpleName}")
         } catch (e: IOException) {
-            e.printStackTrace()
+            Timber.w("message_operation_failed type=${e.javaClass.simpleName}")
         }
 
         MediaScannerConnection.scanFile(context, arrayOf(file.path), null, null)

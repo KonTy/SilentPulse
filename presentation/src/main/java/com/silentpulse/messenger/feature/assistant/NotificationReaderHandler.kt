@@ -133,12 +133,12 @@ class NotificationReaderHandler(private val context: Context) {
     fun sendReply(notifKey: String, replyText: String): Boolean {
         val listener = SilentPulseNotificationListener.sInstance ?: return false
         return listener.tryInlineReply(notifKey, replyText).also {
-            Log.d(TAG, "sendReply key=$notifKey result=$it")
+            Log.d(TAG, "notification_reply success=$it")
         }
     }
 
     fun dismiss(notifKey: String) {
         SilentPulseNotificationListener.sInstance?.dismissNotification(notifKey)
-        Log.d(TAG, "dismiss key=$notifKey")
+        Log.d(TAG, "notification_dismiss")
     }
 }

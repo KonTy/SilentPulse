@@ -11,7 +11,7 @@ import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.feature.assistant.VoiceAssistantService
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 
 /**
  * Quick Settings tile — Voice Assistant on/off.

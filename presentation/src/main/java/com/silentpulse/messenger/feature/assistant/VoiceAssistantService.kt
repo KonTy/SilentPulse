@@ -11,14 +11,16 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
-import android.util.Log
-import timber.log.Timber
-import com.silentpulse.messenger.feature.drivemode.AndroidSttEngine
+import android.speech.tts.TextToSpeech
+import com.silentpulse.messenger.feature.drivemode.SpeechLog as Log
+import com.silentpulse.messenger.feature.drivemode.SpeechFailure
+import com.silentpulse.messenger.feature.drivemode.AndroidTtsEngine
 import com.silentpulse.messenger.feature.drivemode.DriveModeWidgetProvider
 import com.silentpulse.messenger.feature.drivemode.NotifSnapshot
 import com.silentpulse.messenger.feature.drivemode.SttEngine
 import com.silentpulse.messenger.feature.drivemode.VoiceInteractor
 import com.silentpulse.messenger.feature.drivemode.WidgetPrefs
+import com.silentpulse.messenger.injection.appComponent
 import java.util.Locale
 
 private const val TAG = "VoiceAssistantSvc"
@@ -41,11 +43,14 @@ private const val TAG = "VoiceAssistantSvc"
  * This eliminates the infinite beep loop caused by restarting SpeechRecognizer
  * every 5 seconds as a fake always-on detector.
  *
- * All processing is fully on-device.  INTERNET permission is removed — kernel
- * blocks all outbound sockets.
+ * Speech uses installed offline engines. Network policy in this app does not
+ * firewall the separate Android speech-provider process.
  */
-class VoiceAssistantService : Service() {
+class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
 
+    private var tts: TextToSpeech? = null
+    private var ttsInitializationListener: TextToSpeech.OnInitListener? = null
+    private var ttsReady = false
     private var sttEngine: SttEngine? = null
     private lateinit var voiceInteractor: VoiceInteractor
     @Volatile private var isListening = false
@@ -95,9 +100,11 @@ class VoiceAssistantService : Service() {
      */
     private var sttRetryCount = 0
 
-    private val sessionManager = SessionManager()
+    private val companionRequest = CompanionRequestTracker()
     private var wakeWordDetector: VoskWakeWordDetector? = null
     private var voskModelReady = false
+    private var speechFailure: String? = null
+    private var companionReplyTimeout: Runnable? = null
 
     companion object {
         const val ACTION_REFRESH_ASSISTANT_NOTIFICATION = "com.silentpulse.messenger.action.REFRESH_ASSISTANT_NOTIFICATION"
@@ -118,30 +125,30 @@ class VoiceAssistantService : Service() {
     private val ttsReplyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == CommandRouter.ACTION_TTS_REPLY) {
-                val spokenText = intent.getStringExtra(CommandRouter.EXTRA_SPOKEN_TEXT) ?: return
-                val requireFollowup = intent.getBooleanExtra(CommandRouter.EXTRA_REQUIRE_FOLLOWUP, false)
-                val sessionId = intent.getStringExtra(CommandRouter.EXTRA_SESSION_ID)
-                if (android.util.Log.isLoggable("SP_XAPP", android.util.Log.DEBUG)) {
-                    android.util.Log.d("SP_XAPP",
-                        "[TTS_REPLY\u200b] text=\"$spokenText\" requireFollowup=$requireFollowup session=$sessionId")
+                val senderUid = if (android.os.Build.VERSION.SDK_INT >= 34) sentFromUid.takeIf { it >= 0 } else null
+                val authorized = commandRouter.acceptReply(
+                    intent.getStringExtra(CommandRouter.EXTRA_SESSION_ID),
+                    intent.getStringExtra(CommandRouter.EXTRA_REPLY_NONCE),
+                    senderUid
+                ) ?: return
+                val active = companionRequest.current()
+                if (active?.sessionId != authorized.sessionId || active.targetPackage != authorized.packageName) {
+                    Log.w(TAG, "Ignoring companion reply outside its active conversation")
+                    return
                 }
-
-                if (requireFollowup) {
-                    sessionManager.touch()
-                    Log.d(TAG, "TTS reply (follow-up required, session=$sessionId): \"$spokenText\"")
-                } else {
-                    if (sessionId != null) sessionManager.close(sessionId)
-                    Log.d(TAG, "TTS reply (final, session=$sessionId): \"$spokenText\"")
+                cancelCompanionReplyTimeout()
+                val spokenText = intent.getStringExtra(CommandRouter.EXTRA_SPOKEN_TEXT)
+                if (spokenText.isNullOrBlank()) {
+                    cancelCompanionInteraction()
+                    Log.w(TAG, "Approved companion returned an empty voice response")
+                    speak("The approved app did not provide a response.") { resumeWakeWord() }
+                    return
                 }
-
+                companionRequest.complete(authorized.sessionId)
+                Log.d("SP_XAPP", "[TTS_REPLY] one-shot response accepted")
                 speak(spokenText) {
-                    if (requireFollowup) {
-                        // For follow-ups, go directly to STT (skip wake word)
-                        startSttOneShot()
-                    } else {
-                        // Conversation done — back to wake word detection
-                        resumeWakeWord()
-                    }
+                    // Companion hints cannot activate the microphone for another turn.
+                    resumeWakeWord()
                 }
             }
         }
@@ -150,8 +157,20 @@ class VoiceAssistantService : Service() {
     private val schemaReplyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == CommandRouter.ACTION_REPORT_SCHEMA) {
-                val schemaJson = intent.getStringExtra(CommandRouter.EXTRA_SCHEMA_JSON) ?: return
-                Log.d(TAG, "Schema reply: $schemaJson")
+                val senderUid = if (android.os.Build.VERSION.SDK_INT >= 34) sentFromUid.takeIf { it >= 0 } else null
+                commandRouter.acceptSchemaReply(
+                    intent.getStringExtra(CommandRouter.EXTRA_SESSION_ID),
+                    intent.getStringExtra(CommandRouter.EXTRA_REPLY_NONCE),
+                    senderUid
+                ) ?: return
+                cancelCompanionReplyTimeout()
+                val schemaJson = intent.getStringExtra(CommandRouter.EXTRA_SCHEMA_JSON)
+                if (schemaJson.isNullOrBlank()) {
+                    Log.w(TAG, "Approved companion returned an empty command schema")
+                    speak("The approved app did not provide its commands.") { resumeWakeWord() }
+                    return
+                }
+                Log.d(TAG, "Schema reply received")
                 speak("Available commands: $schemaJson") { resumeWakeWord() }
             }
         }
@@ -172,6 +191,7 @@ class VoiceAssistantService : Service() {
     private val stopSpeakingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != WidgetPrefs.ACTION_STOP_SPEAKING) return
+            cancelCompanionInteraction()
         Log.d(TAG, "stopSpeakingReceiver: stop + resume wake word")
             confirmWorkflow?.reset()
             confirmWorkflow = null
@@ -180,6 +200,36 @@ class VoiceAssistantService : Service() {
             voiceInteractor.interrupt { resumeWakeWord() }
         }
     }
+    private fun cancelCompanionReplyTimeout() {
+        companionReplyTimeout?.let(mainHandler::removeCallbacks)
+        companionReplyTimeout = null
+    }
+
+    private fun cancelCompanionInteraction() {
+        cancelCompanionReplyTimeout()
+        if (::commandRouter.isInitialized) commandRouter.clearPendingReplies()
+        companionRequest.clear()
+    }
+
+    private fun scheduleCompanionReplyTimeout() {
+        cancelCompanionReplyTimeout()
+        lateinit var timeout: Runnable
+        timeout = Runnable {
+            if (destroyed || companionReplyTimeout !== timeout) return@Runnable
+            cancelCompanionInteraction()
+            speak("The approved app did not respond. Open it and try again.") { resumeWakeWord() }
+        }
+        companionReplyTimeout = timeout
+        mainHandler.postDelayed(timeout, CompanionRequestTracker.TIMEOUT_MS)
+    }
+
+    private fun companionUnavailable() {
+        cancelCompanionInteraction()
+        speak("Say a complete command with Grafium or Microcore. The approved app must be installed, updated, and signed with the same key.") {
+            resumeWakeWord()
+        }
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onCreate() {
         super.onCreate()
@@ -187,7 +237,23 @@ class VoiceAssistantService : Service() {
         // Mark as running immediately so the widget reflects reality
         WidgetPrefs.setVoiceAst(this, true)
         DriveModeWidgetProvider.refreshAll(this)
-        voiceInteractor = VoiceInteractor(this) { maybeStartListening() }
+        voiceInteractor = VoiceInteractor(
+            this,
+            onFailure = ::handleTtsFailure,
+            onReady = { maybeStartListening() },
+            createPlatformEngine = { listener ->
+                // Preserve the service init callback while the shared engine owns
+                // offline voice selection, speaking, and shutdown of this instance.
+                ttsInitializationListener = listener
+                val preferred = AndroidTtsEngine.preferredEnginePackage(this)
+                if (preferred != null) {
+                    tts = TextToSpeech(this, this, preferred)
+                } else {
+                    tts = TextToSpeech(this, this)
+                }
+                requireNotNull(tts)
+            }
+        )
         commandRouter = CommandRouter(applicationContext)
         commandRouter.refreshApps()
         weatherHandler = WeatherCommandHandler(applicationContext)
@@ -204,7 +270,6 @@ class VoiceAssistantService : Service() {
         outlookHandler     = OutlookCommandHandler(applicationContext)
         val filter = IntentFilter().apply {
             addAction(CommandRouter.ACTION_TTS_REPLY)
-            addAction(CommandRouter.ACTION_REPORT_SCHEMA)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             this, ttsReplyReceiver, filter,
@@ -232,7 +297,9 @@ class VoiceAssistantService : Service() {
         val channelId = com.silentpulse.messenger.common.util.NotificationManagerImpl.DEFAULT_CHANNEL_ID
         val overlayMissing = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             !Settings.canDrawOverlays(this)
-        if (overlayMissing) {
+        if (speechFailure != null) {
+            SpeechFailure.message(speechFailure!!)
+        } else if (overlayMissing) {
             Log.w(TAG, "Overlay permission missing; Android 14+ background navigation launch will be blocked")
         }
         val overlayIntent = Intent(
@@ -251,7 +318,9 @@ class VoiceAssistantService : Service() {
         val builder = androidx.core.app.NotificationCompat.Builder(this, channelId)
             .setContentTitle("SilentPulse Assistant")
             .setContentText(
-                if (overlayMissing) {
+                if (speechFailure != null) {
+                    SpeechFailure.message(requireNotNull(speechFailure))
+                } else if (overlayMissing) {
                     "Tap Enable overlay to allow background navigation launch"
                 } else {
                     "Listening for wake word\u2026"
@@ -283,7 +352,7 @@ class VoiceAssistantService : Service() {
         } catch (e: SecurityException) {
             // Android 14+ blocks microphone FGS when started from background
             // (e.g. after force-stop + widget toggle).  Gracefully stop instead of crashing.
-            Log.e(TAG, "Cannot start foreground service from background: ${e.message}")
+            Log.e(TAG, "Cannot start microphone foreground service from background")
             stopSelf()
         }
     }
@@ -312,23 +381,52 @@ class VoiceAssistantService : Service() {
      * finishes last triggers the actual start.
      */
     private fun maybeStartListening() {
-        Log.d(TAG, "maybeStartListening() ttsReady=${voiceInteractor.isReady} voskModelReady=$voskModelReady")
-        if (!voskModelReady) return
-        val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
-        if (voiceInteractor.isReady) {
+        if (destroyed) return
+        ttsReady = ::voiceInteractor.isInitialized && voiceInteractor.isReady
+        Log.d(TAG, "maybeStartListening() ttsReady=$ttsReady voskModelReady=$voskModelReady")
+        if (ttsReady && voskModelReady) {
+            speechFailure = null
+            val word = WidgetPrefs.getWakeWord(this@VoiceAssistantService)
             speak("Voice assistant ready. Say $word to activate.") { startWakeWordDetection() }
-        } else {
-            // TTS unavailable (e.g. Samsung OEM engine allowlist rejected this package).
-            // Start wake word detection silently — the notification already informs the user.
-            Log.w(TAG, "TTS not ready — starting wake word detection without voice greeting")
-            startWakeWordDetection()
         }
+    }
+
+    override fun onInit(status: Int) {
+        if (destroyed) return
+        val listener = ttsInitializationListener
+        if (listener != null) {
+            listener.onInit(status)
+        } else {
+            Log.e(TAG, "Offline TTS initialization callback is missing")
+            handleTtsFailure("tts_init_failed")
+        }
+    }
+
+    private fun handleTtsFailure(code: String) {
+        if (destroyed) return
+        speechFailure = code
+        ttsReady = false
+        isListening = false
+        sttEngine?.stopListening()
+        wakeWordDetector?.pause()
+        confirmWorkflow?.reset()
+        confirmWorkflow = null
+        cancelCompanionInteraction()
+        notifReaderActive = false
+        notifReaderAwaitingReply = false
+        notifReaderList = emptyList()
+        smsReadingList = emptyList()
+        outlookReadingActive = false
+        outlookAwaitingReply = false
+        outlookAwaitingForward = false
+        refreshAssistantNotification()
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy()")
         destroyed = true
+        cancelCompanionInteraction()
         // Cancel all pending postDelayed callbacks (error retries, etc.) before
         // any async engine teardown so they cannot re-enter after destroy.
         mainHandler.removeCallbacksAndMessages(null)
@@ -353,7 +451,10 @@ class VoiceAssistantService : Service() {
         sttEngine?.shutdown()
         sttEngine = null
         voiceInteractor.destroy()
-        sessionManager.close()
+        tts = null
+        ttsInitializationListener = null
+        ttsReady = false
+        companionRequest.clear()
         webAiSearchScraper.destroy()
         try { unregisterReceiver(ttsReplyReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(schemaReplyReceiver) } catch (_: Exception) {}
@@ -373,28 +474,28 @@ class VoiceAssistantService : Service() {
             },
             onModelError = { error ->
                 if (destroyed) return@init
-                Log.e(TAG, "Vosk model failed: $error")
+                Log.e(TAG, "Vosk model failed")
                 speak("Wake word model failed to load. $error") {}
             }
         )
     }
     // ── Phase 1: Vosk keyword spotter (silent, no beeps, low CPU) ───────────
     private fun startWakeWordDetection() {
-        if (destroyed) return
+        if (destroyed || !voiceInteractor.isReady || !voskModelReady || speechFailure != null) return
         Log.d(TAG, "Starting Vosk wake word detection")
         wakeWordDetector?.start(
             onWakeWordDetected = {
                 if (destroyed) return@start
-                Log.d(TAG, "WAKE WORD \"${getWakeWord(this@VoiceAssistantService)}\" detected — switching to STT")
+                Log.d(TAG, "Wake word detected — switching to STT")
                 // Give an immediate audio cue so user knows to speak their command.
                 speak("Yes?") { startSttOneShot() }
             },
             onListening = {
-                Log.d(TAG, "Vosk listening for \"${getWakeWord(this@VoiceAssistantService)}\"")
+                Log.d(TAG, "Vosk wake word listener ready")
             },
             onErr = { error ->
                 if (destroyed) return@start
-                Log.e(TAG, "Vosk error: $error")
+                Log.e(TAG, "Vosk recognition failed")
                 speak("Wake word error: $error") {
                     // Try to restart after a delay
                     mainHandler.postDelayed({ startWakeWordDetection() }, ERROR_RETRY_DELAY_MS)
@@ -403,7 +504,7 @@ class VoiceAssistantService : Service() {
         )
     }
     private fun resumeWakeWord() {
-        if (destroyed) return
+        if (destroyed || !voiceInteractor.isReady || !voskModelReady || speechFailure != null) return
         Log.d(TAG, "Resuming Vosk wake word detection")
         isListening = false
         sttRetryCount = 0
@@ -415,29 +516,26 @@ class VoiceAssistantService : Service() {
     }
     // ── Phase 2: One-shot SpeechRecognizer (single beep, then done) ─────────
     private fun initSttEngine() {
-        Log.d(TAG, "Creating AndroidSttEngine (on-device, INTERNET blocked)")
-        sttEngine = AndroidSttEngine(this)
+        Log.d(TAG, "Creating selected offline STT engine")
+        sttEngine = appComponent.sttEngineFactory().create()
     }
-    private fun startSttOneShot(commandPrefix: String? = null) {
-        if (destroyed || isListening) return
+    private fun startSttOneShot() {
+        if (destroyed || isListening || !voiceInteractor.isReady || speechFailure != null) return
         val engine = sttEngine ?: run {
             Log.w(TAG, "startSttOneShot() ABORTED — no STT engine")
             speak("Speech recognition unavailable.") { resumeWakeWord() }
             return
         }
         isListening = true
-        if (commandPrefix != null) {
-            Log.d(TAG, "STT one-shot — listening for command (prefix=\"$commandPrefix\")")
-        } else {
-            Log.d(TAG, "STT one-shot — listening for command")
-        }
+        Log.d(TAG, "STT one-shot — listening for command")
         engine.startListening(
             onResult = { transcript ->
+                if (destroyed || speechFailure != null) return@startListening
                 isListening = false
                 // Stop the engine immediately — kills the internal continuation
                 // restart so it can't fire a spurious no_match error callback.
                 engine.stopListening()
-                Log.d(TAG, "STT transcript: \"$transcript\"")
+                Log.d(TAG, "STT result received")
                 // Strip any leading "computer" in case the user said it again
                 // or it bled over from the wake word.
                 val command = transcript
@@ -448,12 +546,7 @@ class VoiceAssistantService : Service() {
                     .trim()
                 if (command.isNotEmpty()) {
                     sttRetryCount = 0
-                    val fullCommand = if (commandPrefix != null) {
-                        "$commandPrefix $command"
-                    } else {
-                        command
-                    }
-                    routeCommand(fullCommand)
+                    routeCommand(command)
                 } else {
                     // User only said "computer" again or something unintelligible.
                     // Allow up to MAX_STT_RETRIES re-prompts then give up.
@@ -461,11 +554,13 @@ class VoiceAssistantService : Service() {
                     if (sttRetryCount < MAX_STT_RETRIES) {
                         speak("I'm listening.") { startSttOneShot() }
                     } else {
+                        cancelCompanionInteraction()
                         speak("Going back to wake word.") { resumeWakeWord() }
                     }
                 }
             },
             onError = { errorCode ->
+                if (destroyed) return@startListening
                 isListening = false
                 if (errorCode == "no_match" || errorCode == "speech_timeout") {
                     sttRetryCount++
@@ -473,25 +568,82 @@ class VoiceAssistantService : Service() {
                         Log.d(TAG, "STT $errorCode — retry $sttRetryCount/$MAX_STT_RETRIES")
                         speak("I didn't catch that. Try again.") { startSttOneShot() }
                     } else {
+                        cancelCompanionInteraction()
                         Log.d(TAG, "STT $errorCode — max retries reached, resuming wake word")
                         speak("I didn't catch that. Say ${getWakeWord(this@VoiceAssistantService)} to try again.") {
                             resumeWakeWord()
                         }
                     }
                 } else {
-                    Log.e(TAG, "STT error: $errorCode — telling user, retry after delay")
-                    speak("Speech recognition error.") {
-                        mainHandler.postDelayed({ resumeWakeWord() }, ERROR_RETRY_DELAY_MS)
-                    }
+                    Log.e(TAG, "STT unavailable — waiting for user to correct settings")
+                    speechFailure = errorCode
+                    wakeWordDetector?.pause()
+                    confirmWorkflow?.reset()
+                    confirmWorkflow = null
+                    cancelCompanionInteraction()
+                    refreshAssistantNotification()
+                    SpeechFailure.show(this@VoiceAssistantService, errorCode)
+                    speak(SpeechFailure.message(errorCode))
                 }
             }
         )
     }
+    private fun routeCompanionCommand(command: String, lower: String): Boolean {
+        val onlinePrefix = lower.startsWith("brave ") || lower.startsWith("bing ") ||
+            lower.startsWith("being ") || lower.startsWith("leo ")
+        val appManagement = Regex(
+            "^(?:please\\s+)?(?:open|launch|start|close|quit|kill)\\s+" +
+                "(?:the\\s+)?(?:grafium|micro\\s*core)(?:\\s+app)?[.!?]?$"
+        ).matches(lower)
+        if (onlinePrefix || appManagement) return false
+
+        val route = commandRouter.route(command)
+        val appDirected = route != null || commandRouter.isCompanionCommand(command)
+        if (appDirected && (lower.contains("commands in") || lower.contains("what can") && lower.contains("do"))) {
+            cancelCompanionInteraction()
+            if (route == null) {
+                speak("I'm not sure which approved app you mean.") { resumeWakeWord() }
+            } else {
+                val declared = commandRouter.declaredCommandPrefixes(route.targetPackage)
+                if (declared.isNotEmpty()) {
+                    // Grafium's signed manifest supplies safe help without its legacy schema broadcast.
+                    speak("${route.appLabel} commands include: ${declared.distinct().take(12).joinToString(", ")}.") {
+                        resumeWakeWord()
+                    }
+                } else {
+                    speak("Asking ${route.appLabel} for its commands.") {
+                        if (commandRouter.requestSchema(route.targetPackage)) scheduleCompanionReplyTimeout()
+                        else companionUnavailable()
+                    }
+                }
+            }
+            return true
+        }
+        if (route != null) {
+            cancelCompanionInteraction()
+            val sessionId = companionRequest.begin(route.targetPackage, route.appLabel)
+            speak("Sending to ${route.appLabel}.") {
+                if (commandRouter.dispatch(route, sessionId)) {
+                    Log.d("SP_XAPP", "[DISPATCH] command dispatched")
+                    scheduleCompanionReplyTimeout()
+                } else {
+                    companionUnavailable()
+                }
+            }
+            return true
+        }
+        if (appDirected) {
+            companionUnavailable()
+            return true
+        }
+        return false
+    }
+
     // ── Command routing ───────────────────────────────────────────────────────
     private fun routeCommand(command: String) {
-        Log.d(TAG, "routeCommand(\"$command\")")
+        Log.d(TAG, "Routing command")
         if (android.util.Log.isLoggable("SP_ROUTE", android.util.Log.VERBOSE)) {
-            android.util.Log.v("SP_ROUTE", "[ROUTE] transcript=\"$command\" knownApps=${commandRouter.getAppNames()}")
+            Log.v("SP_ROUTE", "[ROUTE] command received")
         }
         val c = command.lowercase(Locale.getDefault())
         // ── 0a. Confirm-send workflow intercept ────────────────────────────────────
@@ -520,24 +672,10 @@ class VoiceAssistantService : Service() {
             else handleNotifReaderCommand(c)
             return
         }
-        // ── 1. Active follow-up session? Route back to same app ──────────────
-        val activeSession = sessionManager.getActive()
-        if (activeSession != null) {
-            Log.d("SP_SESSION",
-                    "[FOLLOW-UP\u200b] re-routing to ${activeSession.appLabel} (${activeSession.targetPackage}) session=${activeSession.sessionId}")
-            speak("Sending to ${activeSession.appLabel}.") {
-                commandRouter.dispatch(
-                    CommandRouter.RouteResult(
-                        targetPackage = activeSession.targetPackage,
-                        appLabel = activeSession.appLabel,
-                        rawCommand = command
-                    ),
-                    activeSession.sessionId
-                )
-                // Wait for TTS_REPLY broadcast from the app
-            }
-            return
-        }
+        cancelCompanionInteraction()
+        // App-directed journal/health text must be handled before weather/search
+        // handlers, even when the approved companion is missing or outdated.
+        if (routeCompanionCommand(command, c)) return
         // ── 2. Built-in: time queries ──────────────────────────────────
         if (timeHandler.isTimeCommand(c)) {
             Log.d(TAG, "Time command detected")
@@ -587,7 +725,7 @@ class VoiceAssistantService : Service() {
         if (navigationHandler.isNavigationCommand(c)) {
             Log.d(TAG, "Navigation command detected")
             navigationHandler.handleNavigation(command) { text, onDone ->
-                Log.d(TAG, "Navigation onSpeak callback: \"$text\" onDone=${onDone != null}")
+                Log.d(TAG, "Navigation speech callback received")
                 speak(text) { onDone?.invoke(); resumeWakeWord() }
             }
             return
@@ -721,7 +859,7 @@ class VoiceAssistantService : Service() {
                                 }
                                 pi.send(this@VoiceAssistantService, 0, null, null, null, null, opts.toBundle())
                             }
-                        } catch (e: Exception) { Log.e(TAG, "Google Maps open failed", e) }
+                        } catch (e: Exception) { Log.e(TAG, "Google Maps open failed") }
                         resumeWakeWord()
                     }
                 } else {
@@ -733,36 +871,6 @@ class VoiceAssistantService : Service() {
                 launchApp(appName)
                 return
             }
-        }
-        // ── 5. Built-in: "give me commands in <app>" / "what can <app> do?" ─
-        if (c.contains("commands in") || c.contains("what can") && c.contains("do")) {
-            commandRouter.refreshApps()
-            val routeResult = commandRouter.route(command)
-            if (routeResult != null) {
-                commandRouter.requestSchema(routeResult.targetPackage)
-                speak("Asking ${routeResult.appLabel} for its commands.") { /* wait for schema reply */ }
-            } else {
-                speak("I'm not sure which app you mean.") { resumeWakeWord() }
-            }
-            return
-        }
-        // ── 6. Try cross-app routing via CommandRouter ───────────────────────
-        val routeResult = commandRouter.route(command)
-        // ── 6a. Cross-app routing — but NOT if it would hijack built-in prefixes ──
-        // Brave browser is installed, so commandRouter.route("brave <query>") would
-        // route to it instead of Brave Leo. Guard: skip cross-app routing when the
-        // command starts with a reserved built-in prefix.
-        val isBuiltInPrefix = c.startsWith("brave ") || c.startsWith("bing ") ||
-            c.startsWith("being ") || c.startsWith("leo ")
-        if (routeResult != null && !isBuiltInPrefix) {
-            val sessionId = sessionManager.open(routeResult.targetPackage, routeResult.appLabel)
-            speak("Sending to ${routeResult.appLabel}.") {
-                commandRouter.dispatch(routeResult, sessionId)
-                Log.d("SP_XAPP",
-                    "[DISPATCH\u200b] ➡ ${routeResult.appLabel} (${routeResult.targetPackage}) cmd=\"${routeResult.rawCommand}\" session=$sessionId")
-                // Wait for TTS_REPLY broadcast from the app
-            }
-            return
         }
         // ── 6b. Stock price query ───────────────────────────────────────────────
         if (stockQueryHandler.isStockQuery(c)) {
@@ -814,7 +922,7 @@ class VoiceAssistantService : Service() {
         if (leoPrefix > 0) {
             val leoQuery = command.drop(leoPrefix).trim()
             if (leoQuery.isNotEmpty()) {
-                Log.d(TAG, "Leo explicit query: \"$leoQuery\"")
+                Log.d(TAG, "Leo query requested")
                 speak("Asking Brave.") {
                     webAiSearchScraper.searchStreaming(leoQuery, WebAiSearchScraper.Source.LEO,
                         onChunk = { paragraph -> speakQueued(paragraph) },
@@ -838,14 +946,13 @@ class VoiceAssistantService : Service() {
         if (bingPrefix > 0) {
             val bingQuery = command.drop(bingPrefix).trim()
             if (bingQuery.isNotEmpty()) {
-                Log.d(TAG, "Bing explicit query: \"$bingQuery\"")
+                Log.d(TAG, "Bing query requested")
                 speak("Asking Bing.") {
                     webAiSearchScraper.searchStreaming(bingQuery, WebAiSearchScraper.Source.BING,
                         onChunk = { paragraph -> speakQueued(paragraph) },
                         onDone  = { answer ->
                             if (answer != null) {
-                                Log.d(TAG, "Bing full answer (${answer.length} chars): $answer")
-                                saveDebugAnswer("bing", bingQuery, answer)
+                                Log.d(TAG, "Bing answer received")
                                 speak(" ") { resumeWakeWord() }
                             } else {
                                 if (braveSearchHandler.hasApiKey()) {
@@ -890,18 +997,8 @@ class VoiceAssistantService : Service() {
             }
             return
         }
-        // ── 8. Just an app name with no command — re-listen ─────────────────
-        val appMatch = commandRouter.findAppByName(c)
-        if (appMatch != null) {
-            Log.d(TAG, "App name only (\"${appMatch.label}\") — re-listening for command")
-            speak("What would you like ${appMatch.label} to do?") {
-                startSttOneShot(commandPrefix = appMatch.labelLower)
-            }
-            return
-        }
-
         // ── 9. No app matched — tell the user ────────────────────────────────
-        Log.d(TAG, "No app matched for: \"$command\"")
+        Log.d(TAG, "No app matched")
         speak("Sorry, I don't know how to handle that. Say open and an app name, or try an assistant command.") {
             resumeWakeWord()
         }
@@ -949,11 +1046,11 @@ class VoiceAssistantService : Service() {
         speak("$text. $prompt") { startSttOneShot() }
     }
     private fun handleNotifReaderCommand(c: String) {
-        Log.d(TAG, "handleNotifReaderCommand(\"$c\") index=$notifReaderIndex/${notifReaderList.size}")
+        Log.d(TAG, "Notification command received; index=$notifReaderIndex/${notifReaderList.size}")
         val item = notifReaderList.getOrNull(notifReaderIndex)
         when {
             notifReaderHandler.isDismissCommand(c) -> {
-                Log.d(TAG, "notifReader: DELETE key=${item?.key}")
+                Log.d(TAG, "notifReader: DELETE")
                 if (item != null) notifReaderHandler.dismiss(item.key)
                 notifReaderIndex++
                 speak("Deleted.") { readCurrentNotification() }
@@ -972,7 +1069,7 @@ class VoiceAssistantService : Service() {
                 readCurrentNotification()
             }
             else -> {
-                Log.d(TAG, "notifReader: UNRECOGNIZED command \"$c\"")
+                Log.d(TAG, "notifReader: UNRECOGNIZED command")
                 val hint = if (item?.hasReplyAction == true)
                     "Say reply, delete, or repeat."
                 else "Say delete or repeat."
@@ -981,7 +1078,7 @@ class VoiceAssistantService : Service() {
         }
     }
     private fun handleNotifReplyText(replyText: String) {
-        Log.d(TAG, "handleNotifReplyText() starting confirm workflow len=${replyText.length}")
+        Log.d(TAG, "Starting reply confirmation workflow")
         notifReaderAwaitingReply = false
         val item = notifReaderList.getOrNull(notifReaderIndex) ?: run {
             notifReaderActive = false; resumeWakeWord(); return
@@ -1111,7 +1208,7 @@ class VoiceAssistantService : Service() {
     }
 
     private fun handleOutlookReadingCommand(c: String) {
-        Log.d(TAG, "handleOutlookReadingCommand(\"$c\") index=$outlookReadingIndex/${outlookReadingList.size}")
+        Log.d(TAG, "Outlook command received; index=$outlookReadingIndex/${outlookReadingList.size}")
         val email = outlookReadingList.getOrNull(outlookReadingIndex)
         when {
             outlookHandler.isNextCommand(c) -> {
@@ -1243,7 +1340,7 @@ class VoiceAssistantService : Service() {
             speak("I couldn't find $recipientName in your contacts.") { resumeWakeWord() }
             return
         }
-        Log.d(TAG, "handleSendSmsCommand: resolved \"$recipientName\" → ${contact.name} (${contact.number})")
+        Log.d(TAG, "SMS recipient resolved")
         confirmWorkflow = ConfirmSendWorkflow(
             speak    = ::speak,
             startStt = ::startSttOneShot,
@@ -1292,7 +1389,7 @@ class VoiceAssistantService : Service() {
         if (best != null) {
             val launchIntent = pm.getLaunchIntentForPackage(best.packageName)
             if (launchIntent != null) {
-                Log.d(TAG, "Launching app: ${best.label} (${best.packageName})")
+                Log.d(TAG, "Launching matched app")
                 speak("Opening ${best.label}.") {
                     startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     resumeWakeWord()
@@ -1332,7 +1429,7 @@ class VoiceAssistantService : Service() {
             speak("I couldn't find an app called $spokenName.") { resumeWakeWord() }
             return
         }
-        Log.d(TAG, "Closing app: ${best.label} (${best.packageName})")
+        Log.d(TAG, "Closing matched app")
         val navPackages = setOf(
             "com.google.android.apps.maps",
             "net.osmand", "net.osmand.plus", "net.osmand.dev",
@@ -1356,7 +1453,7 @@ class VoiceAssistantService : Service() {
             android.os.Handler(mainLooper).postDelayed({
                 val am = getSystemService(android.app.ActivityManager::class.java)
                 am?.killBackgroundProcesses(best.packageName)
-                Log.d(TAG, "killBackgroundProcesses attempted for ${best.packageName}")
+                Log.d(TAG, "Background stop requested")
             }, 800)
             resumeWakeWord()
         }
@@ -1373,24 +1470,6 @@ class VoiceAssistantService : Service() {
         }
         return dp[a.length][b.length]
     }
-    // ── Debug helpers ─────────────────────────────────────────────────────────
-    /**
-     * Write the last answer from [source] to `files/debug_last_answer.txt` so it
-     * can be compared against what TTS actually said.
-     * File is written to app-private storage — never uploaded anywhere.
-     * Read back with:  adb shell run-as com.silentpulse.messenger cat files/debug_last_answer.txt
-     */
-    private fun saveDebugAnswer(source: String, query: String, answer: String) {
-        try {
-            val file = java.io.File(filesDir, "debug_last_answer.txt")
-            val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-            file.writeText("[$ts] source=$source\nquery: $query\n---\n$answer\n")
-            Log.d(TAG, "Debug answer saved to ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to save debug answer: ${e.message}")
-        }
-    }
-
     // -- TTS helper --
 
     /**
@@ -1403,7 +1482,7 @@ class VoiceAssistantService : Service() {
      * navigation, weather, general queries) calls this method.
      */
     private fun speak(text: String, onDone: (() -> Unit)? = null) {
-        Log.d(TAG, "TTS speak (${text.length} chars): \"$text\"")
+        Log.d(TAG, "TTS speech requested")
         voiceInteractor.speak(text, onDone ?: {})
     }
 

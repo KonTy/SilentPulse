@@ -45,7 +45,7 @@ class GeneralQueryHandler(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "General query: \"$command\"")
+        Log.d(TAG, "general_query_started")
 
         executor.execute {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -55,7 +55,7 @@ class GeneralQueryHandler(private val context: Context) {
                     ?: "I couldn't find an answer for that. Try rephrasing your question."
                 mainHandler.post { onResult(answer) }
             } catch (e: Exception) {
-                Log.e(TAG, "General query failed", e)
+                Log.e(TAG, "general_query_failed type=${e.javaClass.simpleName}")
                 mainHandler.post { onResult("I couldn't find an answer right now. Try again later.") }
             }
         }
@@ -66,7 +66,7 @@ class GeneralQueryHandler(private val context: Context) {
     private fun queryDuckDuckGo(query: String): String? {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "$DDG_URL?q=$encoded&format=json&no_redirect=1&no_html=1&skip_disambig=1"
-        Log.d(TAG, "DDG URL: $url")
+        Log.d(TAG, "ddg_request_started")
 
         val body = httpGet(url)
         val json = JSONObject(body)
@@ -74,7 +74,7 @@ class GeneralQueryHandler(private val context: Context) {
         // 1. Direct computed answer (unit conversions, calculations, etc.)
         val answer = json.optString("Answer", "").trim()
         if (answer.isNotEmpty()) {
-            Log.d(TAG, "DDG Answer: $answer")
+            Log.d(TAG, "ddg_answer chars=${answer.length}")
             return answer
         }
 
@@ -88,7 +88,7 @@ class GeneralQueryHandler(private val context: Context) {
         // 3. Dictionary definition
         val definition = json.optString("Definition", "").trim()
         if (definition.isNotEmpty()) {
-            Log.d(TAG, "DDG Definition: $definition")
+            Log.d(TAG, "ddg_definition chars=${definition.length}")
             return definition
         }
 
@@ -103,7 +103,7 @@ class GeneralQueryHandler(private val context: Context) {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val searchUrl = "$WIKI_SEARCH_URL?action=query&list=search" +
                 "&srsearch=$encoded&format=json&srprop=snippet&srlimit=3"
-        Log.d(TAG, "Wikipedia search: $searchUrl")
+        Log.d(TAG, "wikipedia_search_started")
 
         val searchBody = httpGet(searchUrl)
         val searchJson = JSONObject(searchBody)
@@ -131,7 +131,7 @@ class GeneralQueryHandler(private val context: Context) {
             val titleWords = title.lowercase().split("\\s+".toRegex()).toSet()
             val overlap = queryWords.intersect(titleWords)
             if (overlap.isNotEmpty()) {
-                Log.d(TAG, "Wikipedia: title \"$title\" overlaps query on: $overlap")
+                Log.d(TAG, "wikipedia_title_matched")
                 chosenTitle = title
                 break
             }
@@ -146,7 +146,7 @@ class GeneralQueryHandler(private val context: Context) {
         val encodedTitle = URLEncoder.encode(chosenTitle, "UTF-8")
         val extractUrl = "$WIKI_SEARCH_URL?action=query&titles=$encodedTitle" +
                 "&prop=extracts&exsentences=3&format=json&explaintext=1"
-        Log.d(TAG, "Wikipedia extract: $extractUrl (article: $chosenTitle)")
+        Log.d(TAG, "wikipedia_extract_started")
 
         val extractBody = httpGet(extractUrl)
         val extractJson = JSONObject(extractBody)
@@ -161,7 +161,7 @@ class GeneralQueryHandler(private val context: Context) {
         if (extract.isEmpty()) return null
 
         val spoken = truncateToSentence(extract, MAX_CHARS)
-        Log.d(TAG, "Wikipedia answer from \"$chosenTitle\": $spoken")
+        Log.d(TAG, "wikipedia_answer chars=${spoken.length}")
         return "According to Wikipedia, on $chosenTitle: $spoken"
     }
 

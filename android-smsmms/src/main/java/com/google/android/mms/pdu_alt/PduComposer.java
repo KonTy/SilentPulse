@@ -886,7 +886,7 @@ public class PduComposer {
         }
         catch (ArrayIndexOutOfBoundsException e){
             Timber.e(e, "logging error");
-            e.printStackTrace();
+            timber.log.Timber.w("pdu_composition_failed type=%s", e.getClass().getSimpleName());
         }
 
         int ctLength = ctStart.getLength();

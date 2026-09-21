@@ -18,11 +18,22 @@
 #include "ggml.h"
 
 #define TAG     "WhisperJNI"
+#ifndef NDEBUG
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#else
+#define LOGI(...) ((void)0)
+#define LOGW(...) ((void)0)
+#define LOGE(...) ((void)0)
+#endif
 
 #define UNUSED(x) (void)(x)
+
+/* Decoder diagnostics may contain text; Java reports fixed error codes instead. */
+static void discard_native_log(enum ggml_log_level level, const char *text, void *user_data) {
+    UNUSED(level); UNUSED(text); UNUSED(user_data);
+}
 
 /* ─── Package prefix ──────────────────────────────────────────────────────── */
 /* ## can only be used inside a #define body, not at file scope.
@@ -55,8 +66,10 @@ static int preferred_threads(void) {
 JNIEXPORT jlong JNICALL
 JNI_FUN(initContext)(JNIEnv *env, jobject thiz, jstring model_path_str) {
     UNUSED(thiz);
+    whisper_log_set(discard_native_log, NULL);
+    ggml_log_set(discard_native_log, NULL);
     const char *path = (*env)->GetStringUTFChars(env, model_path_str, NULL);
-    LOGI("Loading Whisper model: %s", path);
+    LOGI("Loading local Whisper model");
     struct whisper_context *ctx =
         whisper_init_from_file_with_params(path, whisper_context_default_params());
     (*env)->ReleaseStringUTFChars(env, model_path_str, path);
@@ -118,15 +131,20 @@ JNI_FUN(fullTranscribe)(JNIEnv *env, jobject thiz,
     }
 
     whisper_reset_timings(ctx);
-    LOGI("Running whisper_full on %d samples (%d threads, lang=%s)",
-         (int)n_samples, params.n_threads,
-         params.language ? params.language : "auto");
+    LOGI("Running whisper_full on %d samples (%d threads)",
+         (int)n_samples, params.n_threads);
 
     int result = whisper_full(ctx, params, samples, (int)n_samples);
     if (result != 0) { LOGE("whisper_full failed: %d", result); }
 
     if (lang_chars) (*env)->ReleaseStringUTFChars(env, language_str, lang_chars);
     (*env)->ReleaseFloatArrayElements(env, audio_data, samples, JNI_ABORT);
+    if (result != 0) {
+        jclass error_class = (*env)->FindClass(env, "java/lang/IllegalStateException");
+        if (error_class) {
+            (*env)->ThrowNew(env, error_class, "Local transcription failed");
+        }
+    }
 }
 
 /* ─── Result accessors ────────────────────────────────────────────────────── */

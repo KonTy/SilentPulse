@@ -12,7 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
+import com.silentpulse.messenger.feature.drivemode.SpeechLog as Log
 import androidx.core.content.ContextCompat
 import com.silentpulse.messenger.BuildConfig
 import com.silentpulse.messenger.feature.assistant.ConfirmSendWorkflow
@@ -20,7 +20,7 @@ import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.model.Message
 import com.silentpulse.messenger.repository.MessageRepository
 import io.realm.Realm
-import timber.log.Timber
+import com.silentpulse.messenger.feature.drivemode.SpeechDiagnostics as Timber
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -46,8 +46,6 @@ data class NavEtaInfo(
 
 class SilentPulseNotificationListener : NotificationListenerService() {
 
-    // TTS with onDone callback support
-    private var ttsEngine: AndroidTtsEngine? = null
     /** TTS + language-detection, shared pattern with [VoiceAssistantService]. */
     private lateinit var voiceInteractor: VoiceInteractor
     private var listenerConnected = false
@@ -150,7 +148,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 val combined = listOf(title, text.ifBlank { bigText }, subText, infoText)
                     .filter { it.isNotBlank() }
                     .joinToString(" · ")
-                Log.d("NavETA", "Found nav notification from $appLabel: \"$combined\"")
+                Timber.d("Navigation notification found")
                 return NavEtaInfo(appLabel, title, combined)
             }
             return null
@@ -218,8 +216,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         appComponent.inject(this)
         sInstance = this
         Timber.d("Drive Mode listener: onCreate")
-        ttsEngine = AndroidTtsEngine(applicationContext)
-        voiceInteractor = VoiceInteractor(applicationContext)
+        voiceInteractor = VoiceInteractor(applicationContext, onFailure = { stopReading() })
     }
 
     override fun onListenerConnected() {
@@ -241,7 +238,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
-        Log.d("DriveModeTTS", "onNotificationPosted: pkg=" + (sbn?.packageName ?: "null") + " key=" + (sbn?.key ?: "null") + " flags=0x" + Integer.toHexString(sbn?.notification?.flags ?: 0))
+        Timber.d("Drive Mode: notification posted")
         if (sbn == null) return
 
         storedNotifications[sbn.key] = sbn
@@ -249,14 +246,14 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             storedNotifications.keys.firstOrNull()?.let { storedNotifications.remove(it) }
         }
 
-        Timber.d("Drive Mode: notification from pkg=${sbn.packageName} key=${sbn.key} state=$listenState")
+        Timber.d("Drive Mode: notification received; state=$listenState")
         if (!isDriveModeEnabled()) return
         if (!isMessagingApp(sbn.packageName)) return
 
         // Skip ongoing / foreground-service notifications (e.g. VoiceAssistantService, Drive Mode itself)
         val flags = sbn.notification?.flags ?: 0
         if (flags and Notification.FLAG_ONGOING_EVENT != 0 || flags and Notification.FLAG_FOREGROUND_SERVICE != 0) {
-            Timber.d("Drive Mode: skipping ongoing/foreground notification ${sbn.key}")
+            Timber.d("Drive Mode: skipping ongoing/foreground notification")
             return
         }
 
@@ -270,7 +267,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         val now = System.currentTimeMillis()
         val lastSpoken = recentlySpoken[sbn.key]
         if (lastSpoken != null && now - lastSpoken < DEDUP_WINDOW_MS) {
-            Timber.d("Drive Mode: dedup skip ${sbn.key}")
+            Timber.d("Drive Mode: dedup skip")
             return
         }
         recentlySpoken[sbn.key] = now
@@ -285,7 +282,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             ?.toString()?.takeIf { it.isNotBlank() } ?: return
 
         val appName = getAppName(sbn.packageName)
-        Timber.d("Drive Mode: SPEAKING - from $sender via $appName: $text")
+        Timber.d("Drive Mode: SPEAKING")
 
         // Cancel any ongoing listening session for a previous message
         stopListeningNow()
@@ -325,8 +322,6 @@ class SilentPulseNotificationListener : NotificationListenerService() {
         // DriveModeMicService is persistent — do NOT stop it here
         cachedSttEngine?.shutdown()
         cachedSttEngine = null
-        ttsEngine?.shutdown()
-        ttsEngine = null
         voiceInteractor.destroy()
         clearAllStoredNotifications()
     }
@@ -406,7 +401,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     }
 
     private fun handleCommandResult(text: String) {
-        Timber.d("Drive Mode command recognized: \"$text\"")
+        Timber.d("Drive Mode command recognized")
 
         // ── Confirm-send workflow intercept ──────────────────────────────────
         // While a confirm workflow is active (user just dictated a reply and we
@@ -421,7 +416,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
 
         // Filter Whisper hallucinations — treat as silence
         if (isHallucination(text)) {
-            Timber.d("Drive Mode: ignoring Whisper hallucination: \"$text\"")
+            Timber.d("Drive Mode: ignoring probable hallucination")
             retryOrGiveUp("I did not hear anything. Say dismiss, delete, reply, repeat, or stop.")
             return
         }
@@ -499,7 +494,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             }
             else -> {
                 // Unrecognized command — DO NOT reset totalVoiceAttempts
-                Timber.d("Drive Mode: unrecognized command \"$text\", re-prompting")
+                Timber.d("Drive Mode: unrecognized command, re-prompting")
                 retryOrGiveUp("I heard \"${text.take(30)}\". Say dismiss, delete, reply, repeat, or stop.")
             }
         }
@@ -543,7 +538,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     }
 
     private fun handleReplyText(replyText: String) {
-        Timber.d("Drive Mode reply text: \"$replyText\"")
+        Timber.d("Drive Mode reply received")
         // Filter hallucinations in reply mode too
         if (isHallucination(replyText)) {
             speak("I did not hear your reply. Please try again, or say dismiss.") {
@@ -600,12 +595,12 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                 }
                 if (messageIds.isNotEmpty()) {
                     messageRepo.deleteMessages(*messageIds)
-                    Timber.d("Drive Mode: deleted ${messageIds.size} message(s) from thread $threadId")
+                    Timber.d("Drive Mode: deleted ${messageIds.size} message(s)")
                 } else {
-                    Timber.d("Drive Mode: no unread messages found in thread $threadId")
+                    Timber.d("Drive Mode: no unread messages found")
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Drive Mode: failed to delete messages from thread $threadId")
+                Timber.e("Drive Mode: failed to delete messages")
             }
         }.start()
     }
@@ -614,7 +609,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
     fun tryInlineReply(notificationKey: String, replyText: String): Boolean {
         return try {
             val replyAction = getStoredReplyAction(notificationKey) ?: run {
-                Timber.w("No inline reply action for key: $notificationKey")
+                Timber.w("No inline reply action")
                 return false
             }
             val remoteInputs = replyAction.remoteInputs ?: return false
@@ -626,10 +621,10 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             bundle.putCharSequence(remoteInput.resultKey, replyText)
             RemoteInput.addResultsToIntent(remoteInputs, intent, bundle)
             replyAction.actionIntent.send(applicationContext, 0, intent)
-            Timber.d("Inline reply sent: \"$replyText\"")
+            Timber.d("Inline reply sent")
             true
         } catch (e: Exception) {
-            Timber.e(e, "Inline reply failed")
+            Timber.e("Inline reply failed")
             false
         }
     }
@@ -659,20 +654,13 @@ class SilentPulseNotificationListener : NotificationListenerService() {
      * ready when we actually need to record. Call this during TTS playback.
      */
     private fun ensureSttEngine() {
-        // If we have a stale Whisper engine cached, drop it so the factory
-        // can create the preferred Android STT engine instead.
-        if (cachedSttEngine is WhisperSttEngine) {
-            Timber.d("ensureSttEngine: replacing stale WhisperSttEngine with preferred engine")
-            cachedSttEngine?.shutdown()
-            cachedSttEngine = null
-        }
         if (cachedSttEngine != null) return
         try {
             Log.d("DriveModeTTS", "ensureSttEngine: pre-loading STT engine during TTS")
             cachedSttEngine = sttEngineFactory.create()
             Timber.d("ensureSttEngine: created ${cachedSttEngine?.javaClass?.simpleName}")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to pre-load STT engine")
+            Timber.e("Failed to pre-load STT engine")
         }
     }
 
@@ -691,7 +679,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
             try {
                 cachedSttEngine = sttEngineFactory.create()
             } catch (e: Exception) {
-                Timber.e(e, "Failed to create STT engine")
+                Timber.e("Failed to create STT engine")
                 speak("Speech recognition is not available.") {
                     mainHandler.post { listenState = ListenState.IDLE }
                 }
@@ -709,8 +697,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                     Timber.d("Drive Mode STT: stale session $sessionId (current=$sttSessionId), ignoring result")
                     return@startListening
                 }
-                Log.d("DriveModeTTS", "STT result: \"$recognizedText\"")
-                Timber.d("STT result: \"$recognizedText\"")
+                Timber.d("STT result received")
                 if (recognizedText.isNotBlank()) {
                     mainHandler.post {
                         stopMicService()
@@ -756,8 +743,7 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                             "Microphone permission is required."
                         "recognition_unavailable" ->
                             "Speech recognition is not available on this device."
-                        else ->
-                            "Speech recognition error: $errorCode."
+                        else -> SpeechFailure.message(errorCode)
                     }
 
                     val retryable = (errorCode == "speech_timeout" || errorCode == "no_match") && errorCode != "mic_silenced"
@@ -766,6 +752,9 @@ class SilentPulseNotificationListener : NotificationListenerService() {
                         retryOrGiveUp(userMsg)
                     } else {
                         // Non-retryable error — bail out
+                        confirmWorkflow?.reset()
+                        confirmWorkflow = null
+                        SpeechFailure.show(this@SilentPulseNotificationListener, errorCode)
                         speak(userMsg) {
                             mainHandler.post { listenState = ListenState.IDLE }
                         }

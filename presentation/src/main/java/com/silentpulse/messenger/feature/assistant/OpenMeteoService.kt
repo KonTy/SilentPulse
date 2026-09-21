@@ -3,6 +3,7 @@ package com.silentpulse.messenger.feature.assistant
 import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -34,8 +35,8 @@ import kotlin.math.roundToInt
 object OpenMeteoService {
 
     private const val TAG = "OpenMeteo"
-    private const val GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
-    private const val FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+    internal const val GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
+    internal const val FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
     private const val WTTR_URL = "https://wttr.in"
     private const val CONNECT_TIMEOUT = 10_000
     private const val READ_TIMEOUT = 15_000
@@ -61,7 +62,7 @@ object OpenMeteoService {
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Open-Meteo failed for '$location', trying wttr.in", e)
+            Log.w(TAG, "weather_primary_failed type=${e.javaClass.simpleName}")
         }
 
         // ── Fallback: wttr.in (plain text) ───────────────────────────────
@@ -72,7 +73,7 @@ object OpenMeteoService {
                 spokenSummary = wttrText
             )
         } catch (e: Exception) {
-            Log.e(TAG, "wttr.in also failed for '$location'", e)
+            Log.e(TAG, "weather_fallback_failed type=${e.javaClass.simpleName}")
         }
 
         return WeatherResult.Error("Could not fetch weather for $location from any source.")
@@ -90,7 +91,7 @@ object OpenMeteoService {
                 spokenSummary = wttrText
             )
         } catch (e: Exception) {
-            Log.e(TAG, "wttr.in auto-location failed", e)
+            Log.e(TAG, "weather_auto_location_failed type=${e.javaClass.simpleName}")
             WeatherResult.Error("Could not determine your location for weather. Try specifying a city, like: weather in Seattle.")
         }
     }
@@ -126,7 +127,7 @@ object OpenMeteoService {
 
     private fun geocode(location: String): GeoResult? {
         val url = "$GEOCODE_URL?name=${URLEncoder.encode(location, "UTF-8")}&count=1&language=en&format=json"
-        Log.d(TAG, "Geocoding: $url")
+        Log.d(TAG, "weather_geocoding_started")
 
         val json = httpGet(url)
         val results = json.optJSONArray("results") ?: return null
@@ -159,7 +160,7 @@ object OpenMeteoService {
             append("&forecast_days=$days")
         }
         val url = "$FORECAST_URL?$params"
-        Log.d(TAG, "Forecast: $url")
+        Log.d(TAG, "weather_forecast_started")
 
         val json = httpGet(url)
         return buildSpokenForecast(json, days)
@@ -287,13 +288,13 @@ object OpenMeteoService {
         return if (days <= 1) {
             val format = URLEncoder.encode("%C, %t, humidity %h, wind %w", "UTF-8")
             val url = "$WTTR_URL/$encodedLoc?format=$format&u"
-            Log.d(TAG, "wttr.in single: $url")
+            Log.d(TAG, "weather_single_day_started")
             val text = httpGetText(url).trim()
             "Currently: $text."
         } else {
             // Use the JSON API for multi-day from wttr.in
             val url = "$WTTR_URL/$encodedLoc?format=j1"
-            Log.d(TAG, "wttr.in multi-day: $url")
+            Log.d(TAG, "weather_multi_day_started")
             val json = httpGet(url)
             parseWttrJson(json, days)
         }
@@ -351,23 +352,21 @@ object OpenMeteoService {
         return JSONObject(httpGetText(urlString))
     }
 
-    private fun httpGetText(urlString: String): String {
+    internal fun httpGetText(urlString: String, followRedirects: Boolean = true): String {
         val url = URL(urlString)
         val conn = url.openConnection() as HttpURLConnection
         conn.connectTimeout = CONNECT_TIMEOUT
         conn.readTimeout = READ_TIMEOUT
         conn.requestMethod = "GET"
+        conn.instanceFollowRedirects = followRedirects
         conn.setRequestProperty("User-Agent", "SilentPulse/1.0 (Android; offline-first)")
 
         try {
             val code = conn.responseCode
             if (code != 200) {
-                throw RuntimeException("HTTP $code from ${url.host}")
+                throw IOException("Weather service HTTP $code")
             }
-            val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val body = reader.readText()
-            reader.close()
-            return body
+            return BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
         } finally {
             conn.disconnect()
         }

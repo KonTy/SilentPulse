@@ -115,7 +115,7 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <!-- Engine toggle: Google | Vosk -->
+                    <!-- Engine toggle: Android on-device | Vosk | configured Whisper -->
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/sttEngineToggle"
                         android:layout_width="match_parent"
@@ -130,7 +130,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Google (Recommended)" />
+                            android:text="@string/speech_engine_android" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/sttBtnVosk"
@@ -138,9 +138,28 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Vosk (Air-gapped)" />
+                            android:text="Vosk" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/sttBtnWhisper"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:enabled="false"
+                            android:text="Whisper" />
 
                     </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        android:id="@+id/whisperSelection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingBottom="8dp"
+                        android:text="@string/speech_whisper_existing_model"
+                        android:textSize="13sp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:visibility="gone" />
 
                     <!-- Google STT info (visible when Google selected) -->
                     <LinearLayout
@@ -155,7 +174,7 @@
                             android:layout_height="wrap_content"
                             android:paddingTop="4dp"
                             android:paddingBottom="4dp"
-                            android:text="Uses Android's on-device SODA recognizer (com.google.android.as). EXTRA_PREFER_OFFLINE is enabled to prevent audio from leaving the device."
+                            android:text="@string/speech_android_stt_privacy"
                             android:textSize="13sp"
                             android:textColor="?android:attr/textColorSecondary" />
 
@@ -360,7 +379,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Google TTS" />
+                            android:text="@string/speech_android_tts_label" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/ttsBtnKokoro"
@@ -368,7 +387,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Kokoro (Expressive)" />
+                            android:text="@string/speech_kokoro_unavailable_label" />
 
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -385,7 +404,7 @@
                             android:layout_height="wrap_content"
                             android:paddingTop="4dp"
                             android:paddingBottom="4dp"
-                            android:text="Uses Android's on-device TextToSpeech engine. No model download needed."
+                            android:text="@string/speech_android_tts_privacy"
                             android:textSize="13sp"
                             android:textColor="?android:attr/textColorSecondary" />
 
@@ -404,7 +423,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:paddingBottom="8dp"
-                            android:text="Neural expressive TTS — fully offline via sherpa-onnx."
+                            android:text="@string/speech_kokoro_privacy_block"
                             android:textSize="13sp"
                             android:textColor="?android:attr/textColorSecondary" />
 

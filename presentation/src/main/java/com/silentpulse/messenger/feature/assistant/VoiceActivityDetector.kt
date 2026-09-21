@@ -92,7 +92,7 @@ class VoiceActivityDetector(private val context: Context) {
                 bufSize
             )
         } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException creating AudioRecord", e)
+            Log.e(TAG, "audio_record_permission_failed type=${e.javaClass.simpleName}")
             return
         }
 

@@ -67,6 +67,7 @@ class OutlookWebScraper(private val context: Context) {
 
     private fun getOrCreateWebView(): WebView {
         return webView ?: WebView(context).apply {
+            webChromeClient = DiagnosticFreeWebChromeClient()
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -122,13 +123,13 @@ class OutlookWebScraper(private val context: Context) {
                     override fun onPageFinished(view: WebView, url: String) {
                         if (done || loaded) return
                         loaded = true
-                        Log.d(TAG, "Inbox page finished: $url")
+                        Log.d(TAG, "inbox_page_finished")
 
                         // Check if we got redirected to login
                         if (url.contains("login.microsoftonline.com") || url.contains("login.live.com")) {
                             done = true
                             mainHandler.removeCallbacks(timeoutCallback)
-                            Log.w(TAG, "Session expired — redirected to login: $url")
+                            Log.w(TAG, "inbox_session_expired")
                             setOutlookReady(context, false)
                             inboxLoaded = false
                             onResult(emptyList())
@@ -163,13 +164,6 @@ class OutlookWebScraper(private val context: Context) {
             return
         }
 
-        // Debug dump on poll #3 to help tune selectors
-        if (attempt == 3) {
-            wv.evaluateJavascript(DEBUG_DUMP_JS) { dump ->
-                Log.d(TAG, "DOM debug dump: $dump")
-            }
-        }
-
         wv.evaluateJavascript(INBOX_SCRAPE_JS.replace("MAX_COUNT", count.toString())) { raw ->
             if (raw != null && raw != "null" && raw.length > 10) {
                 try {
@@ -196,7 +190,7 @@ class OutlookWebScraper(private val context: Context) {
                         return@evaluateJavascript
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "JSON parse error on poll $attempt: ${e.message}")
+                    Log.w(TAG, "inbox_parse_failed attempt=$attempt type=${e.javaClass.simpleName}")
                 }
             }
             // Not ready yet — retry
@@ -270,7 +264,7 @@ class OutlookWebScraper(private val context: Context) {
             val wv = getOrCreateWebView()
             wv.evaluateJavascript(DELETE_EMAIL_JS) { raw ->
                 val ok = raw?.contains("true") == true
-                Log.d(TAG, "Delete result: $ok")
+                Log.d(TAG, "email_delete_callback")
                 onResult(ok)
             }
         }
@@ -356,19 +350,6 @@ class OutlookWebScraper(private val context: Context) {
     }
 
     // ── JavaScript snippets ───────────────────────────────────────────────────
-
-    private val DEBUG_DUMP_JS = """
-    (function() {
-        var roles = document.querySelectorAll('[role]');
-        var summary = [];
-        for (var i = 0; i < Math.min(roles.length, 50); i++) {
-            var el = roles[i];
-            summary.push(el.tagName + '[role=' + el.getAttribute('role') + '] text=' +
-                (el.textContent || '').substring(0, 60).replace(/\n/g,' '));
-        }
-        return JSON.stringify(summary);
-    })()
-    """.trimIndent()
 
     /**
      * Scrape the inbox mail list. OWA uses role="listbox" for the mail list

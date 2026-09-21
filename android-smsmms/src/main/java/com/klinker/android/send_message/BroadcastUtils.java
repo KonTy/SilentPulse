@@ -33,7 +33,7 @@ public class BroadcastUtils {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            timber.log.Timber.w("broadcast_failed type=%s", e.getClass().getSimpleName());
         }
 
         intent.setPackage(context.getPackageName());

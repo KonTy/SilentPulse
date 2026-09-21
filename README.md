@@ -2,13 +2,15 @@
 
 **Privacy-first SMS & messaging app with an offline voice assistant for hands-free drive mode.**
 
-Forked from [QKSMS](https://github.com/moezbhatti/qksms) and rebuilt for corporate and security-sensitive environments where **no data may leave the device to any third party**.
+Forked from [QKSMS](https://github.com/moezbhatti/qksms) and rebuilt to keep private message storage and speech processing local.
 
 ---
 
 ## What is SilentPulse?
 
-SilentPulse is a drop-in replacement for the Android stock SMS app. On top of that it ships a fully **offline, always-on voice assistant** you activate hands-free while driving. Every feature works without internet — except a small set of explicitly whitelisted privacy-respecting APIs (weather, navigation ETA, stock prices, and optional AI search). **Google is never contacted.**
+SilentPulse is a drop-in replacement for the Android stock SMS app with an on-device, hands-free voice assistant. Optional weather, navigation ETA, stock prices, and AI questions use explicitly permitted online services.
+
+Android speech is restricted to the on-device recognizer and installed offline TTS voices, with no cloud fallback. SilentPulse cannot firewall a separate Google/system process or guarantee that it never makes unrelated network requests; that requires device-level controls.
 
 ---
 
@@ -39,7 +41,7 @@ Say **"Computer"** at any time while the assistant is running. The Vosk on-devic
 
 Phase 1 — **Vosk keyword spotter** runs continuously, constrained to the grammar `["computer", "[unk]"]`. It reads raw PCM via AudioRecord — zero beeps, zero SpeechRecognizer restarts, minimal battery drain.
 
-Phase 2 — When Vosk hears "Computer" it releases the mic and hands off to **Android SpeechRecognizer** (`EXTRA_PREFER_OFFLINE=true`) for a single free-form utterance. The recognizer plays its natural beep — this is the "ready" signal the user hears.
+Phase 2 — When Vosk hears the wake word, it releases the mic and hands off to the selected offline STT engine. Android recognition requires the **API 31+ on-device recognizer**, not merely `EXTRA_PREFER_OFFLINE`; unavailable offline recognition is reported rather than falling back to the generic/cloud-capable recognizer. Vosk and Whisper remain local alternatives.
 
 The transcript then flows through a routing chain:
 
@@ -56,28 +58,32 @@ The transcript then flows through a routing chain:
 | `BraveSearchHandler` | Optional AI search summariser (user-supplied API key) |
 | `CommandRouter` | Cross-app broadcast dispatch with Levenshtein fuzzy app-name matching |
 
-All TTS uses Android's on-device `TextToSpeech` engine with automatic language/locale detection. No cloud speech of any kind.
+Android TTS must have an installed voice for the requested language that does not require a network connection; a missing or network-only voice is rejected rather than used as a fallback. The bundled Kokoro/Sherpa backend is temporarily blocked because its native error diagnostics can expose input text even with debugging disabled. Its saved models/preferences remain intact, and it is not silently replaced by another engine.
 
 ### Cross-app voice broadcast protocol
 
-Third-party apps can register as voice targets. SilentPulse:
+Only approved companion apps can be voice targets. SilentPulse:
 
-1. Discovers registered apps via `PackageManager` (`ASSISTANT_CAPABLE` intent filter)
+1. Discovers only **Grafium (`com.grafium.app`)** and **Microcore (`com.microcore.microcore`)**, requiring a signing identity matching SilentPulse
 2. Strips the app name from the command and dispatches an `EXECUTE_COMMAND` broadcast
-3. The target app replies with a `TTS_REPLY` broadcast; SilentPulse speaks it aloud
-4. Supports multi-turn disambiguation — if the target replies with candidates, SilentPulse asks the user to clarify, then re-dispatches with the resolved intent
+3. The target app replies with a package-scoped `TTS_REPLY` broadcast; SilentPulse requires a fresh, one-use request nonce, approved recipient identity, and pending request before speaking
+4. **One command, one reply, then back to the wake word.** Companion follow-up hints never activate another listening turn or implicitly route the next utterance to that app
 
 Example: *"Computer, Microcore, log weight 220 pounds"* — SilentPulse routes "log weight 220 pounds" to the Microcore health app, which logs the measurement and replies *"Logged weight at 220 pounds."*
+
+Microcore requires voice-bridge protocol 2: `EXTRA_SESSION_ID` identifies each one-shot request, and a separate fresh `EXTRA_REPLY_NONCE` is echoed in the reply. Its internal protocol remains compatible, but SilentPulse does not continue companion conversations. Incomplete commands must be repeated as a new, complete wake-word command. The receiver requires the signature-level `com.silentpulse.messenger.permission.VOICE_COMMAND` permission. Older global-broadcast Microcore bridges are rejected before private commands are sent. Grafium's existing package-scoped protocol uses a fresh nonce in `EXTRA_SESSION_ID`; its signed manifest supplies local command-help text instead of accepting unauthenticated legacy schema replies.
+
+Private app-directed commands are not forwarded to online AI when a companion is unavailable. Cancel/stop, timeout, speech failure, and service shutdown revoke pending reply capabilities. These controls authorize SilentPulse's integrations; they do not audit every behavior of the approved companion apps.
 
 ---
 
 ## Privacy Architecture
 
-> **Core principle: if it touches Google, it is blocked.**
+> **Core principle: private content must not be forwarded to online providers without the user's explicit request.**
 
 ### Network security
 
-`network_security_config.xml` acts as a domain-level TLS firewall:
+`network_security_config.xml` limits the app's framework-managed TLS trust:
 
 - `base-config` trusts **zero** certificate authorities — any unlisted domain fails at TLS handshake
 - Only explicitly whitelisted privacy-respecting domains can connect:
@@ -93,14 +99,24 @@ Example: *"Computer, Microcore, log weight 220 pounds"* — SilentPulse routes "
 | `query1/2.finance.yahoo.com` | Stock prices (unofficial) |
 | `api.search.brave.com` | AI search summariser (optional — user-supplied key) |
 
+This is not a device-wide egress firewall. It does not govern other applications, Android speech/font/backup services, or arbitrary native networking. Online AI questions and public-city weather requests are intentional network operations; the provider necessarily sees the request and connection metadata.
+
+### Backup, fonts, and diagnostics
+
+SilentPulse disables automatic cloud backup and device-to-device extraction of its app data. An update does not delete any existing remote backup or change Android's separate system SMS-backup settings.
+
+The UI uses platform fonts and does not request downloadable Google fonts or emoji metadata. Debug builds retain content-free diagnostics; release app diagnostics are disabled. Messages, contact details, transcripts, authentication URLs, and request capabilities must not appear in diagnostic logs.
+
+AI conversation cookies/session behavior is unchanged by these privacy fixes. A configurable conversation inactivity window is a separate, deferred design discussion.
+
 ### What is explicitly absent
 
 - No Firebase of any kind (no Crashlytics, Analytics, FCM, Remote Config, Performance)
-- No Google Play Services network calls — ML Kit runs in fully bundled/embedded mode only
+- No app-initiated Google font downloads or Play Services telemetry SDKs
 - No crash or event reporting (Sentry, Datadog, Amplitude, Mixpanel, Segment…)
 - No advertising SDKs
 - No cloud TTS or cloud STT — all speech processing is on-device only
-- No log shipping — Timber logs go to a local file only, never off-device
+- No log shipping — debug diagnostics stay local, and release diagnostics are disabled
 - No A/B testing or feature flag services
 - No referral or attribution tracking
 
@@ -115,9 +131,21 @@ Example: *"Computer, Microcore, log weight 220 pounds"* — SilentPulse routes "
 
 ## Home-screen controls
 
-The four-icon control widget requests a **3-column, 1-row** footprint for the notification reader, next notification, voice assistant, and stop-speaking controls. It supports vertical resizing with a compact minimum height; actual grid sizing depends on your launcher.
+The four-icon control widget requests a **2-column, 1-row** footprint for the notification reader, next notification, voice assistant, and stop-speaking controls. Tight horizontal padding keeps all four icons visible at **2x1**, while horizontal resizing also supports **3x1** and **4x1** for larger touch targets. Actual grid sizing depends on your launcher.
 
-After updating, long-press an existing widget and drag its resize handle down to one row. If your launcher keeps the old size or does not show resize handles, remove and re-add the widget.
+After updating, long-press an existing widget and use its side handles to shrink its width, or its top/bottom handles to reduce its height to one row. If your launcher keeps the old minimum size or does not show resize handles, remove and re-add the widget.
+
+### World clocks
+
+Add **SilentPulse World Clock** from your launcher's widget picker, search for a city or IANA time zone, choose white or black text for your wallpaper, and tap **Save clock**. Its background is fully transparent.
+
+Each clock requests **2 columns by 1 row**, so two fit side by side on a four-column home screen. Add as many independent instances as your launcher allows, with a different city on each. Tap the time or city to change its city or text color; long-press to resize it. Actual grid dimensions depend on your launcher.
+
+Timekeeping works entirely offline using Android's time-zone database and automatically follows daylight-saving changes and the system's 12/24-hour format. The launcher updates the time without a background service or periodic alarms.
+
+A small, transparent weather icon sits **between the time and city**, with no temperature text in the compact layout. Sunny/clear-night, partly cloudy, cloudy, fog, rain, sleet, snow and storm icons are bundled vector drawings, not downloaded images.
+
+Weather uses [Open-Meteo](https://open-meteo.com/) (no API key; [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). Only the selected city and its geocoded coordinates are requested; no device location, messages or contacts are used. Cities are matched to the clock's time zone rather than silently using a different location. Predefined country/region shortcuts resolve to and display a named representative city, such as **Japan → Tokyo**. The picker prioritizes exact city matches and removes duplicate region shortcuts; real city names such as Seattle remain distinct. Conditions are cached per city and refreshed about hourly using WorkManager; Android can delay background work. Tap the weather icon to refresh manually. A question-mark cloud means weather is pending or unavailable, not a guessed forecast. UTC and unresolved city aliases still work as clocks but may have no weather. Removing the last clock cancels refresh work and clears the separate weather cache.
 
 ---
 

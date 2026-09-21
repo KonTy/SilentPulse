@@ -72,7 +72,6 @@ class BuildConfigTest {
         // UI & Media
         private const val EXPECTED_CONDUCTOR = "3.2.0"
         private const val EXPECTED_EXOPLAYER = "2.19.1"
-        private const val EXPECTED_BILLING = "7.1.1"
 
         // Testing
         private const val EXPECTED_ESPRESSO = "3.6.1"
@@ -85,8 +84,6 @@ class BuildConfigTest {
 
         // Build Tools
         private const val EXPECTED_AGP = "8.7.3"
-        private const val EXPECTED_GOOGLE_SERVICES = "4.4.2"
-        private const val EXPECTED_FIREBASE_CRASHLYTICS_GRADLE = "3.0.2"
     }
 
     @Test
@@ -164,7 +161,6 @@ class BuildConfigTest {
     fun `document UI and media library versions`() {
         assertEquals("3.2.0", EXPECTED_CONDUCTOR)
         assertEquals("2.19.1", EXPECTED_EXOPLAYER)
-        assertEquals("7.1.1", EXPECTED_BILLING)
     }
 
     @Test
@@ -183,22 +179,13 @@ class BuildConfigTest {
     @Test
     fun `document build tool versions`() {
         assertEquals("8.7.3", EXPECTED_AGP)
-        assertEquals("4.4.2", EXPECTED_GOOGLE_SERVICES)
-        assertEquals("3.0.2", EXPECTED_FIREBASE_CRASHLYTICS_GRADLE)
     }
 
     @Test
     fun `verify BuildConfig is accessible`() {
         assertNotNull("BuildConfig should be accessible", BuildConfig::class.java)
         
-        // Verify the AMPLITUDE_API_KEY field exists (even if empty in test environment)
-        try {
-            val field = BuildConfig::class.java.getDeclaredField("AMPLITUDE_API_KEY")
-            assertNotNull("AMPLITUDE_API_KEY field should exist", field)
-            assertEquals("Field should be of type String", String::class.java, field.type)
-        } catch (e: NoSuchFieldException) {
-            fail("BuildConfig.AMPLITUDE_API_KEY field should be defined")
-        }
+        assertFalse(BuildConfig::class.java.declaredFields.any { it.name == "AMPLITUDE_API_KEY" })
     }
 
     @Test

@@ -115,7 +115,7 @@ class SmsCommandHandler(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "fetchUnreadSms failed", e)
+            Log.e(TAG, "unread_sms_failed type=${e.javaClass.simpleName}")
         }
         Log.d(TAG, "fetchUnreadSms: ${results.size} unread")
         return results
@@ -156,7 +156,7 @@ class SmsCommandHandler(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "markAsRead Realm failed for threadId=${msg.threadId}", e)
+            Log.e(TAG, "sms_mark_read_realm_failed type=${e.javaClass.simpleName}")
         }
         // 2. Android SMS provider — keeps system DB in sync
         try {
@@ -168,9 +168,9 @@ class SmsCommandHandler(private val context: Context) {
                 Telephony.MmsSms.CONTENT_CONVERSATIONS_URI, msg.threadId
             )
             val updated = context.contentResolver.update(uri, values, "${Telephony.Sms.READ} = 0", null)
-            Log.d(TAG, "markAsRead threadId=${msg.threadId}: $updated row(s) updated in Android DB")
+            Log.d(TAG, "sms_mark_read rows=$updated")
         } catch (e: Exception) {
-            Log.e(TAG, "markAsRead Android DB failed for threadId=${msg.threadId}", e)
+            Log.e(TAG, "sms_mark_read_provider_failed type=${e.javaClass.simpleName}")
         }
         // 3. Refresh the launcher badge so the count reflects 0
         try {
@@ -184,7 +184,7 @@ class SmsCommandHandler(private val context: Context) {
             } ?: 0
             ShortcutBadger.applyCount(context, unread)
         } catch (e: Exception) {
-            Log.e(TAG, "markAsRead badge refresh failed", e)
+            Log.e(TAG, "sms_badge_refresh_failed type=${e.javaClass.simpleName}")
         }
     }
 
@@ -200,10 +200,10 @@ class SmsCommandHandler(private val context: Context) {
                 Telephony.Sms.CONTENT_URI,
                 "${Telephony.Sms._ID} = ?", arrayOf(msg.id.toString())
             )
-            Log.d(TAG, "deleteSms id=${msg.id}: $deleted row(s) deleted")
+            Log.d(TAG, "sms_deleted rows=$deleted")
             deleted > 0
         } catch (e: Exception) {
-            Log.e(TAG, "deleteSms failed for id=${msg.id}", e)
+            Log.e(TAG, "sms_delete_failed type=${e.javaClass.simpleName}")
             false
         }
     }
@@ -250,10 +250,10 @@ class SmsCommandHandler(private val context: Context) {
                     best = ResolvedContact(displayName, number)
                 }
             }
-            Log.d(TAG, "resolveContact(\"$name\") → ${best?.name} (score=$bestScore)")
+            Log.d(TAG, "contact_resolved found=${best != null} score=$bestScore")
             best
         } catch (e: Exception) {
-            Log.e(TAG, "resolveContact failed", e)
+            Log.e(TAG, "contact_resolve_failed type=${e.javaClass.simpleName}")
             null
         } finally {
             cursor?.close()
@@ -282,10 +282,10 @@ class SmsCommandHandler(private val context: Context) {
             } else {
                 manager.sendMultipartTextMessage(number, null, parts, null, null)
             }
-            Log.d(TAG, "sendSms to=$number len=${text.length} parts=${parts.size}")
+            Log.d(TAG, "sms_sent chars=${text.length} parts=${parts.size}")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "sendSms failed to=$number", e)
+            Log.e(TAG, "sms_send_failed type=${e.javaClass.simpleName}")
             false
         }
     }

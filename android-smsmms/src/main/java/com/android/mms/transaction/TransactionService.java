@@ -313,7 +313,7 @@ public class TransactionService extends Service implements Observer {
                             // can't handle many messages at once.
                             break;
                         } catch (MmsException e) {
-                            e.printStackTrace();
+                            timber.log.Timber.w("transaction_failed type=%s", e.getClass().getSimpleName());
                         }
                     }
                 } finally {

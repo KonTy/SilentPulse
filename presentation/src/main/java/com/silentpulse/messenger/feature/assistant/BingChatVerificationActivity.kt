@@ -66,6 +66,7 @@ class BingChatVerificationActivity : Activity() {
 
         // ── WebView ──────────────────────────────────────────────────────────
         webView = WebView(this).apply {
+            webChromeClient = DiagnosticFreeWebChromeClient()
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -81,17 +82,12 @@ class BingChatVerificationActivity : Activity() {
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    val url = request?.url?.toString() ?: "?"
-                    val host = request?.url?.host ?: "?"
                     val code = error?.errorCode ?: -1
-                    val desc = error?.description ?: "?"
-                    Log.e("BingVerify", "ERR [$code] $desc  host=$host  url=$url")
+                    Log.e("BingVerify", "web_error code=$code")
                 }
                 override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                    val url = error?.url ?: "?"
-                    val host = android.net.Uri.parse(url).host ?: "?"
-                    Log.e("BingVerify", "SSL BLOCKED host=$host  url=$url  error=${error?.primaryError}")
-                    // Don't call handler.proceed() — let it fail so we can see which domains need whitelisting
+                    Log.e("BingVerify", "ssl_blocked code=${error?.primaryError}")
+                    // Never bypass certificate validation.
                 }
             }
             layoutParams = LinearLayout.LayoutParams(

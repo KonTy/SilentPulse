@@ -129,11 +129,11 @@ class WebAiSearchScraper(private val context: Context) {
 
         when (source) {
             Source.BING -> {
-                Log.d(TAG, "Explicit Bing query: \"$query\"")
+                Log.d(TAG, "bing_query_started")
                 mainHandler.post { fetchBingChat(query, onResult) }
             }
             Source.LEO -> {
-                Log.d(TAG, "Explicit Leo query: \"$query\"")
+                Log.d(TAG, "leo_query_started")
                 mainHandler.post { fetchBraveLeo(query, onResult) }
             }
             Source.BRAVE -> {
@@ -146,7 +146,7 @@ class WebAiSearchScraper(private val context: Context) {
                             return@execute
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Brave fetch threw: ${e.message}")
+                        Log.w(TAG, "brave_fetch_failed type=${e.javaClass.simpleName}")
                     }
                     // HTTP scraper got no AI summary — try the Leo /ask WebView
                     Log.d(TAG, "Brave HTTP: no AI answer — falling back to Brave Leo WebView")
@@ -182,7 +182,7 @@ class WebAiSearchScraper(private val context: Context) {
 
         when (source) {
             Source.LEO -> {
-                Log.d(TAG, "Streaming Leo query: \"$query\"")
+                Log.d(TAG, "leo_stream_started")
                 mainHandler.post { fetchBraveLeoStreaming(query, onChunk, onDone) }
             }
             Source.BRAVE -> {
@@ -198,7 +198,7 @@ class WebAiSearchScraper(private val context: Context) {
                             return@execute
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Brave fetch threw: ${e.message}")
+                        Log.w(TAG, "brave_fetch_failed type=${e.javaClass.simpleName}")
                     }
                     Log.d(TAG, "Brave HTTP: no AI answer — falling back to Brave Leo streaming")
                     mainHandler.post { fetchBraveLeoStreaming(query, onChunk, onDone) }
@@ -206,7 +206,7 @@ class WebAiSearchScraper(private val context: Context) {
             }
             Source.BING -> {
                 // Bing doesn't support paragraph-level streaming; use normal search
-                Log.d(TAG, "Bing query (non-streaming): \"$query\"")
+                Log.d(TAG, "bing_query_started")
                 mainHandler.post {
                     fetchBingChat(query) { answer ->
                         if (answer != null) onChunk(answer)
@@ -292,7 +292,7 @@ class WebAiSearchScraper(private val context: Context) {
     private fun fetchBrave(query: String): String? {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://search.brave.com/search?q=$encoded&summary=1&source=web"
-        Log.d(TAG, "Brave GET $url")
+        Log.d(TAG, "brave_fetch_started")
 
         val html = httpGet(url, timeoutMs = BRAVE_TIMEOUT_MS.toInt())
         if (html.isEmpty()) {
@@ -346,7 +346,7 @@ class WebAiSearchScraper(private val context: Context) {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        Log.v(TAG, "Brave window tail (last 600): ...${text.takeLast(600)}")
+        Log.v(TAG, "brave_window chars=${text.length}")
 
         // Split on URL strings and [Image:…] references — these delimit search
         // result snippets. The AI answer is the last substantial natural-English
@@ -368,7 +368,7 @@ class WebAiSearchScraper(private val context: Context) {
             return null
         }
 
-        Log.d(TAG, "Brave answer candidate (${candidate.length} chars): ${candidate.take(120)}...")
+        Log.d(TAG, "brave_answer_candidate chars=${candidate.length}")
 
         // Trim to 1200 chars, ending on a sentence boundary when possible
         val trimmed = if (candidate.length > 1200) {
@@ -414,13 +414,13 @@ class WebAiSearchScraper(private val context: Context) {
             "may have changed since"
         )
         if (boilerplatePatterns.any { t.contains(it) }) {
-            Log.d(TAG, "Brave: discarding boilerplate candidate: ${text.take(80)}")
+            Log.d(TAG, "brave_candidate_discarded reason=boilerplate")
             return true
         }
         // Reject blocks with very low sentence density (metadata key-value noise)
         val sentences = text.split(Regex("[.!?]+")).filter { it.trim().length > 5 }
         if (text.length > 200 && sentences.size < 2) {
-            Log.d(TAG, "Brave: discarding low-sentence-density candidate: ${text.take(80)}")
+            Log.d(TAG, "brave_candidate_discarded reason=sentence_density")
             return true
         }
         return false
@@ -580,30 +580,18 @@ class WebAiSearchScraper(private val context: Context) {
         // First pass: prefer non-definitional
         for (var j = 0; j < candidates.length; j++) {
             if (!isDefinition(candidates[j])) {
-                console.log('[BingAI] best non-def (' + candidates[j].length + ' chars)');
                 return candidates[j].substring(0, 1500);
             }
         }
         // Fallback: accept anything
-        console.log('[BingAI] fallback def (' + candidates[0].length + ' chars)');
         return candidates[0].substring(0, 1500);
-    })()
-    """.trimIndent()
-
-    private val BING_DEBUG_JS = """
-    (function() {
-        var items = [];
-        document.querySelectorAll('#b_results > li').forEach(function(li) {
-            items.push(li.className + ' >> ' + li.innerText.substring(0, 60));
-        });
-        return JSON.stringify(items.slice(0, 8));
     })()
     """.trimIndent()
 
     private fun fetchBingWebView(query: String, onResult: (String?) -> Unit) {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://www.bing.com/search?q=$encoded&setlang=en"
-        Log.d(TAG, "Bing WebView: $url")
+        Log.d(TAG, "bing_page_loading")
 
         val wv = getOrCreateBingWebView()
         var done = false
@@ -623,7 +611,7 @@ class WebAiSearchScraper(private val context: Context) {
             override fun onPageFinished(view: WebView, url: String) {
                 if (done || pageLoaded) return
                 pageLoaded = true
-                Log.d(TAG, "Bing page finished: $url")
+                Log.d(TAG, "bing_page_finished")
                 pollBingResult(wv, timeoutCallback, 0, onResult) { done = true }
             }
         }
@@ -645,13 +633,6 @@ class WebAiSearchScraper(private val context: Context) {
             return
         }
 
-        // On poll #4 dump the result list for debugging selector issues
-        if (attempt == 4) {
-            wv.evaluateJavascript(BING_DEBUG_JS) { dbg ->
-                Log.d(TAG, "Bing result-list dump: $dbg")
-            }
-        }
-
         wv.evaluateJavascript(BING_SELECTORS_JS) { raw ->
             if (raw != null && raw != "null" && raw.length > 6) {
                 val text = raw
@@ -661,7 +642,7 @@ class WebAiSearchScraper(private val context: Context) {
                     .replace("\\\\", "\\")
                     .trim()
                 if (text.length > 50) {
-                    Log.d(TAG, "Bing answer (${text.length} chars): ${text.take(80)}...")
+                    Log.d(TAG, "bing_answer chars=${text.length}")
                     markDone()
                     mainHandler.removeCallbacks(timeout)
                     onResult(text)
@@ -717,7 +698,7 @@ class WebAiSearchScraper(private val context: Context) {
                 override fun onPageFinished(view: WebView, url: String) {
                     if (done || pageLoaded) return
                     pageLoaded = true   // absorb any subsequent redirect callbacks
-                    Log.d(TAG, "Bing chat page loaded: $url")
+                    Log.d(TAG, "bing_chat_page_finished")
                     // 2 s for the SPA to render the input box
                     mainHandler.postDelayed({
                         if (!done) {
@@ -745,7 +726,7 @@ class WebAiSearchScraper(private val context: Context) {
         val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
         val js = BING_CHAT_INJECT_JS.replace("SP_QUERY_PLACEHOLDER", escaped)
         wv.evaluateJavascript(js) { result ->
-            Log.d(TAG, "Bing chat inject: $result")
+            Log.d(TAG, "bing_chat_input_missing=${result == null || result.contains("NO_INPUT")}")
             if (result == null || result.contains("NO_INPUT")) {
                 Log.w(TAG, "Bing chat: input not found — falling back to search-page scraper")
                 bingChatInitialized = false
@@ -789,7 +770,7 @@ class WebAiSearchScraper(private val context: Context) {
         wv.evaluateJavascript(js) { raw ->
             if (isDone()) return@evaluateJavascript   // timeout fired while we waited
             val payload = raw?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: ""
-            Log.v(TAG, "Bing chat poll $attempt: ${payload.take(120)}")
+            Log.v(TAG, "bing_chat_poll attempt=$attempt chars=${payload.length}")
             if (payload.contains("\"status\":\"done\"")) {
                 val match = Regex("\"text\":\"(.*?)\"\\s*[,}]",
                     setOf(RegexOption.DOT_MATCHES_ALL)).find(payload)
@@ -797,7 +778,7 @@ class WebAiSearchScraper(private val context: Context) {
                     ?.replace("\\n", " ")?.replace("\\\"", "\"")
                     ?.replace("\\\\", "\\")?.trim()
                 if (!answer.isNullOrBlank() && answer.length > 20) {
-                    Log.d(TAG, "Bing chat answer (${answer.length} chars): ${answer.take(80)}...")
+                    Log.d(TAG, "bing_chat_answer chars=${answer.length}")
                     markDone()
                     mainHandler.removeCallbacks(timeout)
                     onResult(answer)
@@ -840,20 +821,10 @@ class WebAiSearchScraper(private val context: Context) {
                 }
                 if (texts.length) {
                     var joined = texts.join(' ');
-                    console.log('[LeoAI] sel=' + sels[i] + ' n=' + texts.length +
-                        ' total=' + joined.length + 'ch: ' + joined.substring(0, 60));
                     return joined.substring(0, 3000);
                 }
             } catch(e) {}
         }
-        // Debug: dump all named ask/leo/chatllm elements to help tune selectors
-        var dbg = [];
-        document.querySelectorAll('[class*="ask"],[class*="leo"],[class*="chatllm"],[class*="answer"]')
-            .forEach(function(el) {
-                var t = (el.innerText || '').trim();
-                if (t.length > 20 && t.length < 2000) dbg.push(el.className + ':' + t.substring(0,60));
-            });
-        console.log('[LeoAI] no match — dump: ' + JSON.stringify(dbg.slice(0, 8)));
         return null;
     })()
     """.trimIndent()
@@ -877,13 +848,13 @@ class WebAiSearchScraper(private val context: Context) {
 
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://search.brave.com/ask?q=$encoded"
-        Log.d(TAG, "Brave Leo: loading $url")
+        Log.d(TAG, "leo_page_loading")
         var pageLoaded = false
         wv.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, urlStr: String) {
                 if (done || pageLoaded) return
                 pageLoaded = true
-                Log.d(TAG, "Brave Leo page finished: $urlStr")
+                Log.d(TAG, "leo_page_finished")
                 mainHandler.postDelayed({
                     if (!done) {
                         leoInitialized = true
@@ -939,7 +910,7 @@ class WebAiSearchScraper(private val context: Context) {
                         return@evaluateJavascript
                     }
                     // Text stabilised — return the answer.
-                    Log.d(TAG, "Brave Leo answer (${text.length} chars, stable at poll $attempt): ${text.take(80)}...")
+                    Log.d(TAG, "leo_answer chars=${text.length} attempt=$attempt")
                     markDone()
                     mainHandler.removeCallbacks(timeout)
                     onResult(cleanForSpeech(text))
@@ -1010,13 +981,13 @@ class WebAiSearchScraper(private val context: Context) {
 
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://search.brave.com/ask?q=$encoded"
-        Log.d(TAG, "Leo streaming: loading $url")
+        Log.d(TAG, "leo_stream_page_loading")
         var pageLoaded = false
         wv.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, urlStr: String) {
                 if (done || pageLoaded) return
                 pageLoaded = true
-                Log.d(TAG, "Leo streaming page finished: $urlStr")
+                Log.d(TAG, "leo_stream_page_finished")
                 mainHandler.postDelayed({
                     if (!done) {
                         leoInitialized = true
@@ -1078,7 +1049,7 @@ class WebAiSearchScraper(private val context: Context) {
                 val arr = JSONArray(inner)
                 (0 until arr.length()).map { arr.getString(it) }
             } catch (e: Exception) {
-                Log.w(TAG, "Leo streaming: JSON parse error: ${e.message}")
+                Log.w(TAG, "leo_stream_parse_failed type=${e.javaClass.simpleName}")
                 emptyList()
             }
 
@@ -1087,7 +1058,7 @@ class WebAiSearchScraper(private val context: Context) {
             for (i in emitted.size until paragraphs.size) {
                 val text = paragraphs[i]
                 emitted.add(text)
-                Log.d(TAG, "Leo streaming chunk #${emitted.size}: ${text.take(60)}... (${text.length}ch)")
+                Log.d(TAG, "leo_stream_chunk index=${emitted.size} chars=${text.length}")
                 onChunk(cleanForSpeech(text))
                 emittedNew = true
             }
@@ -1114,6 +1085,7 @@ class WebAiSearchScraper(private val context: Context) {
 
     private fun getOrCreateLeoWebView(): WebView {
         return leoWebView ?: WebView(context).apply {
+            webChromeClient = DiagnosticFreeWebChromeClient()
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -1132,6 +1104,7 @@ class WebAiSearchScraper(private val context: Context) {
 
     private fun getOrCreateBingWebView(): WebView {
         return bingWebView ?: WebView(context).apply {
+            webChromeClient = DiagnosticFreeWebChromeClient()
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -1151,184 +1124,19 @@ class WebAiSearchScraper(private val context: Context) {
     // ── Debug dump ──────────────────────────────────────────────────────────
 
     /**
-     * Run a diagnostic query that dumps EVERYTHING to files in the app directory.
-     * Triggered via ADB:
-     *   adb shell am broadcast -n com.silentpulse.messenger/.feature.debug.BraveDebugReceiver \
-     *       -a com.silentpulse.messenger.BRAVE_DEBUG --es query "what is quantum physics"
-     *
-     * Then pull the results:
-     *   adb pull /sdcard/Android/data/com.silentpulse.messenger/files/brave_debug/
-     *
-     * Files written:
-     *   1_http_raw.html         — raw Brave Search HTML (plain HTTP)
-     *   2_http_extracted.txt    — what extractBraveAnswer() produces
-     *   3_leo_dom.html          — full Leo WebView DOM after hydration
-     *   4_leo_selectors.txt     — what every CSS selector matched
-     *   5_leo_state.txt         — leoInitialized, etc.
-     *
-     * The user can open 1_http_raw.html or 3_leo_dom.html in a browser,
-     * inspect with F12, and tell us which elements contain the AI answer.
+     * Only reports in-memory state flags. Never collects pages, queries or
+     * response bodies, writes diagnostic files, or alters conversation state.
      */
-    fun debugDump(query: String, onDone: (String) -> Unit) {
+    fun debugDump(@Suppress("UNUSED_PARAMETER") query: String, onDone: (String) -> Unit) {
         if (!com.silentpulse.messenger.BuildConfig.DEBUG) {
             onDone("Debug dump is only available in debug builds.")
             return
         }
-        val dir = java.io.File(context.getExternalFilesDir(null), "brave_debug")
-        dir.mkdirs()
-        // Clean old files
-        dir.listFiles()?.forEach { it.delete() }
-
-        Log.i(TAG, "=== BRAVE DEBUG DUMP: query=\"$query\" ===")
-        val stateFile = java.io.File(dir, "5_leo_state.txt")
-        stateFile.writeText(buildString {
-            appendLine("query: $query")
-            appendLine("timestamp: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
-            appendLine("leoInitialized: $leoInitialized")
-            appendLine("leoWebView: ${if (leoWebView != null) "exists" else "null"}")
-            appendLine("bingWebView: ${if (bingWebView != null) "exists" else "null"}")
-            appendLine("enabled: $enabled")
-        })
-
-        // Step 1: HTTP fetch
-        executor.execute {
-            try {
-                val encoded = URLEncoder.encode(query, "UTF-8")
-                val url = "https://search.brave.com/search?q=$encoded&summary=1&source=web"
-                Log.d(TAG, "Debug: HTTP GET $url")
-                val html = httpGet(url, BRAVE_TIMEOUT_MS.toInt())
-                java.io.File(dir, "1_http_raw.html").writeText(html)
-                Log.d(TAG, "Debug: saved ${html.length} bytes to 1_http_raw.html")
-
-                val extracted = if (html.isNotEmpty()) extractBraveAnswer(html) else null
-                java.io.File(dir, "2_http_extracted.txt").writeText(
-                    extracted ?: "(extractBraveAnswer returned null — no AI answer found in HTTP response)"
-                )
-            } catch (e: Exception) {
-                java.io.File(dir, "2_http_extracted.txt").writeText("HTTP fetch failed: ${e.message}")
-                Log.e(TAG, "Debug: HTTP step failed", e)
-            }
-
-            // Step 2: Leo WebView dump
-            mainHandler.post {
-                debugDumpLeoWebView(query, dir, onDone)
-            }
-        }
-    }
-
-    private fun debugDumpLeoWebView(query: String, dir: java.io.File, onDone: (String) -> Unit) {
-        val wv = getOrCreateLeoWebView()
-        val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://search.brave.com/ask?q=$encoded"
-        Log.d(TAG, "Debug: Leo loading $url")
-
-        var pageLoaded = false
-        wv.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView, urlStr: String) {
-                if (pageLoaded) return
-                pageLoaded = true
-                Log.d(TAG, "Debug: Leo page finished, waiting 12s for hydration + answer generation...")
-                // Wait 12s for SvelteKit to hydrate AND for Leo to generate the full answer
-                mainHandler.postDelayed({
-                    debugExtractLeoState(wv, dir, onDone)
-                }, 12_000L)
-            }
-        }
-        wv.loadUrl(url)
-    }
-
-    private fun debugExtractLeoState(wv: WebView, dir: java.io.File, onDone: (String) -> Unit) {
-        // 1. Dump all page HTML
-        wv.evaluateJavascript(
-            "(function(){ return document.documentElement.outerHTML; })()"
-        ) { rawHtml ->
-            val html = rawHtml?.removeSurrounding("\"")
-                ?.replace("\\n", "\n")
-                ?.replace("\\t", "\t")
-                ?.replace("\\\"", "\"")
-                ?.replace("\\\\/", "/")
-                ?.replace("\\\\", "\\")
-                ?: "(null)"
-            java.io.File(dir, "3_leo_dom.html").writeText(html)
-            Log.d(TAG, "Debug: saved ${html.length} chars to 3_leo_dom.html")
-
-            // 2. Run ALL selectors and dump matches
-            val selectorDumpJs = """
-            (function() {
-                var result = [];
-                var sels = [
-                    '[class*="chatllm"] p',
-                    '[class*="ask-answer"] p', '[class*="ask-center"] p', '[class*="ask-content"] p',
-                    '[class*="leo-answer"] p', '[class*="leo-content"] p', '[class*="leo-response"] p',
-                    '[class*="answer-content"] p', '[class*="ai-answer"] p', '[class*="summary-answer"] p',
-                    '[data-testid*="answer"] p', '[data-type="answer"] p',
-                    '[class*="response-content"] p', '[class*="result-content"] p',
-                    'main [class*="answer"]', 'main [class*="summary"]',
-                    '[class*="streaming"]', '[class*="generating"]',
-                    '[class*="typing"]', '[class*="loading"]',
-                    'textarea', 'input[type="text"]',
-                ];
-                for (var i = 0; i < sels.length; i++) {
-                    try {
-                        var els = document.querySelectorAll(sels[i]);
-                        var matches = [];
-                        for (var k = 0; k < els.length; k++) {
-                            var el = els[k];
-                            var t = (el.innerText || el.textContent || '').trim();
-                            matches.push({
-                                tag: el.tagName,
-                                className: (el.className || '').substring(0, 120),
-                                id: el.id || '',
-                                textLen: t.length,
-                                text: t.substring(0, 200),
-                                childCount: el.children.length,
-                            });
-                        }
-                        if (matches.length > 0) {
-                            result.push({selector: sels[i], count: matches.length, matches: matches});
-                        }
-                    } catch(e) {
-                        result.push({selector: sels[i], error: e.message});
-                    }
-                }
-
-                // Also dump all elements with class containing 'answer', 'leo', 'ask', 'chat', 'summary'
-                var interesting = document.querySelectorAll(
-                    '[class*="answer"],[class*="leo"],[class*="ask"],[class*="chat"],[class*="summary"],[class*="llm"],[class*="response"]'
-                );
-                var interestingList = [];
-                for (var j = 0; j < interesting.length && j < 50; j++) {
-                    var el = interesting[j];
-                    var t = (el.innerText || '').trim();
-                    interestingList.push({
-                        tag: el.tagName,
-                        className: (el.className || '').substring(0, 150),
-                        id: el.id || '',
-                        textLen: t.length,
-                        textPreview: t.substring(0, 150),
-                    });
-                }
-                result.push({label: 'INTERESTING_ELEMENTS', count: interestingList.length, elements: interestingList});
-
-                return JSON.stringify(result, null, 2);
-            })()
-            """.trimIndent()
-
-            wv.evaluateJavascript(selectorDumpJs) { rawJson ->
-                val json = rawJson?.removeSurrounding("\"")
-                    ?.replace("\\n", "\n")
-                    ?.replace("\\\"", "\"")
-                    ?.replace("\\\\", "\\")
-                    ?: "(null)"
-                java.io.File(dir, "4_leo_selectors.txt").writeText(json)
-                Log.d(TAG, "Debug: saved selector dump to 4_leo_selectors.txt")
-
-                val summary = "Debug dump complete → ${dir.absolutePath}\n" +
-                        "Pull with: adb pull ${dir.absolutePath}/ ./brave_debug/"
-                Log.i(TAG, summary)
-                leoInitialized = false // Reset so normal queries start fresh
-                onDone(summary)
-            }
+        mainHandler.post {
+            val summary = "AI diagnostics: enabled=$enabled leoInitialized=$leoInitialized " +
+                "leoWebView=${leoWebView != null} bingWebView=${bingWebView != null}"
+            Log.i(TAG, summary)
+            onDone(summary)
         }
     }
 
@@ -1350,7 +1158,7 @@ class WebAiSearchScraper(private val context: Context) {
             "Chrome/124.0.0.0 Mobile Safari/537.36")
         return try {
             if (conn.responseCode != 200) {
-                Log.w(TAG, "HTTP ${conn.responseCode} for $urlString")
+                Log.w(TAG, "http_failed status=${conn.responseCode}")
                 return ""
             }
             val charset = conn.contentType

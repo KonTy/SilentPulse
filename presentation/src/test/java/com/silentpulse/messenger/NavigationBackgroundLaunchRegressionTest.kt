@@ -87,8 +87,13 @@ class NavigationBackgroundLaunchRegressionTest {
         val content = voiceAssistantServiceFile.readText()
 
         assertTrue(
-            "VoiceAssistantService should initialize TextToSpeech in onCreate",
-            content.contains("tts = TextToSpeech(this, this)")
+            "VoiceAssistantService should initialize the preference-aware TTS controller in onCreate",
+            content.contains("voiceInteractor = VoiceInteractor(")
+        )
+        assertTrue(
+            "VoiceAssistantService must preserve the platform TTS init callback through its offline engine",
+            content.contains("tts = TextToSpeech(this, this)") &&
+                content.contains("listener.onInit(status)")
         )
         assertTrue(
             "VoiceAssistantService should wait for both TTS and Vosk before starting listening",

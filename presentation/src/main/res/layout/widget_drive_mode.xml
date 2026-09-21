@@ -14,8 +14,8 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingStart="4dp"
-    android:paddingEnd="4dp"
+    android:paddingStart="0dp"
+    android:paddingEnd="0dp"
     android:paddingTop="0dp"
     android:paddingBottom="0dp"
     android:background="@android:color/transparent">
@@ -30,8 +30,12 @@
         android:background="@android:color/transparent"
         android:contentDescription="Toggle Notification Reader"
         android:scaleType="centerInside"
+        android:minWidth="0dp"
         android:minHeight="0dp"
-        android:padding="8dp" />
+        android:paddingStart="1dp"
+        android:paddingEnd="1dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
 
     <!-- Slot 2: Next notification -->
     <ImageButton
@@ -43,8 +47,12 @@
         android:background="@android:color/transparent"
         android:contentDescription="Next Notification"
         android:scaleType="centerInside"
+        android:minWidth="0dp"
         android:minHeight="0dp"
-        android:padding="8dp" />
+        android:paddingStart="1dp"
+        android:paddingEnd="1dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
 
     <!-- Slot 3: Voice Assistant toggle -->
     <ImageButton
@@ -56,8 +64,12 @@
         android:background="@android:color/transparent"
         android:contentDescription="Toggle Voice Assistant"
         android:scaleType="centerInside"
+        android:minWidth="0dp"
         android:minHeight="0dp"
-        android:padding="8dp" />
+        android:paddingStart="1dp"
+        android:paddingEnd="1dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
 
     <!-- Slot 4: Stop speaking — interrupt TTS immediately -->
     <ImageButton
@@ -69,7 +81,11 @@
         android:background="@android:color/transparent"
         android:contentDescription="Stop Speaking"
         android:scaleType="centerInside"
+        android:minWidth="0dp"
         android:minHeight="0dp"
-        android:padding="8dp" />
+        android:paddingStart="1dp"
+        android:paddingEnd="1dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
 
 </LinearLayout>

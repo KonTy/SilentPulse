@@ -57,7 +57,7 @@ class ConfirmSendWorkflow(
      * [dictationPrompt] is spoken verbatim before STT starts.
      */
     fun start(recipientLabel: String, dictationPrompt: String) {
-        Log.d(TAG, "start recipient=$recipientLabel")
+        Log.d(TAG, "confirmation_started")
         this.recipientLabel = recipientLabel
         state = State.AWAITING_DICTATION
         speak(dictationPrompt) { startStt() }
@@ -69,7 +69,7 @@ class ConfirmSendWorkflow(
      * captured the message body (e.g. notification reply text just dictated).
      */
     fun startWithText(recipientLabel: String, text: String) {
-        Log.d(TAG, "startWithText recipient=$recipientLabel len=${text.length}")
+        Log.d(TAG, "confirmation_started chars=${text.length}")
         this.recipientLabel = recipientLabel
         pendingText = text.trim()
         state = State.AWAITING_CONFIRM
@@ -83,7 +83,7 @@ class ConfirmSendWorkflow(
     fun handleInput(command: String): Boolean {
         if (state == State.IDLE) return false
         val c = command.lowercase().trim()
-        Log.d(TAG, "handleInput state=$state input=\"$c\"")
+        Log.d(TAG, "confirmation_input state=$state")
 
         return when (state) {
             State.AWAITING_DICTATION -> {
