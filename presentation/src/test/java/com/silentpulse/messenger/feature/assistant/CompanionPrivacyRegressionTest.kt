@@ -33,6 +33,23 @@ class CompanionPrivacyRegressionTest {
     }
 
     @Test
+    fun `unrouted health questions return locally before every online backend`() {
+        val entry = service.indexOf("if (routeCompanionCommand(command, c)) return")
+        for (backend in listOf("weatherHandler.fetchAndSpeak(", "driveTimeHandler.fetchAndSpeak(",
+            "stockQueryHandler.fetchPrice(", "webAiSearchScraper.searchStreaming(",
+            "braveSearchHandler.search(", "generalQueryHandler.fetchAndSpeak(")) {
+            assertTrue(backend, entry in 0 until service.indexOf(backend))
+        }
+        val refusal = service.substringAfter("if (appDirected) {")
+            .substringBefore("// ── Command routing")
+        assertTrue(refusal.contains("commandRouter.isPrivateHealthCommand(command)"))
+        assertTrue(refusal.contains("return true"))
+        assertTrue(refusal.indexOf("return true") < refusal.indexOf("return false"))
+        assertFalse(refusal.contains("searchStreaming"))
+        assertFalse(refusal.contains("fetchAndSpeak"))
+    }
+
+    @Test
     fun `cancellation and expiry clear pending reply capabilities`() {
         assertTrue(service.contains("commandRouter.clearPendingReplies()"))
         assertTrue(service.contains("mainHandler.postDelayed(timeout, CompanionRequestTracker.TIMEOUT_MS)"))

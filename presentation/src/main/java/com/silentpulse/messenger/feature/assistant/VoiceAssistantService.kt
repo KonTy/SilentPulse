@@ -633,7 +633,13 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
             return true
         }
         if (appDirected) {
-            companionUnavailable()
+            if (commandRouter.isPrivateHealthCommand(command)) {
+                speak("Health commands stay on your device. Say Microcore followed by a supported command.") {
+                    resumeWakeWord()
+                }
+            } else {
+                companionUnavailable()
+            }
             return true
         }
         return false

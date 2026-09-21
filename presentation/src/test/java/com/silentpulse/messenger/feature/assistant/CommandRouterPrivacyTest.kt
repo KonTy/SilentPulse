@@ -224,6 +224,70 @@ class CommandRouterPrivacyTest {
     }
 
     @Test
+    fun `bare health questions stay private with missing incompatible or prefixless companions`() {
+        val commands = listOf(
+            "how long did I fast",
+            "how long have I been fasting?",
+            "how many calories have I used today",
+            "how many calories do I have remaining?",
+            "what is my weight?",
+            "what was my last blood pressure reading?",
+            "log blood pressure 120 over 80",
+            "can you log blood pressure 120 over 80",
+            "can you record weight 220 pounds",
+            "could you please save blood pressure 120 over 80?",
+            "is blood pressure 120 over 80 normal?",
+            "is blood pressure one hundred twenty over eighty normal?",
+            "is weight 100kg healthy?",
+            "what is her latest weight?"
+        )
+        for (receivers in listOf(
+            emptyList(),
+            listOf(receiver(microcore, "", version = 1)),
+            listOf(receiver(microcore, "", version = 2))
+        )) {
+            `when`(pm.queryBroadcastReceivers(any(Intent::class.java), eq(PackageManager.GET_META_DATA)))
+                .thenReturn(receivers)
+            for (command in commands) {
+                assertNull(router.route(command))
+                assertTrue(command, router.isCompanionCommand(command))
+                assertTrue(command, router.isPrivateHealthCommand(command))
+            }
+        }
+        `when`(pm.checkSignatures(ownPackage, microcore)).thenReturn(PackageManager.SIGNATURE_NO_MATCH)
+        for (command in commands) {
+            assertNull(router.route(command))
+            assertTrue(command, router.isCompanionCommand(command))
+        }
+        verify(context, never()).sendBroadcast(any(Intent::class.java))
+    }
+
+    @Test
+    fun `health topics default local even without personal pronouns or numeric readings`() {
+        for (command in listOf(
+            "how many calories are in an apple",
+            "what is fasting",
+            "what was the fasting duration",
+            "what is a healthy blood pressure"
+        )) {
+            assertTrue(command, router.isPrivateHealthCommand(command))
+            assertTrue(command, router.isCompanionCommand(command))
+        }
+    }
+
+    @Test
+    fun `nonhealth knowledge and ordinary app commands remain available`() {
+        for (command in listOf(
+            "how fast is my car",
+            "what is the capital of France",
+            "open Microcore",
+            "what is the weather today"
+        )) {
+            assertFalse(command, router.isPrivateHealthCommand(command))
+        }
+    }
+
+    @Test
     fun `new dispatch supersedes an older outstanding request`() {
         val firstConversation = CommandRouter.newSessionId()
         val secondConversation = CommandRouter.newSessionId()

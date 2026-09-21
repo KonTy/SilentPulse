@@ -75,6 +75,10 @@ Microcore requires voice-bridge protocol 2: `EXTRA_SESSION_ID` identifies each o
 
 Private app-directed commands are not forwarded to online AI when a companion is unavailable. Cancel/stop, timeout, speech failure, and service shutdown revoke pending reply capabilities. These controls authorize SilentPulse's integrations; they do not audit every behavior of the approved companion apps.
 
+Weight, blood-pressure, fasting, and calorie questions default to local handling even without an app name. This includes polite logging requests, spelled-out measurements, and general health questions: SilentPulse does not guess whether a health question is personal. When no companion route matches, it asks for an explicit Microcore command instead of searching the web or inventing a health result. To intentionally search online for general health information, explicitly name an online provider (for example, "Brave, what is fasting"). Do not include private health readings in online requests.
+
+The currently installed Microcore bridge still has limitations: paired blood-pressure logging, fasting-duration queries, and calories-burned answers are not implemented. Its calorie voice answer reports remaining intake allowance, not energy burned. Use complete commands with explicit units for weight. If Microcore says it is waking up, that acknowledges a queued command, not a completed write; open Microcore and check the result before repeating a logging command.
+
 ---
 
 ## Privacy Architecture

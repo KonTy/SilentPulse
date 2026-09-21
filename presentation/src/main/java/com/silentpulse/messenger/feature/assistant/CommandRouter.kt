@@ -268,13 +268,22 @@ class CommandRouter(
         return discoveredApps.firstOrNull { it.packageName == packageName }?.commandPrefixes.orEmpty()
     }
 
-    /** App-directed private commands must not fall through into online question handling. */
+    /** Private commands must stay local even without a named or discoverable companion. */
     fun isCompanionCommand(command: String): Boolean {
+        if (isPrivateHealthCommand(command)) return true
         val apps = APPROVED_APPS.map { (pkg, label) ->
             val currentPrefixes = discoveredApps.firstOrNull { it.packageName == pkg }?.commandPrefixes.orEmpty()
             DiscoveredApp(pkg, label, label.lowercase(Locale.ROOT), PRIVATE_PREFIXES + currentPrefixes)
         }
         return findApp(command.lowercase(Locale.ROOT), apps) != null
+    }
+
+    fun isPrivateHealthCommand(command: String): Boolean {
+        val lower = command.lowercase(Locale.ROOT)
+        // Treat health topics as local by default rather than guessing whether a reading is personal.
+        // Explicit online requests are handled separately by the service.
+        return HEALTH_TOPICS.containsMatchIn(lower) ||
+            FAST_DURATION.containsMatchIn(lower)
     }
 
     @Suppress("DEPRECATION")
@@ -393,6 +402,11 @@ class CommandRouter(
             "what are my todos", "what are my tasks", "log weight", "log my weight",
             "log food", "log meal", "log water"
         )
+        private val HEALTH_TOPICS = Regex(
+            "\\b(?:weight|weigh(?:ed)?|bmi|body\\s+fat|calories?|kcals?|fasting|fasted|" +
+                "blood\\s+(?:pressure|sugar|glucose)|bp|systolic|diastolic|heart\\s+rate|pulse)\\b"
+        )
+        private val FAST_DURATION = Regex("\\b(?:how\\s+long|when)\\b.*\\bfast\\b|\\b(?:my|our)\\s+fast\\b")
 
         fun newSessionId(): String = UUID.randomUUID().toString()
 
