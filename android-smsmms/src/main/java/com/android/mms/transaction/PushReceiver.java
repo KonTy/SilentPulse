@@ -29,7 +29,7 @@ import android.provider.Telephony.Mms;
 import android.provider.Telephony.Mms.Inbox;
 
 import com.android.mms.MmsConfig;
-import com.google.android.mms.ContentType;
+import com.silentpulse.messenger.mms.ContentType;
 import com.google.android.mms.MmsException;
 import com.google.android.mms.pdu_alt.DeliveryInd;
 import com.google.android.mms.pdu_alt.GenericPdu;

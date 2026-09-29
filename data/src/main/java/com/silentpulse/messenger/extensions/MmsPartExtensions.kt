@@ -18,7 +18,7 @@
  */
 package com.silentpulse.messenger.extensions
 
-import com.google.android.mms.ContentType
+import com.silentpulse.messenger.mms.ContentType
 import com.silentpulse.messenger.model.MmsPart
 
 fun MmsPart.isSmil() = ContentType.APP_SMIL == type

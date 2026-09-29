@@ -34,7 +34,6 @@ import android.provider.Telephony.Sms
 import android.telephony.SmsManager
 import android.webkit.MimeTypeMap
 import androidx.core.content.contentValuesOf
-import com.google.android.mms.ContentType
 import com.google.android.mms.MMSPart
 import com.google.android.mms.pdu_alt.MultimediaMessagePdu
 import com.google.android.mms.pdu_alt.PduPersister
@@ -46,6 +45,7 @@ import com.silentpulse.messenger.compat.TelephonyCompat
 import com.silentpulse.messenger.extensions.anyOf
 import com.silentpulse.messenger.manager.ActiveConversationManager
 import com.silentpulse.messenger.manager.KeyManager
+import com.silentpulse.messenger.mms.ContentType
 import com.silentpulse.messenger.model.Attachment
 import com.silentpulse.messenger.model.Conversation
 import com.silentpulse.messenger.model.Message

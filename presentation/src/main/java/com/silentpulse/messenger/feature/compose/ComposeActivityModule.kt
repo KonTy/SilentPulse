@@ -22,8 +22,8 @@ package com.silentpulse.messenger.feature.compose
 import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
-import com.google.android.mms.ContentType
 import com.silentpulse.messenger.injection.ViewModelKey
+import com.silentpulse.messenger.mms.ContentType
 import com.silentpulse.messenger.model.Attachment
 import com.silentpulse.messenger.model.Attachments
 import dagger.Module

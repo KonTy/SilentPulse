@@ -29,12 +29,12 @@ import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.upstream.DefaultDataSource
 import com.google.android.exoplayer2.ui.PlayerView
 import com.github.chrisbanes.photoview.PhotoView
-import com.google.android.mms.ContentType
 import com.silentpulse.messenger.R
 import com.silentpulse.messenger.common.base.QkRealmAdapter
 import com.silentpulse.messenger.common.base.QkViewHolder
 import com.silentpulse.messenger.extensions.isImage
 import com.silentpulse.messenger.extensions.isVideo
+import com.silentpulse.messenger.mms.ContentType
 import com.silentpulse.messenger.model.MmsPart
 import com.silentpulse.messenger.util.GlideApp
 import io.reactivex.subjects.PublishSubject

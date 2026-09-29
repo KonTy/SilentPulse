@@ -1,7 +1,7 @@
 package com.google.android.mms.smil;
 
 import com.android.mms.dom.smil.SmilDocumentImpl;
-import com.google.android.mms.ContentType;
+import com.silentpulse.messenger.mms.ContentType;
 import com.google.android.mms.pdu_alt.PduBody;
 import com.google.android.mms.pdu_alt.PduPart;
 import org.w3c.dom.smil.SMILDocument;

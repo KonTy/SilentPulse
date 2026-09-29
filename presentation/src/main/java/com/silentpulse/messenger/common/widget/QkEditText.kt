@@ -30,9 +30,9 @@ import android.widget.EditText
 import androidx.core.view.inputmethod.EditorInfoCompat
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
-import com.google.android.mms.ContentType
 import com.silentpulse.messenger.common.util.TextViewStyler
 import com.silentpulse.messenger.injection.appComponent
+import com.silentpulse.messenger.mms.ContentType
 import com.silentpulse.messenger.util.tryOrNull
 import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject

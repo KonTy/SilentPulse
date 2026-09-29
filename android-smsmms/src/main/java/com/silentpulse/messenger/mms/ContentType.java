@@ -16,10 +16,11 @@
  * limitations under the License.
  */
 
-package com.google.android.mms;
+package com.silentpulse.messenger.mms;
 
 import java.util.ArrayList;
 
+// Keep this bundled implementation outside Android's framework MMS namespace.
 public class ContentType {
     public static final String MMS_MESSAGE       = "application/vnd.wap.mms-message";
     // The phony content type for generic PDUs (e.g. ReadOrig.ind,

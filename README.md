@@ -187,6 +187,8 @@ adb install -r -t path/to/built.apk
 
 Use the existing signing key for in-place updates. If Android reports a signature mismatch, stop rather than uninstalling or clearing app data.
 
+The bundled MMS MIME classifier uses the app-owned `com.silentpulse.messenger.mms` namespace. Keep it separate from Android's framework MMS classes: a framework class with the same name can shadow the bundled implementation and crash optimized builds when image or video messages are displayed. This compatibility fix requires no message-database reset or attachment deletion.
+
 ---
 
 ## CI / CD
