@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stock_detail_title">Instrument details</string>
+    <string name="stock_detail_invalid">This ticker is no longer available in that widget. Open it from your current watchlist.</string>
+    <string name="stock_detail_loading_quote">Loading quote</string>
+    <string name="stock_detail_source">Quote from Yahoo Finance; prices may be delayed.</string>
+    <string name="stock_detail_cached">Showing the cached widget quote while refreshing.</string>
+    <string name="stock_detail_quote_failed">Quote unavailable. Try Refresh details.</string>
+    <string name="stock_detail_cached_failed">Refresh unavailable; showing a cached quote.</string>
+    <string name="stock_detail_change">%1$s (%2$s) since previous trading close</string>
+    <string name="stock_detail_chart_range">Chart range</string>
+    <string name="stock_detail_trend_chart">Price trend for the selected range</string>
+    <string name="stock_detail_loading_chart">Loading trend chart</string>
+    <string name="stock_detail_chart_failed">Trend chart unavailable. Try another range or refresh.</string>
+    <string name="stock_detail_chart_empty">Not enough chart samples for this range. For daily-priced funds, try a month or a year.</string>
+    <string name="stock_detail_chart_bounds">Range low: %1$s / high: %2$s</string>
+    <string name="stock_detail_chart_dates">%1$s to %2$s (device time zone)</string>
+    <string name="stock_detail_refresh">Refresh details</string>
+    <string name="stock_range_day">1 day</string>
+    <string name="stock_range_week">5 trading days</string>
+    <string name="stock_range_month">1 month</string>
+    <string name="stock_range_year">1 year</string>
+    <string name="stock_type_equity">Stock</string>
+    <string name="stock_type_etf">ETF</string>
+    <string name="stock_type_fund">Mutual fund</string>
+    <string name="stock_type_index">Index</string>
+    <string name="stock_type_future">Futures</string>
+    <string name="stock_type_currency">Currency pair</string>
+    <string name="stock_type_crypto">Cryptocurrency</string>
+    <string name="stock_detail_news_title">Related news</string>
+    <string name="stock_detail_loading_news">Loading related headlines</string>
+    <string name="stock_detail_news_source">All Yahoo-tagged stories are included. An info icon marks a possible indirect mention; tap it to see why. Tap the headline to read the article.</string>
+    <string name="stock_news_mention_hint">Possible indirect mention. Show why this story is related.</string>
+    <string name="stock_news_mention_title">Why this story is related</string>
+    <string name="stock_news_mention_explanation">Yahoo tagged this story with %1$s, but its headline did not match the company, asset name or ticker. It may only mention the instrument elsewhere, or use a different name. This is a conservative headline check, not an analysis of the article body.\n\nYahoo ticker tags: %2$s\n\nAll tagged stories remain visible. SilentPulse does not download the article body.</string>
+    <string name="stock_detail_news_empty">No supported articles were returned for this ticker.</string>
+    <string name="stock_detail_news_failed">News unavailable. Quote and chart data can still be viewed.</string>
+    <string name="stock_detail_link_failed">Could not open the article. Check that a browser is installed.</string>
+    <string name="stock_detail_notice">Quotes, charts and headlines use the already-permitted Yahoo Finance service. No app messages or group names are sent. News pages open outside SilentPulse in your browser, where Yahoo and publisher privacy policies, cookies and tracking may apply. No article pages or images are loaded inside the app. Longer-range chart colors describe that range; the price-change text always compares with the previous trading close.</string>
+</resources>

@@ -399,7 +399,8 @@ class TimeHandler {
      *
      * Chain:
      *   1. City alias exact
-     *   2. Strip trailing 2-letter state abbrev → city alias + state zone
+     *   2. Resolve an audited city plus state/country qualifier
+     *      before falling back to a representative state zone
      *   3. IANA zone-city exact
      *   4. Scan words for US state names / abbreviations
      *   5. Scan words for country names
@@ -415,6 +416,10 @@ class TimeHandler {
             return ZoneId.of(it) to friendly(it)
         }
 
+        com.silentpulse.messenger.common.util.CityLocationCatalog.resolveQualified(city).singleOrNull()?.let {
+            return ZoneId.of(it.zoneId) to it.city
+        }
+
         // 2. Trailing 2-letter state abbrev: "lafayette in" → "lafayette" + state "in"
         if (words.size >= 2) {
             val last = words.last()
@@ -426,9 +431,11 @@ class TimeHandler {
                     return ZoneId.of(stateZone) to "$rest, $stateName"
                 }
             }
-            // Also try rest as city alias (e.g. "new york state" → rest = "new york")
-            CITY_ALIASES[rest]?.let {
-                return ZoneId.of(it) to friendly(it)
+            // Only discard a filler word, never a real state or country qualifier.
+            if (last in setOf("city", "state", "province")) {
+                CITY_ALIASES[rest]?.let {
+                    return ZoneId.of(it) to friendly(it)
+                }
             }
         }
 

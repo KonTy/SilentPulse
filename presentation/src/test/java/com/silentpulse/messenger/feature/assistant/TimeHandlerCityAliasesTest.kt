@@ -55,6 +55,21 @@ class TimeHandlerCityAliasesTest {
         }
     }
 
+    @Test
+    fun `state and country qualifiers are not discarded before resolving the city`() {
+        val expected = mapOf(
+            "lafayette indiana" to "America/Indiana/Indianapolis",
+            "lafayette in" to "America/Indiana/Indianapolis",
+            "lafayette louisiana" to "America/Chicago",
+            "portland maine" to "America/New_York",
+            "birmingham england" to "Europe/London",
+            "el paso texas" to "America/Denver",
+            "el paso tx" to "America/Denver",
+            "perth australia" to "Australia/Perth"
+        )
+        expected.forEach { (query, zone) -> assertEquals(query, zone, (resolveZone(query).first as ZoneId).id) }
+    }
+
     private fun resolveZone(location: String): Pair<*, *> {
         val method = TimeHandler::class.java.getDeclaredMethod("resolveZone", String::class.java)
         method.isAccessible = true

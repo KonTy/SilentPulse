@@ -19,7 +19,9 @@
 package com.silentpulse.messenger.feature.settings
 
 import android.content.Context
+import android.content.Intent
 import com.silentpulse.messenger.R
+import com.silentpulse.messenger.feature.settingsbackup.SettingsBackupActivity
 import com.silentpulse.messenger.common.Navigator
 import com.silentpulse.messenger.common.base.QkPresenter
 import com.silentpulse.messenger.common.util.Colors
@@ -146,6 +148,10 @@ class SettingsPresenter @Inject constructor(
                         R.id.notifications -> navigator.showNotificationSettings()
 
                         R.id.locationSharingPref -> navigator.showLocationSharingSettings()
+
+                        R.id.settingsBackup -> context.startActivity(
+                            Intent(context, SettingsBackupActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
 
                         R.id.swipeActions -> view.showSwipeActions()
 

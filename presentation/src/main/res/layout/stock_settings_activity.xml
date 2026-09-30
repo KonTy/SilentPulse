@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/windowBackground"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary" />
+
+    <ScrollView
+        android:id="@+id/stock_settings_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/stock_settings_hint" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                android:id="@+id/stock_settings_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:text="@string/stock_settings_empty"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/stock_settings_widgets"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:text="@string/stock_settings_add" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                android:id="@+id/stock_settings_remembered"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:text="@string/stock_settings_remembered"
+                android:visibility="gone" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/stock_settings_backup_hint" />
+
+            <Button
+                android:id="@+id/stock_settings_backup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_backup_title" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

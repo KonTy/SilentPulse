@@ -29,4 +29,13 @@ class WorldClockCityOptionsTest {
         assertEquals(seattle, WorldClockCityOptions.search("Seattle").first())
         assertEquals(CityTimeZone("Kolkata", "Asia/Kolkata"), WorldClockCityOptions.search("India").first())
     }
+
+    @Test
+    fun `Lafayette Indiana is selectable while the old Louisiana mapping stays explicit`() {
+        assertEquals(CityTimeZone("Lafayette, Indiana", "America/Indiana/Indianapolis"),
+            WorldClockCityOptions.search("Lafayette Indiana").first())
+        assertEquals(CityTimeZone("Lafayette, Louisiana", "America/Chicago"),
+            WorldClockCityOptions.canonical(CityTimeZone("Lafayette", "America/Chicago")))
+        assertFalse(WorldClockCityOptions.search("Lafayette").any { it.city == "Lafayette" })
+    }
 }

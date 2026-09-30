@@ -22,6 +22,7 @@ interface WidgetManager {
 
     companion object {
         const val ACTION_NOTIFY_DATASET_CHANGED = "com.silentpulse.messenger.intent.action.ACTION_NOTIFY_DATASET_CHANGED"
+        const val ACTION_STOCK_THEME_CHANGED = "com.silentpulse.messenger.intent.action.ACTION_STOCK_THEME_CHANGED"
     }
 
     fun updateUnreadCount()

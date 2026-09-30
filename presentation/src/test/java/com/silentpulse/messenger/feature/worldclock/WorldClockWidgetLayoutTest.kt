@@ -25,16 +25,18 @@ class WorldClockWidgetLayoutTest {
     private fun Element.dp(name: String) = android(name).removeSuffix("dp").toInt()
 
     @Test
-    fun `two clocks fit side by side on a four column single row grid`() {
+    fun `clock still starts at two columns and can resize down to one cell`() {
         val provider = xml("res/xml/widget_world_clock_info.xml")
 
         assertEquals("2", provider.android("targetCellWidth"))
         assertEquals("1", provider.android("targetCellHeight"))
-        assertTrue(provider.dp("minWidth") in 1..110)
-        assertTrue(provider.dp("minHeight") in 1..40)
-        assertTrue(provider.dp("minResizeWidth") in 1..110)
-        assertTrue(provider.dp("minResizeHeight") in 1..40)
+        assertEquals(110, provider.dp("minWidth"))
+        assertEquals(40, provider.dp("minHeight"))
+        assertEquals(40, provider.dp("minResizeWidth"))
+        assertEquals(40, provider.dp("minResizeHeight"))
         assertEquals(setOf("horizontal", "vertical"), provider.android("resizeMode").split("|").toSet())
+        assertEquals("", provider.android("maxResizeWidth"))
+        assertEquals("", provider.android("maxResizeHeight"))
     }
 
     @Test
@@ -46,6 +48,7 @@ class WorldClockWidgetLayoutTest {
 
         assertEquals("@android:color/transparent", layout.android("background"))
         assertEquals("vertical", layout.android("orientation"))
+        assertEquals(0, layout.dp("paddingStart") + layout.dp("paddingEnd"))
         assertEquals(0, layout.dp("paddingTop") + layout.dp("paddingBottom"))
         assertEquals(1, clocks.length)
         assertEquals(1, icons.length)
@@ -62,11 +65,17 @@ class WorldClockWidgetLayoutTest {
         assertEquals("fitCenter", weather.android("scaleType"))
         assertEquals("@android:color/transparent", weather.android("background"))
         assertEquals("uniform", clock.android("autoSizeTextType"))
+        assertEquals("1dp", clock.android("autoSizeMinTextSize"))
+        assertEquals("28sp", clock.android("autoSizeMaxTextSize"))
+        assertEquals("1dp", clock.android("autoSizeStepGranularity"))
         assertEquals("uniform", city.android("autoSizeTextType"))
+        assertEquals("12sp", city.android("autoSizeMaxTextSize"))
         assertEquals("1", clock.android("maxLines"))
         assertEquals("1", city.android("maxLines"))
         assertEquals("false", clock.android("includeFontPadding"))
         assertEquals("false", city.android("includeFontPadding"))
+        assertEquals("sans-serif", clock.android("fontFamily"))
+        assertEquals("sans-serif", city.android("fontFamily"))
         assertEquals("", clock.android("format12Hour"))
         assertEquals("", clock.android("format24Hour"))
         assertEquals("0", xml("res/xml/widget_world_clock_info.xml").android("updatePeriodMillis"))
@@ -74,6 +83,17 @@ class WorldClockWidgetLayoutTest {
             .filterIsInstance<Element>()
         assertEquals(listOf("TextClock", "ImageView", "TextView"), children.map { it.tagName })
         assertFalse(children.any { it.android("id").contains("temperature") })
+    }
+
+    @Test
+    fun `configuration explains the optional one cell resize`() {
+        val strings = xml("res/values/strings.xml").getElementsByTagName("string")
+        val copy = (0 until strings.length).map { strings.item(it) as Element }
+            .associate { it.getAttribute("name") to it.textContent }
+
+        assertTrue(copy.getValue("world_clock_widget_description").contains("2 by 1"))
+        assertTrue(copy.getValue("world_clock_widget_description").contains("1 by 1"))
+        assertTrue(copy.getValue("world_clock_setup_hint").contains("1 by 1"))
     }
 
     @Test

@@ -31,13 +31,15 @@ Say **"Computer"** at any time while the assistant is running. The Vosk on-devic
 | **Notifications** | "Read my notifications" · "Read my email" — then: Skip / Reply / Repeat / Dismiss / Stop |
 | **Music** | "Play music" · "Play [artist/song]" · "Resume" |
 | **Audiobooks** | "Listen to book" · "Open voice" |
-| **Stock prices** | "Price of bitcoin" · "Price of AAPL" · "Price of gold" |
+| **Stock prices** | "Stock price Microsoft" · "Stock price AAPL" · "Stock price crude oil" · "Stock price gold" |
 | **General questions** | "What is the capital of France?" · "Who invented the telephone?" |
 | **App control** | "Open Maps" · "Close Spotify" |
 | **Cross-app logging** | "Computer, Microcore, log weight 220 pounds" |
 | **Help** | "Help" · "What can you do?" |
 
 ### Architecture — two-phase listening
+
+Stock lookup requires a command beginning with **"stock price"** (then a company, ticker or supported asset). Ordinary "what is..." / "how much..." questions and bare "price of..." requests no longer enter the stock handler merely because they contain a company name or words such as gold, coin or share.
 
 Phase 1 — **Vosk keyword spotter** runs continuously, constrained to the grammar `["computer", "[unk]"]`. It reads raw PCM via AudioRecord — zero beeps, zero SpeechRecognizer restarts, minimal battery drain.
 
@@ -145,13 +147,81 @@ After updating, long-press an existing widget and use its side handles to shrink
 
 Add **SilentPulse World Clock** from your launcher's widget picker, search for a city or IANA time zone, choose white or black text for your wallpaper, and tap **Save clock**. Its background is fully transparent.
 
-Each clock requests **2 columns by 1 row**, so two fit side by side on a four-column home screen. Add as many independent instances as your launcher allows, with a different city on each. Tap the time or city to change its city or text color; long-press to resize it. Actual grid dimensions depend on your launcher.
+Each clock starts at **2 columns by 1 row** and can now be resized down to **1×1**. Long-press the clock and drag its side handles inward; four compact clocks can fit on a four-column home screen. The time scales to the available width, with no app-added horizontal padding; longer city labels may be shortened. Add as many independent instances as your launcher allows, with a different city on each. Tap the time or city to change its city or text color. Actual grid dimensions and outer padding depend on your launcher; remove and re-add an old widget if it retains the previous minimum size.
+
+For shared city names, select the state/country explicitly. **Lafayette, Indiana** uses `America/Indiana/Indianapolis` (Eastern), while **Lafayette, Louisiana** uses `America/Chicago` (Central). The old unqualified Lafayette entry meant Louisiana; existing saved clocks are relabeled clearly without silently changing their time zone. The picker also distinguishes other common shared names, including Portland, Birmingham, Richmond, Jackson, Columbus, San Jose, London, Paris and La Paz. Searches accept qualifiers such as `Lafayette IN` or `Portland Maine`.
+
+All **214 explicit aliases** were cross-checked against Open-Meteo/GeoNames city records and IANA zone links on 2026-09-30. Their existing mappings correspond to real places; the Lafayette problem was an ambiguous name, not a universal one-hour offset. Audited region metadata also prevents voice queries such as `Lafayette Indiana`, `El Paso TX` or `Perth Australia` from discarding the qualifier or using an over-broad state/country default. IANA-derived entries use their named zone directly. Actual daylight-saving and political-rule updates still depend on the device's time-zone database.
 
 Timekeeping works entirely offline using Android's time-zone database and automatically follows daylight-saving changes and the system's 12/24-hour format. The launcher updates the time without a background service or periodic alarms.
 
 A small, transparent weather icon sits **between the time and city**, with no temperature text in the compact layout. Sunny/clear-night, partly cloudy, cloudy, fog, rain, sleet, snow and storm icons are bundled vector drawings, not downloaded images.
 
 Weather uses [Open-Meteo](https://open-meteo.com/) (no API key; [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). Only the selected city and its geocoded coordinates are requested; no device location, messages or contacts are used. Cities are matched to the clock's time zone rather than silently using a different location. Predefined country/region shortcuts resolve to and display a named representative city, such as **Japan → Tokyo**. The picker prioritizes exact city matches and removes duplicate region shortcuts; real city names such as Seattle remain distinct. Conditions are cached per city and refreshed about hourly using WorkManager; Android can delay background work. Tap the weather icon to refresh manually. A question-mark cloud means weather is pending or unavailable, not a guessed forecast. UTC and unresolved city aliases still work as clocks but may have no weather. Removing the last clock cancels refresh work and clears the separate weather cache.
+
+Qualified city weather additionally checks country and state/region, so a Louisiana or Tennessee result cannot supply weather for Lafayette, Indiana. Offline qualifier metadata is derived from the [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api), based on [GeoNames](https://www.geonames.org/) data; no runtime network lookup is needed to select a clock time zone.
+
+### Stock watchlists
+
+Add **SilentPulse Stocks** from the widget picker. Enter Yahoo Finance symbols in your preferred order (for example `AAPL, MSFT, ^DJI, GC=F, BTC-USD`), choose a layout and save. Each widget has an independent watchlist, background, text color and refresh interval.
+
+The main navigation drawer now includes **Stocks**, beside the other app features. It lists installed stock widgets and opens the settings for the selected instance, with a shortcut to **Settings backup**. If there are no stock widgets, it explains how to add one; remembered watchlists and imported presets are not erased. Returning to the page refreshes the widget list, and a removed widget cannot be accidentally edited.
+
+- **Compact:** one line per symbol with price/currency and signed daily absolute/percentage change. Positive changes are green, negative changes red, and unchanged or unknown changes neutral.
+- **Dense:** larger 14sp base text in tighter, borderless rows showing ticker, price and signed percentage change. Enable **Two columns** to put two stocks on each row; hiding currency labels allows two columns at narrower sizes. Large fonts or narrow widgets fall back to one column. Cached quotes are marked with `*`.
+- **Cards:** ticker, company name, price, daily changes and quote timestamp, with optional **gradient-filled intraday line charts** underneath. Wide widgets can show two card columns; narrower widgets and larger accessibility fonts use one column.
+
+Two-column layouts reserve a **12dp gutter**, rather than allowing the columns to touch. Gains and losses use more vivid green/red, with separate high-contrast shades for light versus dark/OLED backgrounds.
+
+Single-line layouts have no added vertical row margins or font padding: Compact uses a 16dp minimum instead of the previous 32dp, while Dense uses 18dp. Rows still expand for larger fonts rather than clipping text. Group separators and borders use a visible 2dp line in the theme's secondary text color, not the faint app-divider color.
+
+Each widget has a **Ticker text size** slider, from 80% to 180% of its layout's normal size (100% by default). It scales ticker, price/change and supporting row text without changing the rest of the app. Existing widgets update immediately, and the value is included in settings backups and imported presets. Text no longer auto-shrinks against the selected size; large values or labels may need a wider widget, and two-column layouts adapt to the larger text.
+
+All stock widgets now **follow SilentPulse's theme by default**, including a true `#000000` background in OLED mode. Light/dark/system theme changes update the widgets without fetching quotes. Disable **Follow SilentPulse theme** to choose manual light/dark colors instead.
+
+All layouts support a **fully transparent background**, including the toolbar and individual stock cells; transparency takes precedence over the theme background. With theme following disabled, choose light text for dark wallpaper or dark text for light wallpaper. Turn off **Show currency labels** to omit `USD`, `EUR`, etc. from prices; each quote keeps its original currency (there is no conversion), and accessibility descriptions retain it. Existing layout, transparency and watchlist choices are retained.
+
+Use **Add group** to insert a `[Heading]` after the current editor line, then list its instruments underneath. Choose horizontal separators, a border around each group, or headings alone. Groups work with every layout, and two-column rows never mix instruments from different groups. Move complete sections in the editor to reorder groups. Group names stay local and are never sent to the quote provider.
+
+Append a minus inside a heading, such as **`[Commodities-]`**, to put a horizontal rule **beside the group name on the same row**, including in **Headings only** mode. No separate separator row is added above the heading. The displayed heading omits the trailing minus; the marker is retained in saved watchlists and settings backups. Explicit border mode still draws the group outline.
+
+**Find stocks, funds, indices or commodities** opens a full-screen themed picker. Typing filters built-in shortcuts locally; tap **Search Yahoo** or the keyboard search key to look up other instruments by name, issuer or ticker. For example, searching **Fidelity** can return mutual funds such as `FXAIX` (Fidelity 500 Index Fund), along with Fidelity ETFs and similarly named companies. Results show the instrument name, ticker, type and exchange where available. The picker is not limited to the built-in catalog, but coverage and quote availability depend on Yahoo; it cannot guarantee every instrument in existence. Search and ticker verification use the same already-whitelisted Yahoo domains, with no key or account.
+
+Built-in index shortcuts include **S&P 500 (`^GSPC`)**, Dow (`^DJI`), Nasdaq Composite (`^IXIC`), Nasdaq 100 (`^NDX`) and Russell 2000 (`^RUT`). Names such as `snp500`, `gold`, `crude oil`, `natural gas` and `10 year treasury` also resolve locally in the watchlist editor. Gold (`GC=F`) and crude oil (`CL=F`) are **futures**, not spot prices; bond coverage includes ETFs such as `BND`/`TLT` and Treasury futures such as `ZN=F`, not individual CUSIP/ISIN bonds. Currency-pair tickers such as `EURUSD=X` are supported. Use `$TICKER` when a literal ticker conflicts with an asset name (for example `$CORN` is the ETF, while `corn` resolves to corn futures).
+
+Only an explicit online search sends the text in the search box to Yahoo; typing/local filtering does not. Search queries are not logged, and no group names or other app content are appended to them. Old search responses are discarded when the query changes. Online failure is displayed rather than reported as zero matches.
+
+**Verify and save watchlist** checks new or previously unverified tickers against Yahoo, then shows their identities for confirmation. Unknown symbols or unavailable responses block the save instead of silently adding unusable tickers. Previously verified instruments already in that widget can be retained offline when only changing its layout or groups.
+
+For an **existing widget**, appearance controls and refresh interval save and refresh the widget immediately. Unchecking **Show currency labels** therefore remains applied when leaving with Back; no verification or network request is needed for a display-only change. Unsaved ticker/group-content edits are kept separate and still require **Verify and save**. A new widget must be verified and saved before it is configured.
+
+**Tap an individual stock cell** to open a themed details page showing its full name, instrument type/exchange when available, quote time and daily change. Each column opens its own ticker; group headings and empty grid cells do not select a stock. Long-press stays available for the launcher's move/resize/remove controls.
+
+Details include **1-day, 5-trading-day, 1-month and 1-year trend charts**, defaulting to one month. Daily quote changes always compare against the previous trading close, never the start of a longer chart range. Historical chart colors describe the selected range, dates use the phone's time zone, and missing samples remain gaps.
+
+The details page also requests **related headlines from Yahoo**, showing only stories explicitly tagged with that ticker. Some instruments, particularly funds, have no matching articles. Headline loading failures do not block the quote or chart. Tapping a headline opens its returned HTTPS Yahoo Finance article URL in the **external browser**; SilentPulse does not fetch article bodies, images, ads or scripts. The browser and publisher can use cookies/tracking and are outside the app's network controls. No new in-app domain, WebView scraper or dependency is required.
+
+Yahoo's tags can represent a passing mention, not the main subject: a T-Mobile story may also be tagged `AAPL`. All tagged stories remain available. An **info icon beside the headline** marks cases where a conservative local check did not find the selected company/asset name or ticker in the headline. Tap the icon to see Yahoo's actual ticker tags and the explanation; it does not open the article. This is not an analysis of the article body or a guarantee about its primary subject, and some relevant headlines can use a different name.
+
+The widget starts at 4×2, resizes horizontally and vertically, and scrolls to show the rest of the watchlist. Use the gear to edit symbols, change their order or switch layouts, and the refresh button for a manual update. Automatic updates can run every 15, 30 or 60 minutes; Android may defer them. Manual requests are throttled to once per minute per symbol, and overlapping watchlists share a local quote cache.
+
+Quotes and five-minute chart samples use **Yahoo Finance's unofficial, keyless chart endpoint**, shared with the voice assistant through `feature/stocks/data/YahooStockClient`. No extra app, account, API key, WebView scraping, browser cookies, new network domain or dependency is needed. Only requested ticker symbols and connection metadata go to Yahoo; no messages, group names, contacts or device location are sent. Verification requests quotes; saving enables automatic refresh.
+
+This is not a live trading feed: quotes may be delayed, rate-limited or unavailable, and charts show the latest session returned by Yahoo rather than invented out-of-hours data. Mutual funds may publish NAV only once daily and have no intraday line chart; the widget does not invent samples. Daily changes use the provider's previous close, not the first chart point. Cards show the provider's quote time; the header shows when requests were checked. Failed or overdue cached quotes are labeled, missing prices never become zero, and missing chart samples remain gaps. The unofficial API can change without notice. Holdings, price alerts and trading are not included.
+
+Removing the last stock widget cancels scheduled work and clears its separate quote cache, **but keeps the last-used watchlist and its groups** in private app storage. Adding a new widget pre-fills the most recently saved or removed list, so it does not need to be typed again. Multiple installed widgets remain independent; deleting one does not change the others.
+
+## Settings export and restore
+
+Open **Settings → Settings backup** to export a versioned JSON file using the local document picker. This is separate from the existing SMS **Backup & restore**, which backs up messages rather than preferences.
+
+The settings file includes global accent colors (including exact signed ARGB values), light/dark/system/OLED mode, fonts/text size, automatic colors, supported global messaging/notification/voice preferences, every stock watchlist and group (including `[Commodities-]` markers), all stock display/refresh choices, the remembered watchlist, and every world clock's city, time zone and text color. Effective appearance defaults are included even if never explicitly changed. Previously imported widget presets are included in later exports.
+
+On import, the entire file is validated before any preference writes, and a verified **private pre-import snapshot** is saved for **Restore pre-import snapshot**. Only supported settings present in the file are replaced; absent sections and unrelated settings remain untouched. Empty or identical imports do not discard the previous recovery snapshot. Importing does not start microphone/location services, grant permissions or trigger network refreshes.
+
+**Widget configurations are portable presets, not launcher IDs.** Existing widgets are not overwritten by matching numeric IDs. After importing, add or configure a stock/clock widget and choose **Imported presets** from its overflow menu, review it, then save. Stocks retain their explicit **Verify and save** flow. Launcher placement and size are not included.
+
+Files are readable and unencrypted and can contain watchlists, city labels and a message signature; keep them in private, device-local storage. Messages, contacts, per-conversation overrides, blocked senders, logs, caches, API keys, cookies/authentication/session data, permissions, running states, automatic deletion, custom ringtone/model files and web-AI settings are excluded. The backup page lists the supported settings and exclusions in detail.
 
 ---
 

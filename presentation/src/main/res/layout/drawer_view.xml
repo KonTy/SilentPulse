@@ -176,6 +176,21 @@
 
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/stocks"
+            style="@style/DrawerRow">
+
+            <ImageView
+                style="@style/DrawerIcon"
+                android:src="@drawable/ic_stocks_black_24dp"
+                android:tint="?android:attr/textColorSecondary" />
+
+            <com.silentpulse.messenger.common.widget.QkTextView
+                style="@style/DrawerText"
+                android:text="@string/drawer_stocks" />
+
+        </LinearLayout>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

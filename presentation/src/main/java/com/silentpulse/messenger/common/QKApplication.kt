@@ -20,6 +20,7 @@
 package com.silentpulse.messenger.common
 
 import android.app.Application
+import android.content.res.Configuration
 import android.os.Build
 import com.silentpulse.messenger.BuildConfig
 import com.silentpulse.messenger.common.util.FileLoggingTree
@@ -29,9 +30,11 @@ import com.silentpulse.messenger.injection.appComponent
 import com.silentpulse.messenger.manager.AnalyticsManager
 import com.silentpulse.messenger.manager.BillingManager
 import com.silentpulse.messenger.manager.ReferralManager
+import com.silentpulse.messenger.manager.WidgetManager
 import com.silentpulse.messenger.migration.QkMigration
 import com.silentpulse.messenger.migration.QkRealmMigration
 import com.silentpulse.messenger.util.NightModeManager
+import com.silentpulse.messenger.util.Preferences
 import com.uber.rxdogtag.RxDogTag
 import com.uber.rxdogtag.autodispose.AutoDisposeConfigurer
 import dagger.android.AndroidInjector
@@ -63,12 +66,17 @@ class QKApplication : Application(), HasAndroidInjector {
     @Inject lateinit var nightModeManager: NightModeManager
     @Inject lateinit var realmMigration: QkRealmMigration
     @Inject lateinit var referralManager: ReferralManager
+    @Inject lateinit var prefs: Preferences
+    @Inject lateinit var widgetManager: WidgetManager
+
+    private var systemNightMode = Configuration.UI_MODE_NIGHT_UNDEFINED
 
     override fun onCreate() {
         super.onCreate()
 
         AppComponentManager.init(this)
         appComponent.inject(this)
+        systemNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
         if (BuildConfig.DEBUG) {
             Timber.plant(MetadataDebugTree(), fileLoggingTree)
@@ -98,6 +106,16 @@ class QKApplication : Application(), HasAndroidInjector {
             RxDogTag.builder()
                     .configureWith(AutoDisposeConfigurer::configure)
                     .install()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val newNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val nightModeChanged = systemNightMode != newNightMode
+        systemNightMode = newNightMode
+        if (nightModeChanged && prefs.nightMode.get() == Preferences.NIGHT_MODE_SYSTEM) {
+            widgetManager.updateTheme()
         }
     }
 

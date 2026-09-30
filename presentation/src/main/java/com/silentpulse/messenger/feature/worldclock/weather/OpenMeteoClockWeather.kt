@@ -2,6 +2,8 @@ package com.silentpulse.messenger.feature.worldclock.weather
 
 import com.silentpulse.messenger.common.util.CityTimeZone
 import com.silentpulse.messenger.common.util.CityTimeZones
+import com.silentpulse.messenger.common.util.CityLocationCatalog
+import com.silentpulse.messenger.common.util.ClockCityLocation
 import com.silentpulse.messenger.feature.assistant.OpenMeteoService
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonAdapter
@@ -37,8 +39,10 @@ class OpenMeteoClockWeather(
 ) {
 
     fun fetch(city: CityTimeZone, coordinates: WeatherCoordinates? = null): ClockWeather {
+        if (!CityLocationCatalog.isConsistent(city)) throw WeatherLocationUnavailableException()
         val weatherCity = weatherLocation(city) ?: throw WeatherLocationUnavailableException()
-        val name = placeName(weatherCity.city)
+        val named = CityLocationCatalog.locationFor(weatherCity)
+        val name = placeName(named?.place ?: weatherCity.city)
         if (name.isEmpty() || name in nonPlaceNames ||
             weatherCity.zoneId.substringBefore('/') !in geographicRegions ||
             !CityTimeZones.isValidZoneId(weatherCity.zoneId)
@@ -46,7 +50,7 @@ class OpenMeteoClockWeather(
             throw WeatherLocationUnavailableException()
         }
 
-        val location = coordinates?.validated() ?: geocode(weatherCity, name)
+        val location = coordinates?.validated() ?: geocode(weatherCity, name, named)
         val url = "${OpenMeteoService.FORECAST_URL}" +
             "?latitude=${location.latitude}&longitude=${location.longitude}" +
             "&current=weather_code,is_day&timeformat=unixtime&forecast_days=1"
@@ -64,8 +68,8 @@ class OpenMeteoClockWeather(
         return ClockWeather(location, code, day == 1, seconds * 1_000L)
     }
 
-    private fun geocode(city: CityTimeZone, name: String): WeatherCoordinates {
-        val search = if (name == "washingtondc") "Washington" else cityNames[name] ?: city.city.trim()
+    private fun geocode(city: CityTimeZone, name: String, named: ClockCityLocation?): WeatherCoordinates {
+        val search = if (name == "washingtondc") "Washington" else named?.place ?: cityNames[name] ?: city.city.trim()
         val url = "${OpenMeteoService.GEOCODE_URL}?name=${URLEncoder.encode(search, "UTF-8")}" +
             "&count=20&language=en&format=json"
         val response = parse(geocodingAdapter, request(url))
@@ -73,7 +77,9 @@ class OpenMeteoClockWeather(
         val matches = response.results.orEmpty().map { it ?: throw WeatherResponseException() }.filter { result ->
             result.featureCode in populatedPlaces &&
                 canonicalZone(result.timezone) == canonicalZone(city.zoneId) &&
-                matchesName(result, name)
+                matchesName(result, name) &&
+                (named == null || (result.countryCode == named.country &&
+                    (named.region == null || normalize(result.admin1.orEmpty()) == normalize(named.region))))
         }.map { result ->
             WeatherCoordinates(
                 result.latitude ?: throw WeatherResponseException(),
@@ -117,7 +123,7 @@ class OpenMeteoClockWeather(
         fun weatherLocationLabel(city: CityTimeZone): String = weatherLocation(city)?.city ?: city.city
 
         private fun weatherLocation(city: CityTimeZone): CityTimeZone? {
-            val representative = regionAliases[normalize(city.city)] ?: return city
+            val representative = regionAliases[normalize(city.city)] ?: return CityLocationCatalog.canonical(city)
             return if (canonicalZone(city.zoneId) == canonicalZone(representative.zoneId)) {
                 city.copy(city = representative.city)
             } else {
@@ -167,25 +173,6 @@ class OpenMeteoClockWeather(
         private val nameSeparators = Regex("[^\\p{L}\\p{N}]")
         private val cityNames = (nameAliases.values + listOf("Buenos Aires"))
             .associateBy(::normalize)
-        private val zoneAliases = mapOf(
-            "Europe/Kiev" to "Europe/Kyiv",
-            "Asia/Calcutta" to "Asia/Kolkata",
-            "Asia/Katmandu" to "Asia/Kathmandu",
-            "America/Buenos_Aires" to "America/Argentina/Buenos_Aires",
-            "America/Catamarca" to "America/Argentina/Catamarca",
-            "America/Cordoba" to "America/Argentina/Cordoba",
-            "America/Jujuy" to "America/Argentina/Jujuy",
-            "America/Mendoza" to "America/Argentina/Mendoza",
-            "America/Montreal" to "America/Toronto",
-            "America/Indianapolis" to "America/Indiana/Indianapolis",
-            "America/Louisville" to "America/Kentucky/Louisville",
-            "Asia/Chongqing" to "Asia/Shanghai",
-            "Asia/Chungking" to "Asia/Shanghai",
-            "Asia/Harbin" to "Asia/Shanghai",
-            "Asia/Tel_Aviv" to "Asia/Jerusalem",
-            "Asia/Rangoon" to "Asia/Yangon",
-            "Asia/Saigon" to "Asia/Ho_Chi_Minh"
-        )
 
         private fun normalize(value: String): String =
             Normalizer.normalize(value, Normalizer.Form.NFD)
@@ -198,7 +185,7 @@ class OpenMeteoClockWeather(
         }
 
         // Explicit IANA links, not equal offsets (or even equal current DST rules).
-        private fun canonicalZone(value: String?): String? = zoneAliases[value] ?: value
+        private fun canonicalZone(value: String?): String? = CityTimeZones.canonicalZoneId(value)
     }
 }
 
@@ -234,7 +221,8 @@ internal data class ClockGeocodingPlace(
     val longitude: Double? = null,
     val timezone: String? = null,
     @Json(name = "feature_code") val featureCode: String? = null,
-    val admin1: String? = null
+    val admin1: String? = null,
+    @Json(name = "country_code") val countryCode: String? = null
 )
 
 @JsonClass(generateAdapter = true)

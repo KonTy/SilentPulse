@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/stock_configure_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/windowBackground"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary" />
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/stock_setup_hint" />
+            <EditText
+                android:id="@+id/stock_symbols"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="80dp"
+                android:gravity="top|start"
+                android:inputType="textCapCharacters|textMultiLine|textNoSuggestions"
+                android:importantForAutofill="no"
+                android:hint="@string/stock_symbols_hint" />
+            <Button
+                android:id="@+id/stock_add_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/stock_add_group" />
+            <Button
+                android:id="@+id/stock_add_asset"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/stock_add_asset" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/stock_groups_hint"
+                android:textSize="12sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:labelFor="@id/stock_group_style"
+                android:text="@string/stock_group_style" />
+            <Spinner
+                android:id="@+id/stock_group_style"
+                android:layout_width="match_parent"
+                android:layout_height="48dp" />
+            <TextView
+                android:id="@+id/stock_validation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite"
+                android:visibility="gone" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:text="@string/stock_appearance_autosave"
+                android:textSize="12sp" />
+            <RadioGroup
+                android:id="@+id/stock_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <RadioButton
+                    android:id="@+id/stock_mode_compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/stock_mode_compact" />
+                <RadioButton
+                    android:id="@+id/stock_mode_dense"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/stock_mode_dense" />
+                <RadioButton
+                    android:id="@+id/stock_mode_cards"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/stock_mode_cards" />
+            </RadioGroup>
+            <TextView
+                android:id="@+id/stock_font_size_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:labelFor="@id/stock_font_size"
+                android:text="@string/stock_font_size_title" />
+            <SeekBar
+                android:id="@+id/stock_font_size"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:max="20"
+                android:progress="4"
+                android:contentDescription="@string/stock_font_size_title" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="8dp"
+                android:text="@string/stock_font_size_hint"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/stock_charts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_charts" />
+            <CheckBox
+                android:id="@+id/stock_columns"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_columns" />
+            <CheckBox
+                android:id="@+id/stock_currency"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_currency" />
+            <CheckBox
+                android:id="@+id/stock_transparent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_transparent" />
+            <CheckBox
+                android:id="@+id/stock_follow_theme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_follow_theme" />
+            <CheckBox
+                android:id="@+id/stock_dark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/stock_dark" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="12dp"
+                android:text="@string/stock_dense_hint"
+                android:textSize="12sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:labelFor="@id/stock_interval"
+                android:text="@string/stock_interval_label" />
+            <Spinner
+                android:id="@+id/stock_interval"
+                android:layout_width="match_parent"
+                android:layout_height="48dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/stock_data_notice"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+    <Button
+        android:id="@+id/stock_save"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:minHeight="48dp"
+        android:text="@string/stock_save" />
+</LinearLayout>

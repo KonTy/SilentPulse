@@ -3,29 +3,24 @@ package com.silentpulse.messenger.feature.assistant
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.util.Log
-import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import com.silentpulse.messenger.feature.stocks.data.StockQuote
+import com.silentpulse.messenger.feature.stocks.data.YahooStockClient
+import java.util.Locale
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
 /**
- * Fetches real-time stock prices using Yahoo Finance's unofficial chart API.
+ * Speaks quotes from the shared, keyless Yahoo Finance client.
  *
- * No API key required. Domain whitelisted in network_security_config.xml.
- * API: https://query1.finance.yahoo.com/v8/finance/chart/{TICKER}?interval=1d&range=1d
- *
- * Usage: "what is the price of google stock" / "how much is apple stock today"
+ * Usage: "stock price Microsoft" / "stock price crude oil".
  */
-class StockQueryHandler(private val context: Context) {
+class StockQueryHandler(
+    private val context: Context,
+    private val client: YahooStockClient = YahooStockClient()
+) {
 
     companion object {
-        private const val TAG = "StockQuery"
-        private const val BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
-
         /**
          * Maps spoken company/commodity names (lowercase) to Yahoo Finance ticker symbols.
          * Supports common aliases. Commodities use Yahoo's futures/spot symbols.
@@ -139,60 +134,39 @@ class StockQueryHandler(private val context: Context) {
             "dow jones"      to "DIA"
         )
 
-        /** Set of words that indicate a price/value query. */
-        private val KNOWN_ASSETS = TICKER_MAP.keys
+        private val COMMAND_PREFIX = Regex("^stock\\s+prices?(?=\\s|[:,.!?]|$)", RegexOption.IGNORE_CASE)
+        private val TRAILING_FILLER = Regex("\\s+(?:stock|stocks|share|shares|futures|today|right now|currently|please|per ounce|per troy ounce|per barrel|per share)$")
     }
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    /**
-     * Returns true if the command looks like a price query for a known asset.
-     * Matches stock questions ("price of Google stock"), commodity questions
-     * ("price of gold today"), and crypto ("how much is bitcoin").
-     */
-    fun isStockQuery(command: String): Boolean {
-        val c = command.lowercase()
-
-        val hasPriceWord = c.contains("price") || c.contains("worth") ||
-            c.contains("cost") || c.contains("trading") || c.contains("how much") ||
-            c.contains("what is") || c.contains("what's") || c.contains("per ounce") ||
-            c.contains("per share")
-
-        if (!hasPriceWord) return false
-
-        // Explicit stock/share/crypto keywords → always route here
-        if (c.contains("stock") || c.contains("share") || c.contains("crypto") ||
-            c.contains("bitcoin") || c.contains("ethereum") || c.contains("coin")) return true
-
-        // Otherwise only route if a known asset name appears in the command
-        return KNOWN_ASSETS.any { asset -> c.contains(asset) }
-    }
+    /** Stock lookup is opt-in; ordinary questions containing company names are not price commands. */
+    fun isStockQuery(command: String): Boolean = COMMAND_PREFIX.containsMatchIn(command.trim())
 
     /**
      * Parse the company/ticker from the command, fetch price, and call [onResult]
      * on the main thread with a speakable answer string.
      */
     fun fetchPrice(command: String, onResult: (String) -> Unit) {
+        val ticker = extractTicker(command)
+        if (ticker == null) {
+            onResult("Say stock price followed by a company, ticker, or asset. For example: stock price Microsoft, stock price Apple, or stock price gold.")
+            return
+        }
         if (!isNetworkAvailable()) {
             onResult("No data connection. Please enable mobile data or Wi-Fi.")
             return
         }
 
-        val ticker = extractTicker(command)
-        if (ticker == null) {
-            onResult("I'm not sure which stock you mean. Try saying something like: what is the price of Apple stock.")
-            return
-        }
-
-        Log.d(TAG, "stock_query_started")
-
         executor.execute {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
             try {
-                val answer = queryYahooFinance(ticker)
+                val answer = formatStockQuote(client.fetch(ticker))
                 mainHandler.post { onResult(answer) }
-            } catch (e: Exception) {
-                Log.e(TAG, "stock_query_failed type=${e.javaClass.simpleName}")
+            } catch (_: CancellationException) {
+                return@execute
+            } catch (_: Exception) {
+                if (Thread.currentThread().isInterrupted) return@execute
                 mainHandler.post { onResult("I couldn't fetch the price for $ticker right now. Try again later.") }
             }
         }
@@ -201,95 +175,21 @@ class StockQueryHandler(private val context: Context) {
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private fun extractTicker(command: String): String? {
-        val c = command.lowercase()
+        val text = command.trim()
+        val prefix = COMMAND_PREFIX.find(text) ?: return null
+        var cleaned = text.substring(prefix.range.last + 1).trim(' ', ':', ',', '.', '!', '?')
+            .lowercase(Locale.ROOT).replace(Regex("\\s+"), " ").trim()
+            .replace(Regex("^(?:of|for|the)\\s+"), "")
+        while (TRAILING_FILLER.containsMatchIn(cleaned)) cleaned = cleaned.replace(TRAILING_FILLER, "")
+        TICKER_MAP[cleaned]?.let { return it }
 
-        // Remove filler phrases to isolate the company name
-        val cleaned = c
-            .replace(Regex("what(?:'s| is) the (current )?price of"), "")
-            .replace(Regex("how much is"), "")
-            .replace(Regex("what(?:'s| is)"), "")
-            .replace(Regex("\\b(stock|stocks|share|shares|price|today|right now|currently|trading|at|the|for|of)\\b"), " ")
-            .replace(Regex("\\s{2,}"), " ")
-            .trim()
-
-        Log.d(TAG, "stock_ticker_extracted")
-
-        // Try longest match first (handles "jp morgan" before "morgan")
-        val sortedKeys = TICKER_MAP.keys.sortedByDescending { it.length }
-        for (key in sortedKeys) {
-            if (cleaned.contains(key)) {
-                return TICKER_MAP[key]
-            }
-        }
-
-        // If cleaned looks like a raw ticker (2-5 uppercase-able letters), use it directly
-        val upperCleaned = cleaned.trim().uppercase()
+        // If cleaned looks like a raw ticker (1-5 uppercase-able letters), use it directly
+        val upperCleaned = cleaned.trim().uppercase(Locale.ROOT)
         if (upperCleaned.matches(Regex("[A-Z]{1,5}"))) {
             return upperCleaned
         }
 
         return null
-    }
-
-    private fun queryYahooFinance(ticker: String): String {
-        val url = "$BASE_URL/$ticker?interval=1d&range=1d"
-        Log.d(TAG, "finance_request_started")
-
-        val body = httpGet(url)
-        val json = JSONObject(body)
-
-        val result = json.optJSONObject("chart")
-            ?.optJSONArray("result")
-            ?.optJSONObject(0)
-            ?: throw RuntimeException("No result in Yahoo Finance response")
-
-        val meta = result.optJSONObject("meta")
-            ?: throw RuntimeException("No meta in Yahoo Finance result")
-
-        val price       = meta.optDouble("regularMarketPrice", Double.NaN)
-        val prevClose   = meta.optDouble("previousClose", Double.NaN)
-        val currency    = meta.optString("currency", "USD")
-        val symbol      = meta.optString("symbol", ticker)
-        val longName    = meta.optString("longName", "").ifEmpty {
-            meta.optString("shortName", symbol)
-        }
-
-        if (price.isNaN()) throw RuntimeException("No price data returned for $ticker")
-
-        val priceStr = "%.2f".format(price)
-        val currencyLabel = when (currency) {
-            "USD" -> "dollars"
-            "EUR" -> "euros"
-            "GBP" -> "pounds"
-            "CAD" -> "Canadian dollars"
-            "AUD" -> "Australian dollars"
-            else  -> currency
-        }
-
-        // Unit label: futures/spots = per ounce or per barrel, stocks = per share
-        val unitLabel = when {
-            symbol.endsWith("=F") -> when {
-                symbol.startsWith("GC") || symbol.startsWith("SI") ||
-                symbol.startsWith("PL") -> "per troy ounce"
-                symbol.startsWith("CL") || symbol.startsWith("BZ") -> "per barrel"
-                else -> ""
-            }
-            symbol.endsWith("-USD") -> "" // crypto — no unit
-            else -> "per share"
-        }
-        val unitStr = if (unitLabel.isEmpty()) "" else " $unitLabel"
-
-        return if (!prevClose.isNaN() && prevClose != 0.0) {
-            val change    = price - prevClose
-            val changePct = (change / prevClose) * 100
-            val direction = if (change >= 0) "up" else "down"
-            val changeStr = "%.2f".format(abs(change))
-            val pctStr    = "%.2f".format(abs(changePct))
-            "$longName is currently at $$priceStr $currencyLabel$unitStr, " +
-            "$direction $changeStr ($pctStr percent) from yesterday."
-        } else {
-            "$longName is currently at $$priceStr $currencyLabel$unitStr."
-        }
     }
 
     private fun isNetworkAvailable(): Boolean {
@@ -298,19 +198,37 @@ class StockQueryHandler(private val context: Context) {
         val caps = cm.getNetworkCapabilities(network) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
-
-    private fun httpGet(urlString: String): String {
-        val conn = URL(urlString).openConnection() as HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout    = 15_000
-        conn.requestMethod  = "GET"
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-        conn.setRequestProperty("Accept", "application/json")
-        return try {
-            if (conn.responseCode != 200) throw RuntimeException("HTTP ${conn.responseCode}")
-            BufferedReader(InputStreamReader(conn.inputStream)).readText()
-        } finally {
-            conn.disconnect()
-        }
-    }
 }
+
+internal fun formatStockQuote(quote: StockQuote): String {
+    val currencyLabel = when (quote.currency) {
+        "USD" -> "dollars"
+        "EUR" -> "euros"
+        "GBP" -> "pounds"
+        "GBp", "GBX" -> "pence"
+        "CAD" -> "Canadian dollars"
+        "AUD" -> "Australian dollars"
+        "ZAc", "ZAX" -> "South African cents"
+        "ILA", "ILa" -> "Israeli agorot"
+        else -> quote.currency
+    }
+    val unitLabel = when {
+        quote.symbol.endsWith("=F") -> when {
+            quote.symbol.startsWith("GC") || quote.symbol.startsWith("SI") ||
+                quote.symbol.startsWith("PL") -> "per troy ounce"
+            quote.symbol.startsWith("CL") || quote.symbol.startsWith("BZ") -> "per barrel"
+            else -> ""
+        }
+        quote.symbol.endsWith("-USD") -> ""
+        else -> "per share"
+    }
+    val unit = if (unitLabel.isEmpty()) "" else " $unitLabel"
+    val answer = "${quote.name} is currently at ${stockNumber(quote.price)} $currencyLabel$unit"
+    val change = quote.change ?: return "$answer."
+    if (change == 0.0) return "$answer, unchanged from the previous close."
+    val direction = if (change > 0.0) "up" else "down"
+    val percent = quote.changePercent?.let { " (${stockNumber(abs(it))} percent)" }.orEmpty()
+    return "$answer, $direction ${stockNumber(abs(change))}$percent from the previous close."
+}
+
+private fun stockNumber(value: Double): String = String.format(Locale.US, "%.2f", value)

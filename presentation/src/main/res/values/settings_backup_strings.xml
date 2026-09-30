@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_backup_title">Settings backup</string>
+    <string name="settings_backup_summary">Export or import local settings and widget presets (not messages)</string>
+    <string name="settings_backup_scope">Includes global accent color, light/dark/system/OLED mode, text size, system font and automatic colors; global notification behavior, swipe actions, sending options and signature; voice/reader engines, languages, wake word, reply/retry/announcement options, Kokoro voice/speed and car connection behavior; and the map tile-cache preference.\n\nIncludes all stock watchlists and groups, group decoration, compact/dense/cards layouts, charts, columns, ticker text size, currency visibility, transparency, manual/follow-app-theme colors, refresh intervals and the remembered watchlist. Includes every world clock’s city, time zone and text color, plus previously imported presets.</string>
+    <string name="settings_backup_exclusions">Not included: messages, contacts, per-conversation overrides, blocked senders, logs, quotes, weather or map caches; cookies, authentication, sessions, nonces, API keys; permissions, pending actions, microphone/location running states, background-work state or control-widget on/off state. Also excluded: automatic message deletion, diagnostic logging, legacy night schedules, custom ringtone files/URIs, speech model files/paths and web-AI settings. Re-select local speech models on a new phone.\n\nThis is a readable, unencrypted settings file and may contain personal watchlists, city labels and your signature. Choose device-local storage in the file picker. SilentPulse does not upload it or automatically back it up.</string>
+    <string name="settings_backup_widgets">Widget IDs belong to your launcher, not the backup. Imported stock and clock configurations are retained as portable presets; existing widgets are not overwritten by numeric ID. Add or configure a widget, then choose “Imported presets” from its menu and save. Stock “Verify and save” explicitly contacts Yahoo; importing this file does not. Launcher placement and size cannot be restored here. Each widget remains independent.</string>
+    <string name="settings_backup_export">Export to local file</string>
+    <string name="settings_backup_import">Import from local file</string>
+    <string name="settings_backup_undo">Restore pre-import snapshot</string>
+    <string name="settings_backup_undo_confirm">Replace only settings touched by the last import with their previous values? The snapshot is kept in private app storage. Other settings and messages will not be changed. This can also recover an interrupted import.</string>
+    <string name="settings_backup_restore">Restore settings</string>
+    <string name="settings_backup_confirm_title">Import these settings?</string>
+    <string name="settings_backup_confirm">This file contains %1$d global settings, %2$d stock presets and %3$d clock presets. Present global settings and the remembered watchlist replace current values; absent sections stay unchanged. Presets are merged without overwriting existing widgets. A verified private pre-import snapshot is saved first. Messages and other data are not changed. No microphone, location service or network refresh will be started.</string>
+    <string name="settings_backup_ready">Choose export, or select a file to validate before confirming import.</string>
+    <string name="settings_backup_working">Working… Please wait.</string>
+    <string name="settings_backup_exported">Settings exported and the saved file verified.</string>
+    <string name="settings_backup_imported">Settings saved. Widget presets are available in each widget’s configuration menu. Existing widgets were refreshed from local data only.</string>
+    <string name="settings_backup_unchanged">No settings needed changing. The previous recovery snapshot was kept.</string>
+    <string name="settings_backup_failed">Could not complete the operation. The file may be invalid, unsupported, too large or inaccessible, or the private snapshot could not be verified. No successful import is being reported.</string>
+    <string name="settings_backup_rolled_back">Saving failed. The previous settings were restored and verified.</string>
+    <string name="settings_backup_rollback_failed">Saving failed, and rollback could not be fully verified. Some settings may have changed. Keep the private pre-import snapshot and retry “Restore pre-import snapshot” when storage is available.</string>
+    <string name="settings_backup_refresh_failed">Settings were saved, but the screen or widget refresh failed. Reopen SilentPulse to apply the saved theme. No network refresh was requested.</string>
+    <string name="settings_backup_picker_failed">No local document picker is available. Enable a system Files app and try again.</string>
+    <string name="settings_backup_presets">Imported presets</string>
+    <string name="settings_backup_no_presets">No imported presets are available. Import a settings file in Settings → Settings backup first.</string>
+    <string name="settings_backup_preset_stock">%1$d: %2$s</string>
+    <string name="settings_backup_preset_clock">%1$d: %2$s (%3$s)</string>
+    <string name="settings_backup_preset_loaded">Preset loaded into this form. Review it and save to apply it to this widget.</string>
+</resources>

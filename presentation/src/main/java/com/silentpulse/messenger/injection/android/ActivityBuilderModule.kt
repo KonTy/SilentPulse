@@ -42,6 +42,11 @@ import com.silentpulse.messenger.feature.qkreply.QkReplyActivityModule
 import com.silentpulse.messenger.feature.scheduled.ScheduledActivity
 import com.silentpulse.messenger.feature.scheduled.ScheduledActivityModule
 import com.silentpulse.messenger.feature.settings.SettingsActivity
+import com.silentpulse.messenger.feature.settingsbackup.SettingsBackupActivity
+import com.silentpulse.messenger.feature.stocks.StockSettingsActivity
+import com.silentpulse.messenger.feature.stocks.StockWidgetConfigureActivity
+import com.silentpulse.messenger.feature.stocks.StockAssetPickerActivity
+import com.silentpulse.messenger.feature.stocks.StockDetailActivity
 import com.silentpulse.messenger.feature.worldclock.WorldClockConfigureActivity
 import com.silentpulse.messenger.injection.scope.ActivityScope
 import dagger.Module
@@ -104,7 +109,27 @@ abstract class ActivityBuilderModule {
 
     @ActivityScope
     @ContributesAndroidInjector(modules = [])
+    abstract fun bindSettingsBackupActivity(): SettingsBackupActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
     abstract fun bindWorldClockConfigureActivity(): WorldClockConfigureActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindStockWidgetConfigureActivity(): StockWidgetConfigureActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindStockSettingsActivity(): StockSettingsActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindStockAssetPickerActivity(): StockAssetPickerActivity
+
+    @ActivityScope
+    @ContributesAndroidInjector(modules = [])
+    abstract fun bindStockDetailActivity(): StockDetailActivity
 
     @ActivityScope
     @ContributesAndroidInjector(modules = [])

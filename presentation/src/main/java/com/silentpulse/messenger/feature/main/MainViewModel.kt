@@ -271,6 +271,7 @@ class MainViewModel @Inject constructor(
                         NavItem.ASSISTANT -> navigator.showAssistant()
                         NavItem.NOTIFICATION_READER -> navigator.showNotificationReader()
                         NavItem.LOCATION_SHARING -> navigator.showLocationSharing()
+                        NavItem.STOCKS -> navigator.showStocks()
                         NavItem.INVITE -> navigator.showInvite()
                         else -> Unit
                     }

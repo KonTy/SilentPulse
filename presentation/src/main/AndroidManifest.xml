@@ -182,6 +182,32 @@
         </activity>
         <activity android:name=".feature.settings.SettingsActivity" />
         <activity
+            android:name=".feature.settingsbackup.SettingsBackupActivity"
+            android:exported="false"
+            android:label="@string/settings_backup_title" />
+        <activity
+            android:name=".feature.stocks.StockSettingsActivity"
+            android:exported="false"
+            android:label="@string/drawer_stocks" />
+        <activity
+            android:name=".feature.stocks.StockDetailActivity"
+            android:exported="false"
+            android:label="@string/stock_detail_title" />
+        <activity
+            android:name=".feature.stocks.StockAssetPickerActivity"
+            android:exported="false"
+            android:label="@string/stock_asset_picker_title"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
+        <activity
+            android:name=".feature.stocks.StockWidgetConfigureActivity"
+            android:exported="true"
+            android:label="@string/stock_configure_title"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <activity
             android:name=".feature.worldclock.WorldClockConfigureActivity"
             android:exported="true"
             android:label="@string/world_clock_configure_title"
@@ -353,6 +379,25 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_world_clock_info" />
         </receiver>
+
+        <receiver
+            android:name=".feature.stocks.StockWidgetProvider"
+            android:exported="false"
+            android:label="@string/stock_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.silentpulse.messenger.intent.action.ACTION_STOCK_THEME_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/stock_widget_info" />
+        </receiver>
+        <service
+            android:name=".feature.stocks.StockWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
 
         <!-- Quick Settings tile: Notification Reader toggle -->
         <service

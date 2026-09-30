@@ -47,8 +47,8 @@ class OpenMeteoClockWeatherTest {
     @Test
     fun `same name in a different country uses the selected zone not API order`() {
         val fixture = Fixture(geocoding(
-            place("London", "America/Toronto", 42.98, -81.23),
-            place("London", "Europe/London", 51.51, -0.13)
+            place("London", "America/Toronto", 42.98, -81.23, extra = ""","country_code":"CA","admin1":"Ontario""""),
+            place("London", "Europe/London", 51.51, -0.13, extra = ""","country_code":"GB","admin1":"England"""")
         ), current)
         assertEquals(
             WeatherCoordinates(51.51, -0.13),
@@ -61,6 +61,27 @@ class OpenMeteoClockWeatherTest {
         val fixture = Fixture(geocoding(place("Los Angeles", "America/Los_Angeles")), current)
         expect<WeatherLocationUnavailableException> { fixture.client.fetch(seattle) }
         assertEquals(1, fixture.urls.size)
+    }
+
+    @Test
+    fun `qualified Lafayette weather requires matching state country and zone`() {
+        val places = geocoding(
+            place("Lafayette", "America/Chicago", 30.22, -92.02, extra = ""","country_code":"US","admin1":"Louisiana""""),
+            place("Lafayette", "America/Chicago", 36.52, -86.03, extra = ""","country_code":"US","admin1":"Tennessee""""),
+            place("Lafayette", "America/Indiana/Indianapolis", 40.42, -86.88, extra = ""","country_code":"US","admin1":"Indiana"""")
+        )
+        val indiana = Fixture(places, current)
+        assertEquals(WeatherCoordinates(40.42, -86.88),
+            indiana.client.fetch(CityTimeZone("Lafayette, Indiana", "America/Indiana/Indianapolis")).coordinates)
+        assertEquals("Lafayette", query(indiana.urls.first())["name"])
+        val louisiana = Fixture(places, current)
+        assertEquals(WeatherCoordinates(30.22, -92.02),
+            louisiana.client.fetch(CityTimeZone("Lafayette", "America/Chicago")).coordinates)
+        val mismatch = Fixture()
+        expect<WeatherLocationUnavailableException> {
+            mismatch.client.fetch(CityTimeZone("Lafayette, Indiana", "America/Chicago"), seattleCoordinates)
+        }
+        assertTrue(mismatch.urls.isEmpty())
     }
 
     @Test

@@ -7,8 +7,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.text.format.DateFormat
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
@@ -17,6 +21,9 @@ import com.silentpulse.messenger.feature.worldclock.weather.OpenMeteoClockWeathe
 import com.silentpulse.messenger.feature.worldclock.weather.WeatherCondition
 import com.silentpulse.messenger.feature.worldclock.weather.WorldClockWeatherWorker
 import timber.log.Timber
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 class WorldClockWidgetProvider : AppWidgetProvider() {
 
@@ -31,7 +38,7 @@ class WorldClockWidgetProvider : AppWidgetProvider() {
         widgetId: Int,
         newOptions: Bundle
     ) {
-        updateWidget(context, widgetId)
+        updateWidget(context, widgetId, newOptions)
     }
 
     override fun onDeleted(context: Context, ids: IntArray) {
@@ -72,14 +79,16 @@ class WorldClockWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_REFRESH_WEATHER = "com.silentpulse.messenger.REFRESH_CLOCK_WEATHER"
 
-        fun updateWidget(context: Context, widgetId: Int) {
+        fun updateWidget(context: Context, widgetId: Int, options: Bundle? = null) {
+            val manager = AppWidgetManager.getInstance(context)
             val settings = WorldClockPreferences(context).load(widgetId)
             val views = RemoteViews(context.packageName, R.layout.widget_world_clock)
-            views.setTextViewText(
-                R.id.world_clock_city,
-                settings?.city?.let { WorldClockCityOptions.canonical(it).city }
-                    ?: context.getString(R.string.world_clock_choose_city)
-            )
+            val city = settings?.city?.let { WorldClockCityOptions.canonical(it).city }
+                ?: context.getString(R.string.world_clock_choose_city)
+            views.setTextViewText(R.id.world_clock_city, city)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                fitLegacyText(context, views, city, options ?: manager.getAppWidgetOptions(widgetId))
+            }
             views.setViewVisibility(R.id.world_clock_time, if (settings == null) View.GONE else View.VISIBLE)
             if (settings != null) {
                 // TextClock ticks inside the launcher and handles DST and 12/24-hour
@@ -136,7 +145,73 @@ class WorldClockWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
             )
-            AppWidgetManager.getInstance(context).updateAppWidget(widgetId, views)
+            manager.updateAppWidget(widgetId, views)
+        }
+
+        @Suppress("DEPRECATION")
+        private fun fitLegacyText(context: Context, views: RemoteViews, city: String, options: Bundle?) {
+            // Framework TextClock only gains autosizing in API 26. On older hosts,
+            // fit both formats so a later system 12/24-hour change still fits.
+            val metrics = context.resources.displayMetrics
+            val locale = context.resources.configuration.locale ?: Locale.getDefault()
+            val width = WorldClockWidgetSizing.smallestDimension(
+                options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) ?: 0,
+                options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH) ?: 0,
+                110
+            ) * metrics.density
+            val height = WorldClockWidgetSizing.smallestDimension(
+                options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) ?: 0,
+                options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) ?: 0,
+                40
+            ) * metrics.density
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 100f }
+            val lineHeight = (paint.fontMetrics.descent - paint.fontMetrics.ascent) / 100f
+            val timeSize = WorldClockWidgetSizing.fitText(
+                width, height / 2f, 28f * metrics.scaledDensity,
+                widestClockText(paint, locale) / 100f, lineHeight
+            )
+            val citySize = WorldClockWidgetSizing.fitText(
+                width, height / 4f, 12f * metrics.scaledDensity,
+                paint.measureText(city) / 100f, lineHeight,
+                minimumWidthSize = 8f * metrics.density
+            )
+            views.setTextViewTextSize(R.id.world_clock_time, TypedValue.COMPLEX_UNIT_PX, timeSize)
+            views.setTextViewTextSize(R.id.world_clock_city, TypedValue.COMPLEX_UNIT_PX, citySize)
+        }
+
+        private fun widestClockText(paint: Paint, locale: Locale): Float {
+            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), locale)
+            var widest = 0f
+            for (skeleton in listOf("hm", "Hm")) {
+                val pattern = DateFormat.getBestDateTimePattern(locale, skeleton)
+                for (hour in 0..23) {
+                    calendar.set(Calendar.HOUR_OF_DAY, hour)
+                    for (minute in 0..59) {
+                        calendar.set(Calendar.MINUTE, minute)
+                        widest = maxOf(widest, paint.measureText(DateFormat.format(pattern, calendar).toString()))
+                    }
+                }
+            }
+            return widest
         }
     }
+}
+
+internal object WorldClockWidgetSizing {
+    fun smallestDimension(minimum: Int, maximum: Int, fallback: Int): Int =
+        listOf(minimum, maximum).filter { it > 0 }.minOrNull() ?: fallback
+
+    fun fitText(
+        width: Float,
+        height: Float,
+        preferredSize: Float,
+        widthPerPixel: Float,
+        heightPerPixel: Float,
+        minimumWidthSize: Float = 1f
+    ): Float = minOf(
+        preferredSize,
+        ((width - 1f).coerceAtLeast(1f) / widthPerPixel.coerceAtLeast(0.01f))
+            .coerceAtLeast(minimumWidthSize),
+        (height - 1f).coerceAtLeast(1f) / heightPerPixel.coerceAtLeast(0.01f)
+    ).coerceAtLeast(1f)
 }

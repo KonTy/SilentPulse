@@ -44,6 +44,7 @@ import com.silentpulse.messenger.feature.scheduled.ScheduledActivity
 import com.silentpulse.messenger.feature.assistant.AssistantActivity
 import com.silentpulse.messenger.feature.assistant.NotificationReaderActivity
 import com.silentpulse.messenger.feature.settings.SettingsActivity
+import com.silentpulse.messenger.feature.stocks.StockSettingsActivity
 import com.silentpulse.messenger.manager.AnalyticsManager
 import com.silentpulse.messenger.manager.BillingManager
 import com.silentpulse.messenger.manager.NotificationManager
@@ -157,6 +158,11 @@ class Navigator @Inject constructor(
 
     fun showLocationSharing() {
         val intent = Intent(context, LocationSharingActivity::class.java)
+        startActivity(intent)
+    }
+
+    fun showStocks() {
+        val intent = Intent(context, StockSettingsActivity::class.java)
         startActivity(intent)
     }
 

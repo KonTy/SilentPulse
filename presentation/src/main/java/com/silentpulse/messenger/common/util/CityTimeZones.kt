@@ -243,7 +243,7 @@ object CityTimeZones {
         "Atlantic", "Australia", "Europe", "Indian", "Pacific"
     )
     private val acronyms = setOf("nyc", "la", "sf", "dc")
-    private val searchSeparators = Regex("[\\p{M}\\p{Z}\\s_]+")
+    private val searchSeparators = Regex("[^\\p{L}\\p{N}]+")
     private val availableZoneIds by lazy { TimeZone.getAvailableIDs().toSet() }
 
     val cities: List<CityTimeZone> by lazy {
@@ -261,8 +261,10 @@ object CityTimeZones {
             .filter { it.substringBefore('/') in geographicRegions }
             .map { CityTimeZone(it.substringAfterLast('/').replace('_', ' '), it) }
 
-        (friendlyCities + ianaCities + sequenceOf(CityTimeZone("UTC", "UTC")))
+        (friendlyCities + ianaCities + CityLocationCatalog.locations.asSequence().map { it.selection() } +
+            sequenceOf(CityTimeZone("UTC", "UTC")))
             .filter { isValidZoneId(it.zoneId) }
+            .map(CityLocationCatalog::canonical)
             .distinct()
             .sortedWith(compareBy({ it.city }, { it.zoneId }))
             .toList()
@@ -275,13 +277,36 @@ object CityTimeZones {
     fun search(query: String): List<CityTimeZone> {
         val normalizedQuery = normalize(query)
         if (normalizedQuery.isEmpty()) return cities
-        return searchIndex.filter { (_, city, zoneId) ->
+        val direct = searchIndex.filter { (_, city, zoneId) ->
             city.contains(normalizedQuery) || zoneId.contains(normalizedQuery)
         }.map { it.first }
+        return (CityLocationCatalog.resolveQualified(query) + direct).distinct()
     }
 
     /** Unlike TimeZone.getTimeZone, unknown IDs are rejected instead of becoming GMT. */
     fun isValidZoneId(zoneId: String): Boolean = zoneId in availableZoneIds
+
+    fun canonicalZoneId(value: String?): String? = zoneAliases[value] ?: value
+
+    private val zoneAliases = mapOf(
+        "Europe/Kiev" to "Europe/Kyiv",
+        "Asia/Calcutta" to "Asia/Kolkata",
+        "Asia/Katmandu" to "Asia/Kathmandu",
+        "America/Buenos_Aires" to "America/Argentina/Buenos_Aires",
+        "America/Catamarca" to "America/Argentina/Catamarca",
+        "America/Cordoba" to "America/Argentina/Cordoba",
+        "America/Jujuy" to "America/Argentina/Jujuy",
+        "America/Mendoza" to "America/Argentina/Mendoza",
+        "America/Montreal" to "America/Toronto",
+        "America/Indianapolis" to "America/Indiana/Indianapolis",
+        "America/Louisville" to "America/Kentucky/Louisville",
+        "Asia/Chongqing" to "Asia/Shanghai",
+        "Asia/Chungking" to "Asia/Shanghai",
+        "Asia/Harbin" to "Asia/Shanghai",
+        "Asia/Tel_Aviv" to "Asia/Jerusalem",
+        "Asia/Rangoon" to "Asia/Yangon",
+        "Asia/Saigon" to "Asia/Ho_Chi_Minh"
+    )
 
     internal fun normalize(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)

@@ -616,9 +616,9 @@
     <string name="tile_voice_ast">Voice Asst</string>
 
     <string name="world_clock_widget_name">SilentPulse World Clock</string>
-    <string name="world_clock_widget_description">A transparent city clock with a weather icon. Add several 2 by 1 widgets to put two clocks on one row.</string>
+    <string name="world_clock_widget_description">A transparent city clock with a weather icon. Starts at 2 by 1; resize to a compact 1 by 1 tile or keep it larger.</string>
     <string name="world_clock_configure_title">World clock</string>
-    <string name="world_clock_setup_hint">Choose a city and text color. The background is transparent. Tap the time or city to edit; tap the weather icon to refresh. Weather sends only the selected city to Open-Meteo, never messages or device location.</string>
+    <string name="world_clock_setup_hint">Choose a city and text color. The background is transparent. Long-press the widget to resize to 1 by 1 or larger, where supported by your launcher. Tap the time or city to edit; tap the weather icon to refresh. Weather sends only the selected city to Open-Meteo, never messages or device location.</string>
     <string name="world_clock_choose_city">Choose a city</string>
     <string name="world_clock_search_hint">Search cities or time zones</string>
     <string name="world_clock_no_cities">No matching cities or time zones</string>

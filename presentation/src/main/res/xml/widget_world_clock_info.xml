@@ -5,7 +5,7 @@
     android:configure="com.silentpulse.messenger.feature.worldclock.WorldClockConfigureActivity"
     android:minWidth="110dp"
     android:minHeight="40dp"
-    android:minResizeWidth="110dp"
+    android:minResizeWidth="40dp"
     android:minResizeHeight="40dp"
     android:targetCellWidth="2"
     android:targetCellHeight="1"

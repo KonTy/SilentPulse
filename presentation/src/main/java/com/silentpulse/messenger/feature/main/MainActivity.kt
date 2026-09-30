@@ -91,6 +91,7 @@ class MainActivity : QkThemedActivity(), MainView {
     private val assistant: LinearLayout get() = findViewById(R.id.assistant)
     private val notificationReader: LinearLayout get() = findViewById(R.id.notificationReader)
     private val locationSharing: LinearLayout get() = findViewById(R.id.locationSharing)
+    private val stocks: LinearLayout get() = findViewById(R.id.stocks)
     private val empty: QkTextView get() = findViewById(R.id.empty)
     private val inbox: LinearLayout get() = findViewById(R.id.inbox)
     private val inboxIcon: ImageView get() = findViewById(R.id.inboxIcon)
@@ -136,6 +137,7 @@ class MainActivity : QkThemedActivity(), MainView {
                 assistant.clicks().map { NavItem.ASSISTANT },
                 notificationReader.clicks().map { NavItem.NOTIFICATION_READER },
                 locationSharing.clicks().map { NavItem.LOCATION_SHARING },
+                stocks.clicks().map { NavItem.STOCKS },
                 invite.clicks().map { NavItem.INVITE }))
     }
     override val optionsItemIntent: Subject<Int> = PublishSubject.create()

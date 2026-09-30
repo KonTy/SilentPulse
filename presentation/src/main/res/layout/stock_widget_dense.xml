@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/stock_item"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="18dp"
+    android:background="@android:color/transparent"
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+    <TextView
+        android:id="@+id/stock_symbol"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.85"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textStyle="bold"
+        android:textSize="14sp" />
+    <TextView
+        android:id="@+id/stock_price"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.2"
+        android:paddingStart="2dp"
+        android:paddingEnd="0dp"
+        android:gravity="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="14sp" />
+    <TextView
+        android:id="@+id/stock_change"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingStart="2dp"
+        android:paddingEnd="0dp"
+        android:gravity="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="14sp" />
+    <TextView
+        android:id="@+id/stock_cached"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:includeFontPadding="false"
+        android:text="@string/stock_cached_marker"
+        android:contentDescription="@string/stock_cached"
+        android:textSize="12sp"
+        android:visibility="gone" />
+</LinearLayout>

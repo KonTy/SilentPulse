@@ -46,6 +46,7 @@ import com.silentpulse.messenger.feature.widget.WidgetAdapter
 import com.silentpulse.messenger.injection.android.ActivityBuilderModule
 import com.silentpulse.messenger.injection.android.BroadcastReceiverBuilderModule
 import com.silentpulse.messenger.injection.android.ServiceBuilderModule
+import com.silentpulse.messenger.util.Preferences
 import dagger.Component
 import dagger.android.support.AndroidSupportInjectionModule
 import javax.inject.Singleton
@@ -64,6 +65,7 @@ interface AppComponent {
 
     fun sttEngineFactory(): com.silentpulse.messenger.feature.drivemode.SttEngineFactory
     fun ttsEngineFactory(): com.silentpulse.messenger.feature.drivemode.TtsEngineFactory
+    fun preferences(): Preferences
 
     fun inject(application: QKApplication)
 

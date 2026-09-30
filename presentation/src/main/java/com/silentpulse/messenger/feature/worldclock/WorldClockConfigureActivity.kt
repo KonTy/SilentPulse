@@ -9,6 +9,8 @@ import android.text.method.LinkMovementMethod
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.BaseAdapter
 import android.widget.TextView
 import android.widget.Toast
@@ -18,6 +20,7 @@ import com.silentpulse.messenger.common.base.QkThemedActivity
 import com.silentpulse.messenger.common.util.CityTimeZone
 import com.silentpulse.messenger.common.util.CityTimeZones
 import com.silentpulse.messenger.databinding.WorldClockConfigureActivityBinding
+import com.silentpulse.messenger.feature.settingsbackup.ImportedWidgetPresets
 import com.silentpulse.messenger.feature.worldclock.weather.OpenMeteoClockWeather
 import com.silentpulse.messenger.feature.worldclock.weather.WorldClockWeatherWorker
 import dagger.android.AndroidInjection
@@ -100,11 +103,31 @@ class WorldClockConfigureActivity : QkThemedActivity() {
             outState.putString(STATE_CITY, it.city)
             outState.putString(STATE_ZONE, it.zoneId)
         }
+
         if (::binding.isInitialized) {
             outState.putBoolean(
                 STATE_DARK, binding.worldClockTextColor.checkedRadioButtonId == R.id.world_clock_dark_text
             )
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        super.onCreateOptionsMenu(menu)
+        menu?.add(Menu.NONE, ImportedWidgetPresets.MENU_ID, Menu.NONE, R.string.settings_backup_presets)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId != ImportedWidgetPresets.MENU_ID) return super.onOptionsItemSelected(item)
+        if (!::binding.isInitialized) return true
+        ImportedWidgetPresets.chooseClock(this) { clock ->
+            selectedCity = clock.settings().city
+            binding.worldClockTextColor.check(
+                if (clock.darkText) R.id.world_clock_dark_text else R.id.world_clock_light_text
+            )
+            updateSelection()
+        }
+        return true
     }
 
     private fun updateSelection() {

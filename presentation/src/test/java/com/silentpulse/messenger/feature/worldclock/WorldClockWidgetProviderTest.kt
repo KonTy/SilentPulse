@@ -5,8 +5,15 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
+import android.os.Bundle
+import android.text.format.DateFormat
+import android.util.DisplayMetrics
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.silentpulse.messenger.R
@@ -23,12 +30,15 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.MockedConstruction
 import org.mockito.MockedStatic
+import org.mockito.Mockito.CALLS_REAL_METHODS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockConstruction
 import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import java.util.Calendar
+import java.util.Locale
 
 class WorldClockWidgetProviderTest {
 
@@ -38,14 +48,43 @@ class WorldClockWidgetProviderTest {
     private val pendingIntent = mock(PendingIntent::class.java)
     private val refreshIntent = mock(PendingIntent::class.java)
     private val weatherStore = WeatherCacheTestStore()
+    private val metrics = mock(DisplayMetrics::class.java)
     private lateinit var managers: MockedStatic<AppWidgetManager>
     private lateinit var pendingIntents: MockedStatic<PendingIntent>
     private lateinit var uris: MockedStatic<Uri>
     private lateinit var views: MockedConstruction<RemoteViews>
     private lateinit var intents: MockedConstruction<Intent>
+    private lateinit var paints: MockedConstruction<Paint>
+    private lateinit var dateFormats: MockedStatic<DateFormat>
 
     @Before
     fun setUp() {
+        val resources = mock(Resources::class.java)
+        val configuration = mock(Configuration::class.java).apply { locale = Locale.US }
+        metrics.density = 1f
+        metrics.scaledDensity = 1f
+        `when`(context.resources).thenReturn(resources)
+        `when`(resources.displayMetrics).thenReturn(metrics)
+        `when`(resources.configuration).thenReturn(configuration)
+        paints = mockConstruction(Paint::class.java) { paint, _ ->
+            val fontMetrics = mock(Paint.FontMetrics::class.java).apply {
+                ascent = -80f
+                descent = 20f
+            }
+            `when`(paint.fontMetrics).thenReturn(fontMetrics)
+            `when`(paint.measureText(anyString())).thenAnswer { it.getArgument<String>(0).length * 50f }
+        }
+        dateFormats = mockStatic(DateFormat::class.java)
+        dateFormats.`when`<String> {
+            DateFormat.getBestDateTimePattern(eq(Locale.US), anyString())
+        }.thenAnswer { it.getArgument<String>(1) }
+        dateFormats.`when`<CharSequence> {
+            DateFormat.format(anyString(), any(Calendar::class.java))
+        }.thenAnswer {
+            if (it.getArgument<String>(0) == "Hm") "23:59"
+            else if (it.getArgument<Calendar>(1).get(Calendar.HOUR_OF_DAY) < 12) "12:59 AM"
+            else "12:59 PM"
+        }
         `when`(context.packageName).thenReturn("com.silentpulse.messenger")
         `when`(context.getSharedPreferences("world_clock_widgets", Context.MODE_PRIVATE))
             .thenReturn(preferences)
@@ -79,6 +118,8 @@ class WorldClockWidgetProviderTest {
         uris.close()
         pendingIntents.close()
         managers.close()
+        dateFormats.close()
+        paints.close()
     }
 
     @Test
@@ -100,6 +141,8 @@ class WorldClockWidgetProviderTest {
         verify(tokyo).setTextViewText(R.id.world_clock_city, "Tokyo")
         verify(seattle).setTextColor(R.id.world_clock_time, Color.WHITE)
         verify(tokyo).setTextColor(R.id.world_clock_time, Color.BLACK)
+        verify(seattle).setTextColor(R.id.world_clock_city, Color.WHITE)
+        verify(tokyo).setTextColor(R.id.world_clock_city, Color.BLACK)
         verify(manager).updateAppWidget(1, seattle)
         verify(manager).updateAppWidget(2, tokyo)
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -114,6 +157,59 @@ class WorldClockWidgetProviderTest {
             uris.verify { Uri.parse("silentpulse://world-clock/$id") }
             uris.verify { Uri.parse("silentpulse://world-clock-weather/$id") }
         }
+    }
+
+    @Test
+    fun `legacy narrow clock fits both time formats even with large system fonts`() {
+        metrics.scaledDensity = 2f
+        val options = options(40, 40)
+        `when`(manager.getAppWidgetOptions(1)).thenReturn(options)
+
+        WorldClockWidgetProvider.updateWidget(context, 1)
+
+        val view = views.constructed().single()
+        verify(view).setTextViewTextSize(R.id.world_clock_time, TypedValue.COMPLEX_UNIT_PX, 9.75f)
+        verify(view).setTextViewTextSize(R.id.world_clock_city, TypedValue.COMPLEX_UNIT_PX, 8f)
+        dateFormats.verify { DateFormat.getBestDateTimePattern(Locale.US, "hm") }
+        dateFormats.verify { DateFormat.getBestDateTimePattern(Locale.US, "Hm") }
+        verify(view, never()).setCharSequence(
+            eq(R.id.world_clock_time), eq("setFormat12Hour"), any<CharSequence>()
+        )
+        verify(view, never()).setCharSequence(
+            eq(R.id.world_clock_time), eq("setFormat24Hour"), any<CharSequence>()
+        )
+        verify(view, never()).setTextViewText(eq(R.id.world_clock_time), any<CharSequence>())
+    }
+
+    @Test
+    fun `resizing legacy clock uses fresh bounds and grows again on a larger tile`() {
+        val provider = mock(WorldClockWidgetProvider::class.java, CALLS_REAL_METHODS)
+
+        provider.onAppWidgetOptionsChanged(context, manager, 1, options(40, 40))
+        provider.onAppWidgetOptionsChanged(context, manager, 1, options(220, 100))
+
+        verify(manager, never()).getAppWidgetOptions(anyInt())
+        verify(views.constructed()[0])
+            .setTextViewTextSize(R.id.world_clock_time, TypedValue.COMPLEX_UNIT_PX, 9.75f)
+        verify(views.constructed()[1])
+            .setTextViewTextSize(R.id.world_clock_time, TypedValue.COMPLEX_UNIT_PX, 28f)
+    }
+
+    @Test
+    fun `legacy sizing measures widest localized time across the full day`() {
+        dateFormats.`when`<CharSequence> {
+            DateFormat.format(eq("hm"), any(Calendar::class.java))
+        }.thenAnswer {
+            val calendar = it.getArgument<Calendar>(1)
+            if (calendar.get(Calendar.HOUR_OF_DAY) == 23 && calendar.get(Calendar.MINUTE) == 59) {
+                "11:59 LONG DAY PERIOD"
+            } else "1:00 AM"
+        }
+
+        WorldClockWidgetProvider.updateWidget(context, 1, options(40, 40))
+
+        verify(views.constructed().single())
+            .setTextViewTextSize(R.id.world_clock_time, TypedValue.COMPLEX_UNIT_PX, 39f / 10.5f)
     }
 
     @Test
@@ -163,5 +259,12 @@ class WorldClockWidgetProviderTest {
         verify(views.constructed().single()).setTextViewText(R.id.world_clock_city, "Tokyo")
         verify(context).getString(R.string.world_clock_weather_condition_place, "Weather", "Tokyo")
         verify(preferences, never()).edit()
+    }
+
+    private fun options(width: Int, height: Int) = mock(Bundle::class.java).also {
+        `when`(it.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)).thenReturn(width)
+        `when`(it.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)).thenReturn(width)
+        `when`(it.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)).thenReturn(height)
+        `when`(it.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)).thenReturn(height)
     }
 }

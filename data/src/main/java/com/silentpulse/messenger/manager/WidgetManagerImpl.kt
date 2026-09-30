@@ -32,12 +32,19 @@ class WidgetManagerImpl @Inject constructor(private val context: Context) : Widg
     }
 
     override fun updateTheme() {
+        val smsProvider = ComponentName(context.packageName, "com.silentpulse.messenger.feature.widget.WidgetProvider")
         val ids = AppWidgetManager.getInstance(context)
-                .getAppWidgetIds(ComponentName("com.silentpulse.messenger", "com.silentpulse.messenger.feature.widget.WidgetProvider"))
+                .getAppWidgetIds(smsProvider)
 
-        val intent = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
-
-        BroadcastUtils.sendExplicitBroadcast(context, intent, AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+        if (ids.isNotEmpty()) {
+            context.sendBroadcast(Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+                component = smsProvider
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+            })
+        }
+        context.sendBroadcast(Intent(WidgetManager.ACTION_STOCK_THEME_CHANGED).apply {
+            setPackage(context.packageName)
+        })
     }
 
 }

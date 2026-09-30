@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.silentpulse.messenger.common.util.CityTimeZone
 import com.silentpulse.messenger.common.util.CityTimeZones
+import com.silentpulse.messenger.common.util.CityLocationCatalog
 import timber.log.Timber
 
 data class WorldClockSettings(val city: CityTimeZone, val darkText: Boolean = false)
@@ -18,7 +19,8 @@ class WorldClockPreferences(private val preferences: SharedPreferences) {
         val city = preferences.getString("clock_$widgetId.city", null)
         val zone = preferences.getString("clock_$widgetId.zone", null)
         if (city == null && zone == null) return null
-        if (city.isNullOrBlank() || zone == null || !CityTimeZones.isValidZoneId(zone)) {
+        if (city.isNullOrBlank() || zone == null || !CityTimeZones.isValidZoneId(zone) ||
+            !CityLocationCatalog.isConsistent(CityTimeZone(city, zone))) {
             Timber.w("World clock %d has invalid settings; city selection is required", widgetId)
             return null
         }
@@ -32,6 +34,7 @@ class WorldClockPreferences(private val preferences: SharedPreferences) {
         require(widgetId > 0) { "Invalid world clock widget ID" }
         require(settings.city.city.isNotBlank()) { "A world clock needs a city label" }
         require(CityTimeZones.isValidZoneId(settings.city.zoneId)) { "Invalid world clock time zone" }
+        require(CityLocationCatalog.isConsistent(settings.city)) { "City qualifier does not match its time zone" }
         preferences.edit().write(widgetId, settings).apply()
     }
 

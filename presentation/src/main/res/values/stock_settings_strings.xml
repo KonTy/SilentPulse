@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="drawer_stocks">Stocks</string>
+    <string name="stock_settings_hint">Choose a home-screen widget to edit its watchlist, groups, text size, layout, colors or refresh interval. Each widget keeps its own settings.</string>
+    <string name="stock_settings_empty">No stock widgets are installed. Add SilentPulse Stocks to your home screen to configure a watchlist.</string>
+    <string name="stock_settings_add">To add a widget, long-press an empty area of your home screen, open Widgets, and choose SilentPulse Stocks. Your launcher controls widget placement and size.</string>
+    <string name="stock_settings_widget_title">Stock widget %1$d</string>
+    <string name="stock_settings_unconfigured">Not configured — tap to set up a watchlist.</string>
+    <string name="stock_settings_widget_removed">That stock widget is no longer available. Choose another widget or add SilentPulse Stocks from your home screen.</string>
+    <string name="stock_settings_remembered">A last-used watchlist and its groups are saved on this device. They will pre-fill the next stock widget you add.</string>
+    <string name="stock_settings_backup_hint">Settings backup saves stock watchlists, groups, appearance, refresh intervals, the remembered watchlist and imported presets.\n\nImporting keeps existing widgets unchanged. To use a restored watchlist, open a widget above (or add one), choose “Imported presets” from its menu, then review and Verify and save. New or unverified tickers require an online check before saving.</string>
+</resources>
