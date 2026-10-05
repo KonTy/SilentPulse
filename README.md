@@ -12,6 +12,13 @@ SilentPulse is a drop-in replacement for the Android stock SMS app with an on-de
 
 Android speech is restricted to the on-device recognizer and installed offline TTS voices, with no cloud fallback. SilentPulse cannot firewall a separate Google/system process or guarantee that it never makes unrelated network requests; that requires device-level controls.
 
+### Future unified client
+
+The [unified messenger draft spec](UNIFIED_MESSENGER_SPEC.md) records the proposed
+cross-platform client, provider navigation, encrypted family location over Matrix,
+assistant migration, and performance/battery requirements. It is a design document,
+not a list of features already implemented in SilentPulse.
+
 ---
 
 ## Voice Assistant — Drive Mode
